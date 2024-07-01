@@ -94,14 +94,14 @@ export default defineConfig({
             copyright: 'Copyright © 2024 <a href="https://deploy.baldhead.cn" target="_blank">BaldHead</a>'
         },
         nav: [
-            {text: 'docker', link: '/docker/intro', activeMatch: '/zh/guide/'},
-            {text: 'linux', link: '/guide/references/faq', activeMatch: '/zh/faq/'},
+            {text: 'docker', link: '/docker/home', activeMatch: '/zh/guide/'},
+            {text: 'linux', link: '/linux/home', activeMatch: '/zh/faq/'},
         ],
         sidebar: {
             '/docker/': [
                 {
                     text: '首页',
-                    link: '/docker/intro'
+                    link: '/docker/home'
                 },
                {
                     text: 'docker',
@@ -113,6 +113,21 @@ export default defineConfig({
                     ]
                 }
             ],
+            '/linux/': [
+                {
+                    text: '首页',
+                    link: '/linux/home'
+                },
+                {
+                    text: 'linux',
+                    items: [
+                        {
+                            text: '快速开始',
+                            link: '/linux/quick-start'
+                        }
+                    ]
+                }
+            ]
         }
     }
 });

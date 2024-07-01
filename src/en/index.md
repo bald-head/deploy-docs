@@ -6,7 +6,7 @@ title: deploy-docs
 hero:
   name: deploy-docs
   text: better deploy
-  tagline: better deploy
+  tagline: Faster deploy
   image:
     src: /logo.svg
     alt: deploy-docs
@@ -22,7 +22,7 @@ hero:
       link: https://github.com/bald-head/deploy-docs
 
 features:
-  - icon: 🏹
-    title: file transfer in seconds
-    details: Hash summary identification for each uploaded file, when users upload the same file, there is no actual file transfer process, to achieve the second transfer.
+  - icon: 🚀
+    title: faster
+    details: Leverage containerization to more quickly deploy projects and the middleware they require
 ---
