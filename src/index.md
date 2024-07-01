@@ -2,12 +2,12 @@
 layout: home
 
 title: deploy-docs
-titleTemplate: 更好的  deploy
+titleTemplate: 更快的  deploy
 
 hero:
   name: deploy-docs
   text: deploy
-  tagline: 更好的 deploy
+  tagline: 更快的 deploy
   image:
     src: /logo.svg
     alt: deploy-docs

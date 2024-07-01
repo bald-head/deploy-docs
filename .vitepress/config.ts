@@ -14,14 +14,14 @@ export default defineConfig({
             lang: 'zh',
             dir: 'src/zh',
             title: 'deploy-docs',
-            description: '更好的 deploy'
+            description: '更快的 deploy'
         },
         // en: {
         //     label: 'English',
         //     lang: 'en',
         //     dir: 'src/en',
         //     title: 'deploy-docs',
-        //     description: 'Better deploy',
+        //     description: 'Faster deploy',
         //     themeConfig: {
         // footer: {
         //     message: '根据 <a href="https://www.gnu.org/licenses/" target="_blank"> GNU AFFERO GENERAL PUBLIC LICENSE</a> 许可证发布',
