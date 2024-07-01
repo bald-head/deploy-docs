@@ -13,14 +13,14 @@ export default defineConfig({
             lang: 'zh',
             dir: 'src/zh',
             title: 'deploy-docs',
-            description: '更好的 devops'
+            description: '更好的 deploy'
         },
         // en: {
         //     label: 'English',
         //     lang: 'en',
         //     dir: 'src/en',
         //     title: 'deploy-docs',
-        //     description: 'Better devops',
+        //     description: 'Better deploy',
         //     themeConfig: {
         //         footer: {
         //             message: 'Publish under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank">Apache License 2.0</a>',
@@ -100,34 +100,15 @@ export default defineConfig({
             '/docker/': [
                 {
                     text: '首页',
-                    link: '/guide/intro'
+                    link: '/docker/intro'
                 },
-                {
-                    text: '更新日志',
-                    link: '/guide/released'
-                }, {
-                    text: '用户手册',
+               {
+                    text: 'docker',
                     items: [
                         {
                             text: '快速开始',
-                            link: '/guide/user/quick-start'
-                        },
-                        {
-                            text: 'API接口',
-                            link: '/guide/user/api'
-                        },
-                        {
-                            text: '文件元数据',
-                            link: '/guide/user/db'
-                        },
-                        {
-                            text: '配置文件',
-                            link: '/guide/user/config'
-                        },
-                        {
-                            text: '非官方S3实现',
-                            link: '/guide/user/custom'
-                        },
+                            link: '/docker/quick-start'
+                        }
                     ]
                 }
             ],

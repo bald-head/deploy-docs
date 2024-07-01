@@ -5,8 +5,8 @@ title: deploy-docs
 
 hero:
   name: deploy-docs
-  text: better devops
-  tagline: better devops
+  text: better deploy
+  tagline: better deploy
   image:
     src: /logo.svg
     alt: deploy-docs

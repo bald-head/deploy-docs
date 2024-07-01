@@ -14,7 +14,7 @@ hero:
   actions:
     - theme: brand
       text: docker
-      link: /docker/user/quick-start
+      link: /docker/quick-start
     - theme: alt
       text: linux
       link: /linux/intro
