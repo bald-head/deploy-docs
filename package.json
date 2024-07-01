@@ -1,0 +1,22 @@
+{
+  "name": "deploy-docs",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "The documentation of deploy-docs",
+  "author": {
+    "name": "BaldHead",
+    "email": "tianxiang.deng@foxmail.com",
+    "url": "https://github.com/bald-head"
+  },
+  "scripts": {
+    "dev": "vitepress dev --port 1026",
+    "docs:build": "vitepress build",
+    "preview": "vite preview",
+    "serve": "vitepress pnpmserve"
+  },
+  "devDependencies": {
+    "@types/node": "20.12.7",
+    "typescript": "5.4.5",
+    "vitepress": "^1.2.3"
+  }
+}
