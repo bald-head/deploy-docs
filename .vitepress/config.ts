@@ -22,10 +22,10 @@ export default defineConfig({
         //     title: 'deploy-docs',
         //     description: 'Better deploy',
         //     themeConfig: {
-        //         footer: {
-        //             message: 'Publish under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank">Apache License 2.0</a>',
-        //             copyright: 'Copyright © 2024 <a href="https://liuxp.me" target="_blank">liuxp.me</a>'
-        //         },
+        // footer: {
+        //     message: '根据 <a href="https://www.gnu.org/licenses/" target="_blank"> GNU AFFERO GENERAL PUBLIC LICENSE</a> 许可证发布',
+        //     copyright: 'Copyright © 2024 <a href="https://deploy.baldhead.cn" target="_blank">BaldHead</a>'
+        // },
         //         nav: [
         //             {text: 'INTRO', link: '/en/guide/intro', activeMatch: '/en/guide/'},
         //             {text: 'FAQ', link: '/en/faq/', activeMatch: '/en/faq/'},
