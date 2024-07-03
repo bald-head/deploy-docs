@@ -1,7 +1,7 @@
 import {defineConfig} from 'vitepress';
 
 export default defineConfig({
-    base: '/deploy-docs/',
+    // base: '/deploy-docs/',
     // 对 markdown 的配置
     markdown: {
         toc: {
