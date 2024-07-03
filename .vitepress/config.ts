@@ -83,9 +83,9 @@ export default defineConfig({
         search: {
             provider: "algolia",
             options: {
-                appId: "",
-                apiKey: "",
-                indexName: "",
+                appId: "HVG0I8JYN8",
+                apiKey: "1ce3df51e758636d077a6c9561e7e1c7",
+                indexName: "bald-headio",
                 placeholder: "Search Doc",
             }
         },
