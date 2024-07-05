@@ -118,6 +118,10 @@ export default defineConfig({
                         {
                            text: 'mysql',
                            link: '/docker/use/mysql'
+                        },
+                        {
+                            text: 'Nginx',
+                            link: '/docker/use/nginx'
                         }
                     ]
                 }
