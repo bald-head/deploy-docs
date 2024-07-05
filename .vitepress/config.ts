@@ -130,6 +130,10 @@ export default defineConfig({
                         {
                             text: 'activemq',
                             link: '/docker/use/activemq'
+                        },
+                        {
+                            text: 'efk',
+                            link: '/docker/use/efk'
                         }
                     ]
                 }
