@@ -116,13 +116,8 @@ export default defineConfig({
                     text: 'docker-compose',
                     items: [
                         {
-                            text: 'mysql',
-                           items: [
-                               {
-                                   text:'mysql8.0',
-                                   link: '/docker/use/mysql/mysql8.0'
-                               }
-                           ]
+                           text: 'mysql',
+                           link: '/docker/use/mysql'
                         }
                     ]
                 }
