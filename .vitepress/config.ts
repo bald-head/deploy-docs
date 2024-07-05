@@ -1,7 +1,7 @@
 import {defineConfig} from 'vitepress';
 
 export default defineConfig({
-    // base: '/deploy-docs/',
+    base: '/deploy-docs/',
     // 对 markdown 的配置
     markdown: {
         toc: {
@@ -109,6 +109,20 @@ export default defineConfig({
                         {
                             text: '快速开始',
                             link: '/docker/quick-start'
+                        }
+                    ]
+                },
+                {
+                    text: 'docker-compose',
+                    items: [
+                        {
+                            text: 'mysql',
+                           items: [
+                               {
+                                   text:'mysql8.0',
+                                   link: '/docker/use/mysql/mysql8.0'
+                               }
+                           ]
                         }
                     ]
                 }
