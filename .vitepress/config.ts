@@ -122,6 +122,14 @@ export default defineConfig({
                         {
                             text: 'Nginx',
                             link: '/docker/use/nginx'
+                        },
+                        {
+                            text: 'PowerJob',
+                            link: '/docker/use/powerjob'
+                        },
+                        {
+                            text: 'activemq',
+                            link: '/docker/use/activemq'
                         }
                     ]
                 }
