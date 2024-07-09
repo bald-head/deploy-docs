@@ -168,4 +168,4 @@ i18n.locale: zh-CN # 中文
 
 ## ik分词器
 
-[ik分词器](../../public/elasticsearch/plugin/ik.zip)
+[ik分词器](../../static/elasticsearch/plugin/ik.zip)
