@@ -1,15 +1,15 @@
 import {defineConfig} from 'vitepress';
 
 export default defineConfig({
-    // base: '/deploy-docs/',
+    base: '/deploy-docs/',
     // 对 markdown 的配置
     markdown: {
         toc: {
             level: [1, 2, 3, 4], // 指定标题的层级
         },
         theme: {
-            light: "material-theme-lighter",
-            dark: "material-theme-darker",
+            light: "vitesse-light",
+            dark: "vitesse-dark",
         }
     },
     locales: {
