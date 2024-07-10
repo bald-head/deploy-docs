@@ -96,6 +96,7 @@ export default defineConfig({
         nav: [
             {text: 'docker', link: '/docker/home', activeMatch: '/zh/guide/'},
             {text: 'linux', link: '/linux/home', activeMatch: '/zh/faq/'},
+            {text: 'java', link: '/java/home', activeMatch: '/zh/guide/'},
         ],
         sidebar: {
             '/docker/': [
@@ -156,6 +157,12 @@ export default defineConfig({
                             link: '/linux/quick-start'
                         }
                     ]
+                }
+            ],
+            '/java/': [
+                {
+                    text:'Logging',
+                    link: 'java/logging/index'
                 }
             ]
         }
