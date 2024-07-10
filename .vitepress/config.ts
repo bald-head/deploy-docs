@@ -6,6 +6,10 @@ export default defineConfig({
     markdown: {
         toc: {
             level: [1, 2, 3, 4], // 指定标题的层级
+        },
+        theme: {
+            light: "material-theme-lighter",
+            dark: "material-theme-darker",
         }
     },
     locales: {
