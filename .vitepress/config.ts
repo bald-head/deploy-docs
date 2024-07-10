@@ -161,8 +161,17 @@ export default defineConfig({
             ],
             '/java/': [
                 {
+                    text:'首页',
+                    link: '/java/home'
+                },
+                {
                     text:'Logging',
-                    link: 'java/logging/index'
+                    items: [
+                        {
+                            text:'logback & log4j2',
+                            link: 'java/logging/index'
+                        }
+                    ]
                 }
             ]
         }
