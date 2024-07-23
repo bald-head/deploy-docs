@@ -166,6 +166,11 @@ export default defineConfig({
                             text: 'fastDFS',
                             link: '/docker/use/fastDFS/fastDFS'
                         }
+                        ,
+                        {
+                            text: 'filebeat',
+                            link: '/docker/use/filebeat/filebeat'
+                        }
 
                     ]
                 }
