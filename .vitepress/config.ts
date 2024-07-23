@@ -74,7 +74,7 @@ export default defineConfig({
             }
         ],
         ['link', {rel: 'icon', href: '/favicon.ico'}],
-        ['script',{},`!function(p){"use strict";!function(t){var s=window,e=document,i=p,c="".concat("https:"===e.location.protocol?"https://":"http://","sdk.51.la/js-sdk-pro.min.js"),n=e.createElement("script"),r=e.getElementsByTagName("script")[0];n.type="text/javascript",n.setAttribute("charset","UTF-8"),n.async=!0,n.src=c,n.id="LA_COLLECT",i.d=n;var o=function(){s.LA.ids.push(i)};s.LA?s.LA.ids&&o():(s.LA=p,s.LA.ids=[],o()),r.parentNode.insertBefore(n,r)}()}({id:"CDqGooQbS8dts6eI",ck:"CDqGooQbS8dts6eI",hashMode:true});`]
+        ['script', {}, `!function(p){"use strict";!function(t){var s=window,e=document,i=p,c="".concat("https:"===e.location.protocol?"https://":"http://","sdk.51.la/js-sdk-pro.min.js"),n=e.createElement("script"),r=e.getElementsByTagName("script")[0];n.type="text/javascript",n.setAttribute("charset","UTF-8"),n.async=!0,n.src=c,n.id="LA_COLLECT",i.d=n;var o=function(){s.LA.ids.push(i)};s.LA?s.LA.ids&&o():(s.LA=p,s.LA.ids=[],o()),r.parentNode.insertBefore(n,r)}()}({id:"CDqGooQbS8dts6eI",ck:"CDqGooQbS8dts6eI",hashMode:true});`]
     ],
     assetsDir: 'public',
     srcDir: 'src',
@@ -108,12 +108,22 @@ export default defineConfig({
                     text: '首页',
                     link: '/docker/home'
                 },
-               {
+                {
                     text: 'docker',
                     items: [
                         {
                             text: '快速开始',
                             link: '/docker/quick-start'
+                        },
+                        {
+                            text: '常见问题',
+                            link: '/docker/FAQ/logs-too-large',
+                            items: [
+                                {
+                                    text: '容器日志占用磁盘空间过大',
+                                    link: '/docker/FAQ/logs-too-large'
+                                },
+                            ]
                         }
                     ]
                 },
@@ -121,8 +131,8 @@ export default defineConfig({
                     text: 'docker-compose',
                     items: [
                         {
-                           text: 'mysql',
-                           link: '/docker/use/mysql'
+                            text: 'mysql',
+                            link: '/docker/use/mysql'
                         },
                         {
                             text: 'Nginx',
@@ -165,14 +175,14 @@ export default defineConfig({
             ],
             '/java/': [
                 {
-                    text:'首页',
+                    text: '首页',
                     link: '/java/home'
                 },
                 {
-                    text:'Logging',
+                    text: 'Logging',
                     items: [
                         {
-                            text:'logback & log4j2',
+                            text: 'logback & log4j2',
                             link: 'java/logging/index'
                         }
                     ]
