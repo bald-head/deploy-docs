@@ -157,6 +157,10 @@ export default defineConfig({
                         {
                             text: 'elk',
                             link: '/docker/use/elk'
+                        },
+                        {
+                            text: 'elkf',
+                            link: '/docker/use/elkf'
                         }
 
                     ]
