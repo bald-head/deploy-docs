@@ -1,4 +1,5 @@
 # FastDFS
+[[toc]]
 ## docker-compose
 > docker-compose
 ```yaml
