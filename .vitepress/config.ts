@@ -160,7 +160,11 @@ export default defineConfig({
                         },
                         {
                             text: 'elkf',
-                            link: '/docker/use/elkf'
+                            link: '/docker/use/elkf/elkf'
+                        },
+                        {
+                            text: 'fastDFS',
+                            link: '/docker/use/fastDFS/fastDFS'
                         }
 
                     ]
