@@ -13,10 +13,10 @@ services:
     hostname: elkf_elasticsearch
     restart: unless-stopped                   # 指定容器退出后的重启策略为始终重启，但是不考虑在Docker守护进程启动时就已经停止了的容器
     volumes:                                  # 数据卷挂载路径设置,将本机目录映射到容器目录
-      - "/applicataion/middleware/elkf/elasticsearch/data:/usr/share/elasticsearch/data"
-      - "/applicataion/middleware/elkf/elasticsearch/logs:/usr/share/elasticsearch/logs"
-      - "/applicataion/middleware/elkf/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml"
-#      - "/applicataion/middleware/elkf/elasticsearch/config/jvm.options:/usr/share/elasticsearch/config/jvm.options"
+      - "/application/middleware/elkf/elasticsearch/data:/usr/share/elasticsearch/data"
+      - "/application/middleware/elkf/elasticsearch/logs:/usr/share/elasticsearch/logs"
+      - "/application/middleware/elkf/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml"
+#      - "/application/middleware/elkf/elasticsearch/config/jvm.options:/usr/share/elasticsearch/config/jvm.options"
     environment:                              # 设置环境变量,相当于docker run命令中的-e
       TZ: Asia/Shanghai
       LANG: en_US.UTF-8
@@ -36,7 +36,7 @@ services:
     hostname: elkf_kibana
     restart: unless-stopped
     volumes:
-      - "/applicataion/middleware/elkf/kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml"
+      - "/application/middleware/elkf/kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml"
     ports:
       - "5601:5601"
     depends_on:
@@ -54,10 +54,10 @@ services:
     environment:
       LS_JAVA_OPTS: "-Xmx512m -Xms512m"
     volumes:
-      - "/applicataion/middleware/elkf/logstash/data:/usr/share/logstash/data"
-      - "/applicataion/middleware/elkf/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml"
-#      - "/applicataion/middleware/elkf/logstash/config/logstash.conf:/usr/share/logstash/config/logstash.conf"
-      - "/applicataion/middleware/elkf/logstash/config/test:/usr/share/logstash/config/test"
+      - "/application/middleware/elkf/logstash/data:/usr/share/logstash/data"
+      - "/application/middleware/elkf/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml"
+#      - "/application/middleware/elkf/logstash/config/logstash.conf:/usr/share/logstash/config/logstash.conf"
+      - "/application/middleware/elkf/logstash/config/test:/usr/share/logstash/config/test"
 #    command: logstash -f /usr/share/logstash/config/logstash.conf    # 指定logstash启动时使用的配置文件 - 指定单个文件
     command: logstash -f /usr/share/logstash/config/test       # 指定logstash启动时使用的配置文件 - 指定目录夹（系统会自动读取文件夹下所有配置文件，并在内存中整合）
     ports:
@@ -75,9 +75,9 @@ services:
     hostname: elkf_filebeat
     restart: unless-stopped                   # 指定容器退出后的重启策略为始终重启，但是不考虑在Docker守护进程启动时就已经停止了的容器
     volumes:                                  # 数据卷挂载路径设置,将本机目录映射到容器目录
-      - "/applicataion/middleware/elkf/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml"
-      - "/applicataion/middleware/elkf/filebeat/logs:/usr/share/filebeat/logs"
-      - "/applicataion/middleware/elkf/filebeat/my-log:/usr/share/filebeat/my-log"
+      - "/application/middleware/elkf/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml"
+      - "/application/middleware/elkf/filebeat/logs:/usr/share/filebeat/logs"
+      - "/application/middleware/elkf/filebeat/my-log:/usr/share/filebeat/my-log"
     environment:          # 设置环境变量,相当于docker run命令中的-e
       TZ: Asia/Shanghai
       LANG: en_US.UTF-8

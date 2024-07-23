@@ -11,9 +11,9 @@
 # 运行
 docker-compose -f docker-compose.yml -p elkf up -d
 # 当前目录下所有文件赋予权限(读、写、执行)  -- 解决es启动报错问题...
-chmod -R 777 /applicataion/middleware/elkf/elasticsearch
+chmod -R 777 /application/middleware/elkf/elasticsearch
 # 解决logstash启动报错问题...
-chmod -R 777 /applicataion/middleware/elkf/logstash
+chmod -R 777 /application/middleware/elkf/logstash
 ```
 
 1. ES访问地址：[`ip地址:9200`](http://127.0.0.1:9200)

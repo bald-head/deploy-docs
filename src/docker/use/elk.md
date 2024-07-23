@@ -21,10 +21,10 @@ services:
     hostname: elk_elasticsearch
     restart: unless-stopped                   # 指定容器退出后的重启策略为始终重启，但是不考虑在Docker守护进程启动时就已经停止了的容器
     volumes:                                  # 数据卷挂载路径设置,将本机目录映射到容器目录
-      - "/applicataion/middleware/elk/elasticsearch/data:/usr/share/elasticsearch/data"
-      - "/applicataion/middleware/elk/elasticsearch/logs:/usr/share/elasticsearch/logs"
-      - "/applicataion/middleware/elk/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml"
-#      - "/applicataion/middleware/elk/elasticsearch/config/jvm.options:/usr/share/elasticsearch/config/jvm.options"
+      - "/application/middleware/elk/elasticsearch/data:/usr/share/elasticsearch/data"
+      - "/application/middleware/elk/elasticsearch/logs:/usr/share/elasticsearch/logs"
+      - "/application/middleware/elk/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml"
+#      - "/application/middleware/elk/elasticsearch/config/jvm.options:/usr/share/elasticsearch/config/jvm.options"
     environment:                              # 设置环境变量,相当于docker run命令中的-e
       TZ: Asia/Shanghai
       LANG: en_US.UTF-8
@@ -44,7 +44,7 @@ services:
     hostname: elk_kibana
     restart: unless-stopped
     volumes:
-      - "/applicataion/middleware/elk/kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml"
+      - "/application/middleware/elk/kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml"
     ports:
       - "5601:5601"
     depends_on:
@@ -62,10 +62,10 @@ services:
     environment:
       LS_JAVA_OPTS: "-Xmx512m -Xms512m"
     volumes:
-      - "/applicataion/middleware/elk/logstash/data:/usr/share/logstash/data"
-      - "/applicataion/middleware/elk/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml"
-#      - "/applicataion/middleware/elk/logstash/config/logstash.conf:/usr/share/logstash/config/logstash.conf"
-      - "/applicataion/middleware/elk/logstash/config/small-tools:/usr/share/logstash/config/small-tools"
+      - "/application/middleware/elk/logstash/data:/usr/share/logstash/data"
+      - "/application/middleware/elk/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml"
+#      - "/application/middleware/elk/logstash/config/logstash.conf:/usr/share/logstash/config/logstash.conf"
+      - "/application/middleware/elk/logstash/config/small-tools:/usr/share/logstash/config/small-tools"
 #    command: logstash -f /usr/share/logstash/config/logstash.conf    # 指定logstash启动时使用的配置文件 - 指定单个文件
     command: logstash -f /usr/share/logstash/config/small-tools       # 指定logstash启动时使用的配置文件 - 指定目录夹（系统会自动读取文件夹下所有配置文件，并在内存中整合）
     ports:
@@ -477,7 +477,7 @@ output {
 # 运行
 docker-compose -f docker-compose-elk.yml up -d
 # 若运行之后启动日志报相关权限问题，给新产生的文件赋予权限
-chmod -R 777 /applicataion/middleware/elk/
+chmod -R 777 /application/middleware/elk/
 ```
 
 ## 设置ES密码
