@@ -1,0 +1,63 @@
+---
+title: MySQL
+description: docker安装mysql
+sidebar:
+  order: 1
+---
+
+## 安装 MySQL 8.0
+```yaml
+service:
+  mysql:
+    image: mysql:8.0
+    container_name: baldhead_mysql8
+    hostname: mysql
+    restart: always
+    volumes:
+      - /application/dockerData/mysql/conf:/etc/mysql/conf.d
+      - /application/dockerData/mysql/logs:/logs
+      - /application/dockerData/mysql/data:/var/lib/mysql
+      # 宿主机时间
+      - /etc/localtime:/etc/localtime:ro
+      - /application/mysql/sql:/docker-entrypoint-initdb.d:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - LANG=en_US.UTF-8
+      - MYSQL_ROOT_PASSWORD=bbibm@2024
+    command:
+      --default-storage-engine=INNODB
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --explicit_defaults_for_timestamp=true
+      --lower_case_table_names=1
+    privileged: true
+    user: root
+    ports:
+      - "3306:3306"
+    networks:
+      - bbibm_network
+```
+
+### 配置文件
+
+``` properties
+# 服务端参数配置
+[mysqld]
+user=mysql                            # MySQL启动用户
+default-storage-engine=INNODB         # 创建新表时将使用的默认存储引擎
+character-set-server=utf8mb4          # 设置mysql服务端默认字符集
+collation-server=utf8mb4_general_ci   # 数据库字符集对应一些排序等规则，注意要和character-set-server对应
+default-authentication-plugin=mysql_native_password
+
+max_connections=1000    # 允许最大连接数
+max_connect_errors=100  # 最大错误连接数
+
+
+[mysql]
+default-character-set=utf8mb4
+
+
+[client]
+default-character-set=utf8mb4  # 设置mysql客户端默认字符集
+```

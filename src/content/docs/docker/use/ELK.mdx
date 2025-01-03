@@ -1,0 +1,497 @@
+---
+title: ELK
+description: docker 安装 ELK
+sidebar:
+  order: 7
+---
+`Elasticsearch` + `Logstash` + `Kibana` 搭建日志监控系统
+
+1. `Logstash` 日志收集+解析+转换
+2. `Elasticsearch` 日志搜索
+3. `Kibana` 日志展示
+
+## 安装yaml文件
+> docker-compose.yml
+```yaml
+# 网桥elk -> 方便相互通讯
+networks:
+  elk:
+    driver: bridge
+
+services:
+  elasticsearch:
+    image: elasticsearch:7.14.1
+    container_name: elk_elasticsearch         # 容器名为'elk_elasticsearch'
+    hostname: elk_elasticsearch
+    restart: unless-stopped                   # 指定容器退出后的重启策略为始终重启，但是不考虑在Docker守护进程启动时就已经停止了的容器
+    volumes:                                  # 数据卷挂载路径设置,将本机目录映射到容器目录
+      - "/application/middleware/elk/elasticsearch/data:/usr/share/elasticsearch/data"
+      - "/application/middleware/elk/elasticsearch/logs:/usr/share/elasticsearch/logs"
+      - "/application/middleware/elk/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml"
+#      - "/application/middleware/elk/elasticsearch/config/jvm.options:/usr/share/elasticsearch/config/jvm.options"
+    environment:                              # 设置环境变量,相当于docker run命令中的-e
+      TZ: Asia/Shanghai
+      LANG: en_US.UTF-8
+      TAKE_FILE_OWNERSHIP: "true"  # 权限
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xmx512m -Xms512m"
+      ELASTIC_PASSWORD: "123456" # elastic账号密码
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elk
+
+  kibana:
+    image: kibana:7.14.1
+    container_name: elk_kibana
+    hostname: elk_kibana
+    restart: unless-stopped
+    volumes:
+      - "/application/middleware/elk/kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml"
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    links:
+      - elasticsearch
+    networks:
+      - elk
+
+  logstash:
+    image: logstash:7.14.1
+    container_name: elk_logstash
+    hostname: elk_logstash
+    restart: unless-stopped
+    environment:
+      LS_JAVA_OPTS: "-Xmx512m -Xms512m"
+    volumes:
+      - "/application/middleware/elk/logstash/data:/usr/share/logstash/data"
+      - "/application/middleware/elk/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml"
+#      - "/application/middleware/elk/logstash/config/logstash.conf:/usr/share/logstash/config/logstash.conf"
+      - "/application/middleware/elk/logstash/config/small-tools:/usr/share/logstash/config/small-tools"
+#    command: logstash -f /usr/share/logstash/config/logstash.conf    # 指定logstash启动时使用的配置文件 - 指定单个文件
+    command: logstash -f /usr/share/logstash/config/small-tools       # 指定logstash启动时使用的配置文件 - 指定目录夹（系统会自动读取文件夹下所有配置文件，并在内存中整合）
+    ports:
+      - "9600:9600"
+#      - "10001-10010:10001-10010"
+      - "1218:1218"
+      - "20010:20010"
+      - "20030:20030"
+      - "20040:20040"
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+```
+## 挂载的配置文件
+
+### elasticsearch
+> elasticsearch.yml
+```yaml
+cluster.name: "docker-cluster"
+network.host: 0.0.0.0
+http.port: 9200
+# 开启es跨域
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+http.cors.allow-headers: Authorization
+# 开启安全控制
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+
+```
+> jvm.options
+``` properties
+## JVM configuration
+
+################################################################
+## IMPORTANT: JVM heap size
+################################################################
+##
+## You should always set the min and max JVM heap
+## size to the same value. For example, to set
+## the heap to 4 GB, set:
+##
+## -Xms4g
+## -Xmx4g
+##
+## See https://www.elastic.co/guide/en/elasticsearch/reference/current/heap-size.html
+## for more information
+##
+################################################################
+
+# Xms represents the initial size of total heap space
+# Xmx represents the maximum size of total heap space
+
+-Xms1g
+-Xmx1g
+
+################################################################
+## Expert settings
+################################################################
+##
+## All settings below this section are considered
+## expert settings. Don't tamper with them unless
+## you understand what you are doing
+##
+################################################################
+
+## GC configuration
+8-13:-XX:+UseConcMarkSweepGC
+8-13:-XX:CMSInitiatingOccupancyFraction=75
+8-13:-XX:+UseCMSInitiatingOccupancyOnly
+
+## G1GC Configuration
+# NOTE: G1 GC is only supported on JDK version 10 or later
+# to use G1GC, uncomment the next two lines and update the version on the
+# following three lines to your version of the JDK
+# 10-13:-XX:-UseConcMarkSweepGC
+# 10-13:-XX:-UseCMSInitiatingOccupancyOnly
+14-:-XX:+UseG1GC
+14-:-XX:G1ReservePercent=25
+14-:-XX:InitiatingHeapOccupancyPercent=30
+
+## JVM temporary directory
+-Djava.io.tmpdir=${ES_TMPDIR}
+
+## heap dumps
+
+# generate a heap dump when an allocation from the Java heap fails
+# heap dumps are created in the working directory of the JVM
+-XX:+HeapDumpOnOutOfMemoryError
+
+# specify an alternative path for heap dumps; ensure the directory exists and
+# has sufficient space
+-XX:HeapDumpPath=data
+
+# specify an alternative path for JVM fatal error logs
+-XX:ErrorFile=logs/hs_err_pid%p.log
+
+## JDK 8 GC logging
+8:-XX:+PrintGCDetails
+8:-XX:+PrintGCDateStamps
+8:-XX:+PrintTenuringDistribution
+8:-XX:+PrintGCApplicationStoppedTime
+8:-Xloggc:logs/gc.log
+8:-XX:+UseGCLogFileRotation
+8:-XX:NumberOfGCLogFiles=32
+8:-XX:GCLogFileSize=64m
+
+# JDK 9+ GC logging
+9-:-Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,pid,tags:filecount=32,filesize=64m
+
+```
+### kibana
+> kibana.yml
+```yaml
+#
+# ** THIS IS AN AUTO-GENERATED FILE **
+#
+
+# Default Kibana configuration for docker target
+
+server.name: kibana
+server.host: "0.0.0.0"
+server.publicBaseUrl: "http://elk_kibana:5601"  # 这里地址改为你访问kibana的地址，不能以 / 结尾
+elasticsearch.hosts: [ "http://elk_elasticsearch:9200" ] # 使用的容器的 hostname
+xpack.monitoring.ui.container.elasticsearch.enabled: true
+elasticsearch.username: "elastic"  # es账号
+elasticsearch.password: "123456"   # es密码
+i18n.locale: zh-CN # 中文
+
+```
+### logstash
+
+> config-logstash.config
+```properties
+# Sample Logstash configuration for creating a simple
+# Beats -> Logstash -> Elasticsearch pipeline.
+
+input {
+
+    tcp {
+        mode => "server"
+        host => "0.0.0.0"
+        port => 5044
+        codec => json{
+          charset=>"UTF-8"
+        }
+    }
+
+    # ex: 创建2个微服务demo，建立2个不同的输入，将两个服务的日志分别输入到不同的索引中
+
+    tcp {
+        mode => "server"
+        host => "0.0.0.0"         # 允许任意主机发送日志
+        type => "java_demo_log_1" # 设定type以区分每个输入源
+        port => 10001
+        codec => json_lines       # 数据格式
+    }
+
+    tcp {
+        mode => "server"
+        host => "0.0.0.0"
+        type => "java_demo_log_2"
+        port => 10002
+        codec => json_lines
+    }
+
+}
+
+output {
+
+    # For detail config for elasticsearch as output,
+    # See: https://www.elastic.co/guide/en/logstash/current/plugins-outputs-elasticsearch.html
+
+    # elasticsearch {
+    #     hosts => ["http://elasticsearch:9200"]
+    #     #index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+    #     index => "demo-log-%{+YYYY.MM.dd}"
+    #     #user => "elastic"
+    #     #password => "changeme"
+    # }
+
+    stdout{
+        codec => rubydebug
+    }
+
+    if [type] == "java_demo_log_1" {
+        elasticsearch {
+            action => "index"                            # 输出时创建映射
+            hosts  => "http://elasticsearch:9200"        # ElasticSearch地址和端口
+            index  => "java_demo_log_1-%{+YYYY.MM.dd}"   # 指定索引名-按天
+            codec  => "json"
+        }
+    }
+
+    if [type] == "java_demo_log_2" {
+        elasticsearch {
+            action => "index"
+            hosts  => "http://elasticsearch:9200"
+            index  => "java_demo_log_2-%{+YYYY.MM.dd}"
+            codec  => "json"
+        }
+    }
+
+}
+
+```
+
+> logstash.yml
+
+``` yaml
+http.host: "0.0.0.0"
+xpack.monitoring.enabled: true
+xpack.monitoring.elasticsearch.hosts: [ "http://elk_elasticsearch:9200" ] # 使用容器的hostname，或者使用自己的elasticsearch ip
+xpack.monitoring.elasticsearch.username: "elastic"
+xpack.monitoring.elasticsearch.password: "123456"
+
+```
+
+> logstash-sample.conf
+```yaml
+# Sample Logstash configuration for creating a simple
+# Beats -> Logstash -> Elasticsearch pipeline.
+
+input {
+  beats {
+    port => 5044
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["http://localhost:9200"]
+    index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+    #user => "elastic"
+    #password => "changeme"
+  }
+}
+
+
+```
+## small-tool
+> demo.conf
+```yaml
+# 日志输入
+input {
+
+    tcp {
+        mode => "server"
+        host => "0.0.0.0"   # 允许任意主机发送日志
+        type => "demo"      # 设定type以区分每个输入源
+        port => 20040
+        codec => json_lines # 数据格式
+    }
+
+}
+
+
+filter {
+    mutate {
+        # 导入之过滤字段
+        remove_field => ["LOG_MAX_HISTORY_DAY", "LOG_HOME", "APP_NAME"]
+        remove_field => ["@version", "_score", "port", "level_value", "tags", "_type", "host"]
+    }
+}
+
+# 日志输出-控制台
+output {
+    stdout{
+        codec => rubydebug
+    }
+}
+
+# 日志输出-es
+output {
+
+    if [type] == "demo" {
+        elasticsearch {
+            action => "index"                       # 输出时创建映射
+            hosts  => "http://elasticsearch:9200"   # ES地址和端口
+            user => "elastic"                       # ES用户名
+            password => "123456"                    # ES密码
+            index  => "demo-%{+YYYY.MM.dd}"         # 指定索引名-按天
+            codec  => "json"
+        }
+    }
+
+}
+
+```
+> gateway.conf
+```yaml
+input {
+
+    tcp {
+        mode => "server"
+        host => "0.0.0.0"         # 允许任意主机发送日志
+        type => "gateway"         # 设定type以区分每个输入源
+        port => 1218
+        codec => json_lines       # 数据格式
+    }
+
+}
+
+# 日志输出-控制台
+output {
+    stdout{
+        codec => rubydebug
+    }
+}
+
+# 日志输出-es
+output {
+
+    if [type] == "gateway" {
+        elasticsearch {
+            action => "index"                            # 输出时创建映射
+            hosts  => "http://elasticsearch:9200"        # ElasticSearch地址和端口
+            user => "elastic"                            # ES用户名
+            password => "123456"                         # ES密码
+            index  => "gateway-%{+YYYY.MM.dd}"           # 指定索引名-按天
+            codec  => "json"
+        }
+    }
+
+}
+
+```
+> system.conf
+```yaml
+input {
+
+    tcp {
+        mode => "server"
+        host => "0.0.0.0"
+        type => "system"
+        port => 20010
+        codec => json_lines
+    }
+
+}
+
+# 日志输出-控制台
+output {
+    stdout{
+        codec => rubydebug
+    }
+}
+
+# 日志输出-es
+output {
+
+    if [type] == "system" {
+        elasticsearch {
+            action => "index"
+            hosts  => "http://elasticsearch:9200"
+            user => "elastic"
+            password => "123456"
+            index  => "system-%{+YYYY.MM.dd}"
+            codec  => "json"
+        }
+    }
+
+}
+
+```
+> tool.conf
+```yaml
+input {
+
+    tcp {
+        mode => "server"
+        host => "0.0.0.0"
+        type => "tool"
+        port => 20030
+        codec => json_lines
+    }
+
+}
+
+# 日志输出-控制台
+output {
+    stdout{
+        codec => rubydebug
+    }
+}
+
+# 日志输出-es
+output {
+
+    if [type] == "tool" {
+        elasticsearch {
+            action => "index"
+            hosts  => "http://elasticsearch:9200"
+            user => "elastic"
+            password => "123456"
+            index  => "tool-%{+YYYY.MM.dd}"
+            codec  => "json"
+        }
+    }
+
+}
+
+```
+
+## 权限问题
+```shell
+# 运行
+docker-compose -f docker-compose-elk.yml up -d
+# 若运行之后启动日志报相关权限问题，给新产生的文件赋予权限
+chmod -R 777 /application/middleware/elk/
+```
+
+## 设置ES密码
+
+```shell
+# 进入容器
+docker exec -it elasticsearch /bin/bash
+# 设置密码-随机生成密码
+# elasticsearch-setup-passwords auto
+# 设置密码-手动设置密码
+elasticsearch-setup-passwords interactive
+```
+
