@@ -2,6 +2,8 @@ import {defineConfig} from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightImageZoom from 'starlight-image-zoom'
 import starlightSidebarTopicsDropdown from 'starlight-sidebar-topics-dropdown'
+import catppuccin from "starlight-theme-catppuccin";
+
 
 
 export default defineConfig({
@@ -11,6 +13,7 @@ export default defineConfig({
         starlight({
             title: 'deploy-docs',
             plugins: [starlightImageZoom(),
+                catppuccin(),
                 starlightSidebarTopicsDropdown([
                     // {
                     // 	label: 'docker',
