@@ -21,10 +21,19 @@ jobs:
         with:
           node-version: 18
       - run: npm i pnpm -g
-      - run: |
-          corepack enable
-          pnpm install --frozen-lockfile
-          pnpm add sharp
+        # 4️⃣ 允许所有构建脚本
+      - name: Approve build scripts
+        run: |
+          pnpm approve-builds --all
+          echo "PNPM_ENABLE_SCRIPTS=true" >> $GITHUB_ENV
+
+        # 5️⃣ 安装依赖
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+        # 6️⃣ 强制构建 sharp（如仍有问题）
+      - name: Force rebuild sharp
+        run: pnpm rebuild sharp
 
       - name: Build
         run: pnpm build
@@ -33,4 +42,4 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: dist
+          publish_dir: 。/dist
