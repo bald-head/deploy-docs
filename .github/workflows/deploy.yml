@@ -2,9 +2,11 @@ name: Deploy
 
 on:
   # 每次您向`master`分支推送时触发工作流程
-  push:
-    branches: [master]
-
+#  push:
+#    branches: [master]
+  pull_request:
+    branches:
+      - master
   # 允许您从GitHub上的操作标签手动运行此工作流程。
   workflow_dispatch:
 
