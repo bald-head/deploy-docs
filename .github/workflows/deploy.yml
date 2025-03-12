@@ -1,17 +1,14 @@
 name: Deploy
 
-# Listen for push and pull_request events on the master branch.
 on:
+  # 每次您向`master`分支推送时触发工作流程
   push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+    branches: [master]
+
+  # 允许您从GitHub上的操作标签手动运行此工作流程。
   workflow_dispatch:
-    branches:
-      - master
-# Allow this job to clone the repo and create a page deployment
+
+# 允许此工作克隆仓库并创建页面部署
 permissions:
   contents: read
   pages: write
@@ -25,17 +22,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Install, build, and upload your site output
         uses: withastro/action@v2
-        with:
-          path: . # The root location of your Astro project inside the repository. (optional)
-          node-version: 18 # The specific version of Node that should be used to build your site. Defaults to 18. (optional)
-          package-manager: pnpm # The Node package manager that should be used to install dependencies and build your site. Automatically detected based on your lockfile. (optional)
+        path: . # 你的Astro项目在仓库中的根位置。（可选）
+        node-version: 18 # 应用于构建您站点的Node具体版本。默认为18。（可选）
+        package-manager: pnpm@latest # 应使用的Node包管理器，用于安装依赖项并构建您的网站。根据您的锁定文件自动检测。（可选）
+
   deploy:
-    need: build
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-      steps:
-        - name: Deploy to GitHub Pages
-          id: deployment
-          uses: actions/deploy-pages@v4
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
