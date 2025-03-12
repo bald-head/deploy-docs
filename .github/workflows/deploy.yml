@@ -23,7 +23,7 @@ jobs:
       - name: Install, build, and upload your site output
         uses: withastro/action@v2
         path: ./ # 你的Astro项目在仓库中的根位置。（可选）
-        node-version: 18 # 应用于构建您站点的Node具体版本。默认为18。（可选）
+#        node-version: 18 # 应用于构建您站点的Node具体版本。默认为18。（可选）
         package-manager: pnpm@latest # 应使用的Node包管理器，用于安装依赖项并构建您的网站。根据您的锁定文件自动检测。（可选）
 
   deploy:
