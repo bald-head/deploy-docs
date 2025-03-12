@@ -26,8 +26,8 @@ export default defineConfig({
                         link: '/docker/',
                         icon: 'seti:docker',
                         items: [
-							{label:"FQA", autogenerate: {directory: 'docker/FQA'}},
-							{label: 'docker-compose.yml', autogenerate: {directory: 'docker/use'}}
+                            {label: 'docker-compose', autogenerate: {directory: 'docker/use'}},
+							{label:"FQA", autogenerate: {directory: 'docker/FQA'}}
 						]
                     },
                     {
@@ -58,10 +58,10 @@ export default defineConfig({
                     lang: 'zh-CN',
                 },
                 // 英文版本的文档在 '/src/content/docs/en'下
-                'en': {
-                    label: 'English',
-                    lang: 'en'
-                }
+                // 'en': {
+                //     label: 'English',
+                //     lang: 'en'
+                // }
             },
 
         }),
