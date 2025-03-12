@@ -16,17 +16,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
       - run: npm i pnpm -g
-        # 4️⃣ 允许所有构建脚本
-      - name: Approve build scripts
-        run: |
-          pnpm approve-builds --all
-          echo "PNPM_ENABLE_SCRIPTS=true" >> $GITHUB_ENV
-
         # 5️⃣ 安装依赖
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
