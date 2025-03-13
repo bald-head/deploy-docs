@@ -1,0 +1,56 @@
+---
+title: webrtc-stream
+description: rtsp -> webrtc
+sidebar:
+    order: 11
+---
+## 启动yml
+``` yml
+services:
+  webrtc:
+    image: mpromonet/webrtc-streamer
+    hostname: webrtc
+    container_name: bbibm_webrtc
+    restart: always
+    command:
+      - -o
+      - -H
+      - 0.0.0.0:18000
+    privileged: true
+    network_mode: host
+```
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution">容器最好使用host模式，官方的单映射8000端口无法播放视频</Aside>
+
+## 测试html
+``` html
+<html>
+<head>
+<script src="libs/adapter.min.js" ></script>
+<script src="webrtcstreamer.js" ></script>
+<script>
+	var webRtcServer      = null;
+	window.onload         = function() {
+		webRtcServer      = new WebRtcStreamer("video",location.protocol+"//"+location.hostname+":18000");
+		webRtcServer.connect("rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mov");
+	}
+	window.onbeforeunload = function() { webRtcServer.disconnect(); }
+</script>
+</head>
+<body>
+	<video id="video" />
+</body>
+</html>
+```
+
+import { LinkButton } from '@astrojs/starlight/components';
+
+<LinkButton
+    href="https://github.com/mpromonet/webrtc-streamer"
+    variant="secondary"
+    icon="github"
+    iconPlacement="start"
+>
+    项目地址
+</LinkButton>
