@@ -1,0 +1,538 @@
+---
+title: change-impact-analysis
+description: 需求变更影响分析 - 识别受影响功能并定向更新 TODO
+order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`change-impact-analysis` 是 **Critical 优先级** Skill，专门处理已批准范围的真实变化。当需求、契约、数据、权限或交付面发生实质性变更时，完整识别受影响的功能、菜单、API、数据、权限和交付面，并原位更新当前开发者的 TODO 文件。
+
+**核心职责**：
+- 建立变化 Diff（before/after）
+- 完整影响闭包分析
+- 定向回流受影响的专业 Skill
+- 原位更新 TODO 文件
+
+<Aside type="caution">
+本 Skill 只在真实变化时定向回流，**不是**所有新需求和实现的固定前置阶段。
+</Aside>
+
+## 触发条件
+
+### Triggers（触发词）
+
+**中文**：
+- 影响分析
+- 变更影响
+- 依赖分析
+- 需求改了
+- 需求变了
+- 范围变了
+- 加一个字段
+- 加字段
+- 改需求
+- 功能变更
+
+**English**：
+- impact analysis
+- change impact
+- scope change
+- requirement change
+
+### Gates（前置条件）
+
+1. **已有批准的范围、契约或交付面**
+2. **发生真实变化**（用户结果、API、数据、权限或交付面）
+3. **存在唯一 TODO 文件需要更新**
+
+<Aside type="note">
+Bug 修复、编译/测试失败、代码实现偏差、Review finding、checkbox、Git、CI、普通配置值和不改变行为的文案调整**不触发**本 Skill。
+</Aside>
+
+## 使用场景
+
+### 场景 1：用户要求新增字段
+
+**用户输入**：
+```
+需求改了，用户表要加一个手机号字段
+```
+
+**Skill 行为**：
+
+1. **建立变化 Diff**：
+   ```markdown
+   - 领域: data
+   - 对象: 用户表 (users)
+   - 原值: email, password, username
+   - 新值: email, password, username, phone
+   - 来源: 用户要求
+   ```
+
+2. **影响闭包分析**：
+   ```
+   users 表
+   ├─ 数据库迁移: ALTER TABLE users ADD COLUMN phone
+   ├─ 后端 Model: UserEntity.java
+   ├─ 注册 API: POST /api/v1/auth/register
+   ├─ 注册页面: src/pages/register.vue
+   ├─ 用户信息页面: src/pages/profile.vue
+   └─ API 文档: docs/api/auth.md
+   ```
+
+3. **动作决策**：
+   ```markdown
+   - Feature: USER-REG-API
+     Action: update-current
+     Reason: 注册 API 需要增加 phone 参数验证
+   
+   - Feature: USER-REG-PAGE
+     Action: update-current
+     Reason: 注册页面需要增加手机号输入框
+   
+   - Feature: USER-PROFILE-PAGE
+     Action: update-current
+     Reason: 用户信息页面需要展示手机号
+   ```
+
+4. **更新 TODO**：
+   ```markdown
+   ## Feature: USER-REG-API
+   
+   - 状态: [~] in-progress → [~] in-progress
+   - 验收:
+     - AC-001: 接收邮箱密码
+     - AC-002: 接收手机号 ✨ 新增
+     - AC-003: 手机号格式验证 ✨ 新增
+   
+   - 写集:
+     - src/main/java/entity/UserEntity.java ✨ 新增 phone 字段
+     - src/main/java/controller/AuthController.java
+     - docs/migrations/add_phone_to_users.sql ✨ 新增
+   ```
+
+### 场景 2：API 契约变化
+
+**用户输入**：
+```
+登录接口改成支持邮箱或手机号登录
+```
+
+**影响闭包**：
+```
+POST /api/v1/auth/login
+├─ 后端: AuthController.login()
+│   ├─ 参数验证: 支持 email 或 phone
+│   └─ 用户查询: UserService.findByEmailOrPhone()
+├─ 前端: LoginPage.vue
+│   ├─ 表单: 输入框提示改为 "邮箱或手机号"
+│   └─ 验证规则: 邮箱格式 | 手机号格式
+└─ API 文档: docs/api/auth.md
+```
+
+**Planning Level 重算**：
+```markdown
+原 Level: Lite
+新 Level: Standard
+原因: 公开 API 契约变化，需要补充 API 文档和前端兼容性验证
+```
+
+### 场景 3：权限规则变化
+
+**用户输入**：
+```
+普通用户也可以查看订单列表，但只能看自己的
+```
+
+**影响闭包**：
+```
+订单列表 API
+├─ 权限注解: @RequirePermission("order:list") → 移除
+├─ 数据权限: 增加 userId 过滤
+├─ 查询 SQL: WHERE user_id = :currentUserId
+└─ 前端路由: /orders 从管理员菜单移到用户菜单
+```
+
+**Planning Level 重算**：
+```markdown
+原 Level: Lite
+新 Level: High-risk
+原因: 权限变化涉及数据可见性，需要安全审查和数据权限测试
+```
+
+### 场景 4：交付面变化
+
+**用户输入**：
+```
+用户登录功能要支持移动端 App
+```
+
+**影响闭包**：
+```
+用户登录
+├─ 后端 API: 已有，无需改动
+├─ Web 页面: 已完成
+├─ App 页面: 新增
+│   ├─ src/app/pages/login/index.tsx
+│   ├─ 适配移动端布局
+│   └─ 生物识别支持（可选）
+└─ 路由配置: app/routes.ts
+```
+
+**动作决策**：
+```markdown
+- Feature: USER-LOGIN-WEB
+  Action: continue
+  Reason: Web 端已完成，无需改动
+
+- Feature: USER-LOGIN-APP
+  Action: 新增 Feature
+  Reason: 新增交付面，需要独立 Feature
+```
+
+## 工作原理
+
+### 第一步：建立变化 Diff
+
+从唯一 TODO 当前项、项目既有文档和用户新要求取得 before/after：
+
+```markdown
+- 领域: scope / contract / data / permission / architecture / technology / surface
+- 对象: Feature、菜单、API、表、权限、页面或集成
+- 原值: ...
+- 新值: ...
+- 来源: 用户要求、文档路径或源码位置
+```
+
+**只读规则**：
+- 只读能回答当前变化的章节和源码
+- 不全量回读所有 PRD、设计、架构、历史 Context 或 workflow 目录
+
+### 第二步：完整影响闭包
+
+按真实引用、依赖和调用链检查：
+
+```text
+requirement -> capability -> journey/menu -> feature/acceptance
+feature -> dependsOn 后继
+API/schema/message -> producer + all consumers
+data/permission -> repository/service/API/client/audit
+architecture/technology -> affected modules/repositories/environments
+changed path -> integration/review/git scope
+```
+
+**覆盖范围**：
+- 直接受影响的功能、菜单
+- 数据、API、后端、Web/App/Desktop
+- 权限、集成、迁移/回滚
+- 配置和验证
+
+<Aside type="caution">
+文件名相似或模型猜测**不能单独形成影响**，必须基于真实引用和调用链。
+</Aside>
+
+### 第三步：动作决策
+
+每个受影响项选择动作：
+
+| 动作 | 说明 | 示例 |
+|------|------|------|
+| `continue` | 变化已在当前范围内，无需改计划 | 字段变化在预留扩展范围内 |
+| `update-current` | 补充当前 Feature 的目标、验收或写集 | 增加新字段的验证规则 |
+| `reopen` | 已完成 Feature 的用户结果因新变化失效 | 已上线的登录功能需要支持手机号 |
+| `reorder` | 依赖或优先级必须调整 | B 依赖 A 的新字段，需要先完成 A |
+| `cancel/supersede` | 旧功能不再有效 | 旧的单点登录方案被 OAuth2 替代 |
+| `decision-required` | 缺失决定会改变产品、架构或数据 | 手机号是否允许为空？是否支持国际号码？ |
+
+### 第四步：Planning Level 重算
+
+根据变化影响重新评估 Planning Level：
+
+**升级为 High-risk 的条件**：
+- 新增权限/租户
+- 迁移/删除数据
+- 公开契约变化
+- 并发/幂等要求
+- 涉及资金
+- 跨仓/外部集成
+- 难以回滚
+- 核心架构边界
+
+**降级规则**：
+- 变化接近原 Feature 大部分时（约 70%），只作为人工复核信号
+- 不能凭行数自动升级或继续
+
+**Mode 重算**：
+- 仍有关键决定时返回 `Plan`，不进入可领取队列
+- 批准后才写回 `Goal` 或 `Build`
+
+### 第五步：定向回流专业 Skill
+
+只调用受影响的专业规划 Skill：
+
+| 变化类型 | 回流 Skill |
+|---------|-----------|
+| 产品变化 | `product-manager` |
+| UI/UX 变化 | `frontend-design` |
+| 边界变化 | `architecture-design` |
+| 技术变化 | `tech-decision` |
+
+<Aside type="note">
+不重新运行整套项目规划，只针对受影响部分定向更新。
+</Aside>
+
+## 输出格式
+
+### 变化摘要
+
+```markdown
+## 变化摘要
+
+**变化类型**: 数据模型变化
+
+**变化内容**:
+- 用户表 (users) 新增 phone 字段
+- 类型: VARCHAR(20)
+- 约束: NOT NULL, UNIQUE
+
+**来源**: 用户要求
+
+---
+```
+
+### 影响闭包
+
+```markdown
+## 影响闭包
+
+### 直接影响
+
+1. **数据库**
+   - users 表: 新增 phone 字段
+   - 迁移脚本: docs/migrations/add_phone_to_users.sql
+
+2. **后端**
+   - UserEntity.java: 新增 phone 属性
+   - AuthController.java: 注册接口增加 phone 参数
+   - UserService.java: 增加手机号查询方法
+
+3. **前端**
+   - register.vue: 新增手机号输入框
+   - profile.vue: 展示手机号
+
+4. **API 文档**
+   - docs/api/auth.md: 更新注册接口文档
+
+### 间接影响
+
+1. **测试**
+   - 注册功能测试: 增加手机号测试用例
+   - 数据迁移测试: 验证迁移脚本
+
+2. **验收条件**
+   - AC-002: 用户可以使用手机号注册
+   - AC-003: 手机号格式验证
+
+---
+```
+
+### 动作计划
+
+```markdown
+## 动作计划
+
+### Feature: USER-REG-API
+
+**动作**: update-current
+
+**原因**: 注册 API 需要增加 phone 参数验证
+
+**更新内容**:
+- 验收: 新增 AC-002, AC-003
+- 写集: 新增 UserEntity.java, add_phone_to_users.sql
+
+**Planning Level**: Lite → Standard
+**理由**: 公开 API 契约变化，需要补充文档
+
+---
+
+### Feature: USER-REG-PAGE
+
+**动作**: update-current
+
+**原因**: 注册页面需要增加手机号输入框
+
+**更新内容**:
+- 写集: 新增 register.vue (手机号输入)
+- 验收: 新增表单验证测试
+
+---
+```
+
+### 决策请求（如需）
+
+```markdown
+## 需要决策
+
+### 决策 1: 手机号是否允许为空？
+
+**上下文**: 用户表新增 phone 字段
+
+**选项**:
+- A: 允许为空（NULL）
+- B: 必填（NOT NULL）
+
+**影响**:
+- 选项 A: 兼容已有用户，但需要额外逻辑处理空值
+- 选项 B: 数据一致性好，但需要迁移脚本为已有用户生成默认值
+
+**建议**: 选项 A，兼容性更好
+
+---
+
+### 决策 2: 是否支持国际手机号？
+
+**上下文**: 手机号格式验证
+
+**选项**:
+- A: 只支持中国大陆 (+86)
+- B: 支持国际号码 (需要区号选择)
+
+**影响**:
+- 选项 A: 实现简单，正则验证 11 位数字
+- 选项 B: 需要国家/地区选择器，复杂度增加
+
+**建议**: 根据用户群体决定
+
+---
+```
+
+## 与其他 Skill 的关系
+
+### Conflicts（职责边界）
+
+| Skill | 边界说明 |
+|-------|---------|
+| `product-manager` | `product-manager` 负责新项目产品定义；`change-impact-analysis` 负责已有范围的变更分析 |
+| `project-manager` | `project-manager` 负责初始 TODO 生成；`change-impact-analysis` 负责变更后的 TODO 更新 |
+
+### Related Skills
+
+**前置依赖** (before):
+- `product-manager` - 提供初始产品定义
+- `project-manager` - 提供初始 TODO
+- `task-todo-workflow` - 提供 TODO 工作流
+
+**后续推荐** (after):
+- `project-manager` - 重新生成或更新 TODO
+- `task-todo-workflow` - 更新 TODO 状态
+
+**协作 Skill** (complement):
+- `universal-development` - 实施变更后的功能
+- `code-review` - 审查变更代码
+
+## 最佳实践
+
+### 1. 明确变化范围
+
+```markdown
+<!-- 不够清晰 -->
+需求改了
+
+<!-- 清晰明确 -->
+需求改了：用户登录要支持手机号登录，原来只支持邮箱
+```
+
+### 2. 提供上下文
+
+```markdown
+<!-- 缺少上下文 -->
+加一个字段
+
+<!-- 完整上下文 -->
+用户表加一个 phone 字段，用于手机号登录和短信通知
+```
+
+### 3. 区分真实变化 vs 实现偏差
+
+**真实变化**（触发 change-impact-analysis）：
+- 用户要求新增手机号登录
+- API 契约从同步改为异步
+- 权限规则从管理员专用改为所有用户可用
+
+**实现偏差**（不触发）：
+- 代码写错了，少了一个参数验证
+- Review 发现性能问题，需要加缓存
+- 测试失败，需要修复 bug
+
+### 4. 及时更新 TODO
+
+变化分析完成后，立即更新 TODO：
+
+```bash
+# 错误：分析完不更新
+/change-impact-analysis
+# ... 分析完成 ...
+# （用户继续开发，TODO 过时）
+
+# 正确：分析完立即更新
+/change-impact-analysis
+# ... 分析完成 ...
+/project-manager  # 或手动更新 TODO
+```
+
+## 故障排查
+
+### 问题 1：影响闭包不完整
+
+**症状**：分析遗漏了受影响的模块
+
+**原因**：
+- 只基于文件名相似推测，未检查真实引用
+- 未追踪间接依赖
+
+**解决方案**：
+```bash
+# 检查真实引用
+git grep "UserEntity"
+git grep "users 表"
+
+# 检查间接依赖
+# 找到所有调用 AuthController 的地方
+```
+
+### 问题 2：Planning Level 评估不准
+
+**症状**：变化很小但被升级为 High-risk
+
+**原因**：
+- 触发了权限、数据或契约关键词
+- 未考虑变化的实际影响范围
+
+**解决方案**：
+- 评估变化的真实风险
+- 小范围权限调整不一定是 High-risk
+- 内部 API 变化可以是 Lite
+
+### 问题 3：重复触发
+
+**症状**：每次实现都被要求做影响分析
+
+**原因**：
+- 未区分真实变化和实现步骤
+- 把 change-impact-analysis 当作固定流程
+
+**解决方案**：
+- 只在用户明确提出范围变化时触发
+- 实现过程中的调整不触发
+- Bug 修复不触发
+
+## 下一步
+
+- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义与验收
+- [project-manager](/skills/skills-reference/high/project-manager) - 生成功能 TODO
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
+- [universal-development](/skills/skills-reference/high/universal-development) - 实施变更功能

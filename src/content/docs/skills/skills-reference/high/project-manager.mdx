@@ -1,0 +1,595 @@
+---
+title: project-manager
+description: 生成功能 TODO - 基于完整产品、设计、架构和技术结论建立可执行 TODO
+order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`project-manager` 是 **High 优先级** Skill，负责将完整的产品定义、UI/UX 设计、系统架构和技术选型结论转化为可执行的功能 TODO。按功能点与菜单/入口建立当前开发者覆盖全部交付面的唯一 TODO 文件。
+
+**核心职责**：
+- 将上游结论压缩为来源锚点
+- 建立完整功能覆盖（requirement → capability → journey → menu → feature → acceptance）
+- Epic + Feature 拆分（纵向完整功能，非技术阶段）
+- 依赖 DAG 与并行写集规划
+- 规划档位分配（Lite/Standard/High-risk + Goal/Build）
+- 生成当前开发者唯一 Markdown TODO
+
+<Aside type="caution">
+项目计划必须覆盖项目文档承诺的全部功能。流程精简只删除重复回读、状态对象、证据对象和摘要计算，不减少规划或交付内容。
+</Aside>
+
+## 触发条件
+
+### Triggers（触发词）
+
+**中文**：
+- 项目管理
+- 任务分解
+- 交付规划
+- 生成 TODO
+- 建立计划
+
+**English**：
+- project management
+- task breakdown
+- delivery planning
+- generate TODO
+
+### Gates（前置条件）
+
+1. **流程状态机已推进到 task-breakdown**
+2. **technical-confirmation 已确认**
+3. **存在完整的产品定义、设计、架构和技术结论**
+
+### Not For（不适用场景）
+
+- 产品定义
+- 需求分析
+- 代码实现
+- TODO 状态机
+
+## 来源锚点（持久规划记忆）
+
+规划不能只留下一个 PRD 文件名。每个可执行 Feature 必须把原始要求压缩为 TODO 内的**来源锚点**：
+
+```markdown
+来源锚点：
+- 文档: `<PRD/CR/design path#section>`
+- 用户结果: <结果>
+- 范围: <必须/不做/禁止替代>
+- 数据/权限边界: <边界>
+- 关键状态: <状态>
+- 设计约束: <约束>
+- 技术结论: <selected decision/rollback>
+```
+
+**锚点作用**：
+- 导航记忆：首次领取或恢复 Feature 时回读原始章节
+- 冲突检测：原文与锚点冲突时触发 change-impact-analysis
+- 上下文恢复：压缩、换 runtime、换设备、交接时的恢复点
+
+<Aside type="note">
+锚点只保存短摘要，不复制上游正文。无关文档不重复读取，但不能以摘要、聊天记录或 checkbox 替代原文复核。
+</Aside>
+
+## 规划档位与自主边界
+
+### 规划档位 (Planning Level)
+
+| 档位 | 适用场景 | 保留内容 | 理由示例 |
+|------|---------|---------|---------|
+| **Lite** | 范围明确、低风险、复用既有技术且不改变业务行为 | Owner、入口/调用方、稳定 AC、全部真实交付面、最小验证、一次 Review | 纯文案修改、配置调整、重命名 |
+| **Standard** | 新增业务行为、页面/API/数据或跨层联动 | 完整产品、UI/UX、架构、逐 Feature 技术选择、TODO、验证、Review | 新增用户注册功能 |
+| **High-risk** | 权限/租户、迁移/删除、公开契约、并发/幂等、资金、跨仓/外部集成、难回滚、核心架构 | Standard + 风险/回滚矩阵、独立方案复核、Regression-required、人工门禁、发布检查 | 多租户隔离、支付集成 |
+
+### 自主模式 (Mode)
+
+| 模式 | 说明 | 授权范围 |
+|------|------|---------|
+| **Goal** | 目标、并行写集、迭代预算、验证和回滚都明确时连续推进 | 可自主完成规划和实施 |
+| **Plan** | 仍需需求、方案、迁移/发布或不可逆动作批准 | 只保留在规划输出，不进入可领取 TODO；批准后转 Goal/Build |
+| **Build** | 已批准方案和 TODO 的直接续作 | 直接消费方案，不重复要求多方案或确认 |
+
+<Aside type="tip">
+向下游只传一条紧凑结论：`Planning level + mode / Why / Kept / Trimmed / Escalate when`
+</Aside>
+
+## 使用场景
+
+### 场景 1：全新项目规划
+
+**用户输入**：
+```
+用户管理系统的产品、设计、架构和技术都确认了，生成 TODO
+```
+
+**前置完成**：
+- ✅ product-manager: 完整产品定义
+- ✅ frontend-design: UI/UX 设计基线
+- ✅ architecture-design: 系统架构设计
+- ✅ tech-decision: 逐 Feature 技术选型
+
+**project-manager 行为**：
+
+1. **项目覆盖盘点**：
+   ```text
+   项目要求: 用户管理系统
+   ├─ CAP-001: 用户注册
+   │   ├─ JOURNEY: 新用户注册流程
+   │   ├─ MENU: /register (公开入口)
+   │   ├─ FEATURE: USER-REG-API (后端)
+   │   ├─ FEATURE: USER-REG-PAGE (前端)
+   │   └─ AC-001: 用户可以通过邮箱注册
+   │
+   ├─ CAP-002: 用户登录
+   │   ├─ JOURNEY: 用户登录流程
+   │   ├─ MENU: /login (公开入口)
+   │   ├─ FEATURE: USER-LOGIN-API (后端)
+   │   ├─ FEATURE: USER-LOGIN-PAGE (前端)
+   │   └─ AC-001: 用户可以登录
+   │
+   └─ CAP-003: 权限管理
+       ├─ JOURNEY: 管理员分配角色流程
+       ├─ MENU: admin.roles (管理菜单)
+       ├─ FEATURE: ROLE-MANAGE-API (后端)
+       ├─ FEATURE: ROLE-MANAGE-PAGE (前端)
+       └─ AC-001: 管理员可以分配角色
+   ```
+
+2. **生成唯一 TODO**：
+   ```markdown
+   # 用户管理系统 TODO
+   
+   Owner: alice-chen
+   项目: 用户管理系统
+   仓库: /path/to/user-system
+   
+   ## Epic: USER-AUTH 【用户认证】
+   
+   Owner: alice-chen
+   目标: 用户注册、登录功能全部可用
+   菜单/入口: /register, /login
+   
+   ### Feature: USER-REG-API 【用户注册 API】
+   
+   - [ ] `USER-REG-API` 用户注册 API；Owner: alice-chen
+     - 来源: PRD#用户注册
+     - 来源锚点: `docs/prd.md#用户注册`；用户结果：用户可以通过邮箱注册；范围：邮箱+密码注册，不支持第三方登录；数据边界：用户表；关键状态：pending/active；设计约束：无；技术结论：Spring Boot + MyBatis + BCrypt 密码加密
+     - 菜单/入口: POST /api/v1/auth/register (公开 API)
+     - 用户/调用方: 新用户
+     - 目标: 接收注册信息，发送验证邮件，创建用户账号
+     - 验收: 
+       - AC-001: 用户可以通过邮箱注册
+       - AC-002: 邮箱唯一性验证
+       - AC-003: 密码加密存储
+     - 依赖: 无
+     - 并行写集: `src/main/java/controller/AuthController.java`, `src/main/java/entity/UserEntity.java`, `src/main/java/service/UserService.java`
+     - 交付面: data / api / backend / permission
+     - 验证: Evidence-only
+     - 规划: Standard + Build；理由：新增 API 和数据模型；升级条件：涉及权限或租户时升为 High-risk
+   
+   ### Feature: USER-REG-PAGE 【用户注册页面】
+   
+   - [ ] `USER-REG-PAGE` 用户注册页面；Owner: alice-chen
+     - 来源: PRD#用户注册 + UI设计#注册页面
+     - 来源锚点: `docs/prd.md#用户注册`, `docs/ui-design.md#注册页面`；用户结果：用户看到注册表单并可提交；设计约束：Element Plus Form + 响应式布局；技术结论：Vue 3 + Element Plus
+     - 菜单/入口: /register (公开路由)
+     - 用户/调用方: 新用户
+     - 目标: 展示注册表单，验证输入，调用注册 API
+     - 验收:
+       - AC-001: 注册表单展示正确
+       - AC-002: 表单验证有效（邮箱格式、密码强度）
+       - AC-003: 提交后调用 API 并显示结果
+     - 依赖: `USER-REG-API`
+     - 并行写集: `src/pages/register.vue`, `src/api/auth.ts`
+     - 交付面: web
+     - 验证: Evidence-only
+     - 规划: Standard + Build；理由：新增页面和 UI 交互
+   
+   ---
+   
+   ## Epic: ROLE-MANAGE 【角色管理】
+   
+   Owner: alice-chen
+   目标: 角色和权限管理功能可用
+   菜单/入口: admin.roles
+   
+   ### Feature: ROLE-MANAGE-API 【角色管理 API】
+   
+   - [ ] `ROLE-MANAGE-API` 角色管理 API；Owner: alice-chen
+     - 来源: PRD#权限管理
+     - 来源锚点: `docs/prd.md#权限管理`；用户结果：管理员可以创建、编辑角色；权限边界：只有超级管理员可操作；技术结论：RBAC 模型 + Sa-Token
+     - 菜单/入口: /api/v1/admin/roles (管理员 API)
+     - 用户/调用方: 超级管理员
+     - 目标: CRUD 角色，分配权限点
+     - 验收:
+       - AC-001: 管理员可以创建角色
+       - AC-002: 管理员可以为角色分配权限
+       - AC-003: 权限变更实时生效
+     - 依赖: `USER-AUTH` (Epic，等价于依赖其全部子 Feature)
+     - 并行写集: `src/main/java/controller/RoleController.java`, `src/main/java/entity/RoleEntity.java`
+     - 交付面: data / api / backend / permission
+     - 验证: Regression-required
+     - 规划: High-risk + Build；理由：涉及权限管理，影响全局安全；升级条件：已是 High-risk
+   ```
+
+### 场景 2：Epic 聚合大型目标
+
+**用户输入**：
+```
+订单治理功能比较复杂，包含查询、导出、异常恢复三个子功能
+```
+
+**project-manager 行为**：
+
+```markdown
+## Epic: ORDER-GOVERNANCE 【订单治理】
+
+Owner: bob-zhang
+目标: 订单查询、导出和异常恢复全部可用
+菜单/入口: order.*
+
+### 子功能 1: 订单查询
+
+- [ ] `ORDER-QUERY` 【订单查询】；Owner: bob-zhang
+  - 来源: PRD#订单治理#查询
+  - 来源锚点: `docs/prd.md#订单查询`；用户结果：运营人员可以按条件查询订单；权限边界：按数据权限过滤；技术结论：MyBatis Dynamic SQL + Redis 缓存
+  - 菜单/入口: order.list (运营菜单)
+  - 用户/调用方: 运营人员
+  - 目标: 按权限和筛选条件查询订单
+  - 验收:
+    - AC-001: 运营人员可以查询自己负责区域的订单
+    - AC-002: 支持多条件筛选（订单号、状态、时间范围）
+    - AC-003: 分页查询，每页 20 条
+  - 依赖: 无
+  - 并行写集: `apps/admin/src/orders/list/`, `services/order-query/`
+  - 交付面: api / backend / web / permission
+  - 验证: Evidence-only
+  - 规划: Standard + Build
+
+### 子功能 2: 订单导出
+
+- [ ] `ORDER-EXPORT` 【订单导出】；Owner: bob-zhang
+  - 来源: PRD#订单治理#导出
+  - 来源锚点: `docs/prd.md#订单导出`；用户结果：运营人员可以导出当前筛选结果；限制：单次最多 10,000 条；技术结论：Apache POI + 异步任务
+  - 菜单/入口: order.export (运营菜单)
+  - 用户/调用方: 运营人员
+  - 目标: 按当前筛选导出订单为 Excel
+  - 验收:
+    - AC-001: 运营人员可以导出当前查询结果
+    - AC-002: 导出文件包含完整字段（脱敏）
+    - AC-003: 超过 10,000 条提示分批导出
+  - 依赖: `ORDER-QUERY`
+  - 并行写集: `apps/admin/src/orders/export/`, `services/order-export/`
+  - 交付面: api / backend / web / permission / integration
+  - 验证: Evidence-only
+  - 规划: Standard + Build
+
+### 子功能 3: 异常恢复
+
+- [ ] `ORDER-RECOVERY` 【订单异常恢复】；Owner: bob-zhang
+  - 来源: PRD#订单治理#异常恢复
+  - 来源锚点: `docs/prd.md#异常恢复`；用户结果：运营人员可以手动触发异常订单恢复；风险：涉及资金和库存；技术结论：补偿事务 + 审计日志
+  - 菜单/入口: order.recovery (高级运营菜单)
+  - 用户/调用方: 高级运营人员
+  - 目标: 手动触发支付失败、库存未扣减等异常订单的恢复
+  - 验收:
+    - AC-001: 高级运营可以触发异常订单恢复
+    - AC-002: 恢复操作有审计日志
+    - AC-003: 恢复失败有明确提示和回滚
+  - 依赖: `ORDER-QUERY`
+  - 并行写集: `apps/admin/src/orders/recovery/`, `services/order-recovery/`
+  - 交付面: api / backend / web / permission / integration
+  - 验证: Regression-required
+  - 规划: High-risk + Build；理由：涉及资金和库存，需要严格测试和回滚能力
+```
+
+<Aside type="note">
+Epic 不进入 Ready 队列，不能被 claim/complete/block/release。只在全部直接子 Feature `[x]` 后自动汇总为 `[x]`。
+</Aside>
+
+### 场景 3：依赖 DAG 与并行写集
+
+**用户输入**：
+```
+前端三个页面可以并行开发吗？
+```
+
+**project-manager 分析**：
+
+```markdown
+## 依赖分析
+
+### Feature A: USER-LOGIN-PAGE
+- 依赖: `USER-LOGIN-API`
+- 并行写集: `src/pages/login.vue`, `src/api/auth.ts`
+- 状态: 可并行（假设 USER-LOGIN-API 已完成）
+
+### Feature B: USER-PROFILE-PAGE
+- 依赖: `USER-INFO-API`
+- 并行写集: `src/pages/profile.vue`, `src/api/user.ts`
+- 状态: 可并行（与 A 写集互斥）
+
+### Feature C: USER-SETTINGS-PAGE
+- 依赖: `USER-SETTINGS-API`
+- 并行写集: `src/pages/settings.vue`, `src/api/user.ts`
+- 状态: **不可与 B 并行**（共享 `src/api/user.ts`）
+
+## 并行策略
+
+**可并行**:
+- A 和 B 可以并行（写集互斥）
+- A 和 C 可以并行（写集互斥）
+
+**不可并行**:
+- B 和 C 不可并行（共享 `src/api/user.ts`）
+
+## 推荐执行顺序
+
+1. 并行: A + B
+2. 串行: C (等待 B 完成)
+```
+
+<Aside type="caution">
+无法证明互斥时按串行规划，不猜测安全。独占资源键包括：数据库迁移序列、公共契约、共享配置、端口、账号、Git index/ref。
+</Aside>
+
+## 工作原理
+
+### 一次性完整规划
+
+新项目或尚未规划的新功能必须完成：
+
+1. **product-manager**: 研究、brainstorm、完整产品定义、能力/旅程/菜单/验收映射
+2. **frontend-design**: 全部适用 Web/App/Desktop 页面与交互设计
+3. **architecture-design**: 模块、数据所有权、依赖、部署、仓库、安全、可靠性和恢复边界
+4. **tech-decision**: 逐个业务 Feature 比较具名候选并选定具体技术/组合、采用方式、版本、配置、生产路径、兼容、迁移和回滚
+5. **project-manager**: 把全部结论变成可执行 Feature DAG 和唯一 TODO
+
+<Aside type="note">
+这些活动必须完整完成一次。每个业务 Feature 都要能映射到已确认的具名技术结论；`reuse-existing` 只能作为选中技术的采用方式，不能以"沿用现有项目"跳过比较。
+</Aside>
+
+### 项目覆盖盘点
+
+首次建计划必须建立完整覆盖：
+
+```text
+项目要求 → capability → journey → menu/entry → feature → acceptance → technology → delivery surfaces
+```
+
+**覆盖规则**：
+- 每个文档承诺能力、角色旅程、菜单/入口和验收至少映射一个 Feature
+- 每个 Feature/Epic 使用稳定 ID（大写字母开头、只含大写字母/数字/连字符）
+- 每个 Feature 的验收按稳定 `AC-001`、`AC-002` 编号
+- 每个 Feature 必须回溯到项目要求，不能按模板增加或删除范围
+- 每个 Feature 必须包含来源锚点并能回读到对应原始章节
+- 每个业务 Feature 必须已有 `tech-decision` 的具名技术结论
+- 纯后端功能必须写真实调用方
+
+### Epic + Feature 拆分
+
+**平铺 Feature 结构**（普通目标）：
+
+```markdown
+- [ ] `FEATURE-ID` 功能名称；Owner: `<developer-id>`
+  - 来源: 项目文档章节或需求 ID
+  - 来源锚点: ...
+  - 菜单/入口: ...
+  - 用户/调用方: ...
+  - 目标: ...
+  - 验收: AC-001, AC-002
+  - 依赖: Feature ID 或无
+  - 并行写集: ...
+  - 交付面: data / api / backend / web / app / desktop / permission / integration
+  - 验证: Evidence-only / Test-first / Regression-required
+  - 规划: <Lite|Standard|High-risk> + <Goal|Build>；理由与升级条件
+  - 结果: 完成时的一条合并摘要
+```
+
+**Epic 聚合结构**（大型目标）：
+
+```markdown
+- [ ] `EPIC-ID` 【Epic 名称】；Owner: `<developer-id>`；菜单/入口: `menu.*`
+  - 目标: Epic 整体目标
+  - [ ] `FEATURE-ID-1` 【子功能 1】；Owner: `<developer-id>`
+    - 来源: ...
+    - 来源锚点: ...
+    - ... (完整 Feature 字段)
+  - [ ] `FEATURE-ID-2` 【子功能 2】；Owner: `<developer-id>`
+    - ... (完整 Feature 字段)
+```
+
+<Aside type="caution">
+数据、契约、后端、前端、权限、联调、Review 和 Git **不能拆成独立 Feature checkbox**。后端存在页面入口时，对应客户端和真实接口必须在同一 Feature 完成。
+</Aside>
+
+### 完整完成屏障
+
+Feature 只有满足以下条件后，才可由状态机在 commit 前准备 `[x]`：
+
+1. ✅ 全部适用生产代码和数据/迁移完成
+2. ✅ API、权限、错误、并发和失败恢复与验收一致
+3. ✅ Web/App/Desktop 等批准客户端完成真实接入和关键状态
+4. ✅ 外部集成的生产者、消费者、认证、幂等和补偿闭环
+5. ✅ 每个构建根一个最有判别力的现有检查，另加一次 `git diff --check`
+6. ✅ 每条 AC 都有与声明档位匹配的新鲜证据且没有 `unverified`
+7. ✅ 当前完整 diff 的一次 Review 无未关闭严重/重要 finding
+8. ✅ 预先准备的 `[x]`、业务改动和必要契约已进入同一次授权 commit&push，且核验一致
+
+**High-risk 额外要求**：
+- 能回读风险/回滚边界
+- 实现前独立方案复核
+- Regression-required 证据
+- 适用发布检查
+
+<Aside type="note">
+静态页面、mock、原型、孤立接口、迁移文件、文档或构建通过都不能单独关闭功能。测试源码仅在用户本轮明确要求时新增。
+</Aside>
+
+## 开发者隔离
+
+### 动态解析 Developer ID
+
+```bash
+# 优先级 1: Git user.name
+git config user.name  # → alice-chen
+
+# 优先级 2: 系统登录用户名
+whoami  # → alice
+
+# 优先级 3: 环境变量
+echo $AGENT_DEVELOPER_NAME  # → alice-chen
+```
+
+### TODO 路径规则
+
+```text
+当前开发者: alice-chen
+TODO 路径: docs/alice-chen/tasks/todo/<原文件名>.md
+
+其他开发者: bob-zhang
+TODO 路径: docs/bob-zhang/tasks/todo/<原文件名>.md (只读)
+```
+
+**隔离规则**：
+- 当前开发者计划只写入 `docs/<developer-id>/tasks/todo/<原文件名>.md`
+- 该目录只能有一份活动 TODO
+- 其他开发者的 Feature 保持在其各自 TODO 中，不复制、不合并、不代勾选
+- 同一 Git identity 下的主 Agent/subagent 共享一份 TODO
+
+## 与其他 Skill 的关系
+
+### Related Skills
+
+**前置依赖** (before):
+- `product-manager` - 提供完整产品定义
+- `architecture-design` - 提供系统架构设计
+- `tech-decision` - 提供技术选型结论
+
+**后续推荐** (after):
+- `task-todo-workflow` - TODO 工作流管理
+- `dev` - 功能实施
+- `universal-development` - 通用开发
+
+**协作 Skill** (complement):
+- `change-impact-analysis` - 变更影响分析
+- `add-todo` - 追加 TODO 项
+- `update-status` - 更新 TODO 状态
+- `progress` - 进度统计
+
+## 输出格式
+
+### 唯一 TODO 文件
+
+```markdown
+# {项目名称} TODO
+
+Owner: {developer-id}
+项目: {项目名称}
+仓库: {仓库路径}
+
+## Epic: {EPIC-ID} 【Epic 名称】
+
+Owner: {developer-id}
+目标: {Epic 整体目标}
+菜单/入口: {menu.*}
+
+### Feature 1
+
+- [ ] `{FEATURE-ID}` {功能名称}；Owner: {developer-id}
+  - 来源: {文档章节}
+  - 来源锚点: {锚点内容}
+  - 菜单/入口: {menu.id / route / 调用方}
+  - 用户/调用方: {角色}
+  - 目标: {可观察结果}
+  - 验收: {AC-001, AC-002}
+  - 依赖: {Feature ID 或无}
+  - 并行写集: {目录前缀 / resource:key}
+  - 交付面: {data / api / backend / web / app}
+  - 验证: {Evidence-only / Test-first / Regression-required}
+  - 规划: {Lite|Standard|High-risk} + {Goal|Build}；{理由与升级条件}
+  - 结果: {完成时填写}
+
+---
+
+## 下一项
+
+当前项: {FEATURE-ID}
+下一 Ready 项: {FEATURE-ID}
+阻塞项: {FEATURE-ID (原因)}
+```
+
+## 最佳实践
+
+### 1. 来源锚点必须完整
+
+```markdown
+<!-- 错误: 只有文件名 -->
+来源锚点: prd.md
+
+<!-- 正确: 完整锚点 -->
+来源锚点: `docs/prd.md#用户注册`；用户结果：用户可以通过邮箱注册；范围：邮箱+密码，不支持第三方；数据边界：用户表；技术结论：Spring Boot + BCrypt
+```
+
+### 2. Feature 必须纵向完整
+
+```markdown
+<!-- 错误: 按技术层拆分 -->
+- [ ] USER-REG-DB 数据库表
+- [ ] USER-REG-API 后端 API
+- [ ] USER-REG-PAGE 前端页面
+
+<!-- 正确: 纵向完整功能 -->
+- [ ] USER-REG 用户注册功能
+  - 交付面: data / api / backend / web
+  - 写集: UserEntity.java, AuthController.java, register.vue
+```
+
+### 3. 依赖必须精确
+
+```markdown
+<!-- 错误: 模糊依赖 -->
+依赖: 后端 API
+
+<!-- 正确: 精确 Feature ID -->
+依赖: `USER-LOGIN-API`
+```
+
+### 4. 并行写集必须互斥
+
+```markdown
+<!-- 可并行: 写集互斥 -->
+Feature A: src/pages/login.vue
+Feature B: src/pages/register.vue
+
+<!-- 不可并行: 共享文件 -->
+Feature A: src/api/user.ts
+Feature B: src/api/user.ts  # 冲突！
+```
+
+### 5. Epic 只在必要时使用
+
+```markdown
+<!-- 不需要 Epic: 只有 1 个 Feature -->
+- [ ] USER-LOGIN 用户登录
+
+<!-- 需要 Epic: 2+ 个独立可验收的子功能 -->
+- [ ] ORDER-GOVERNANCE 【订单治理】
+  - [ ] ORDER-QUERY 订单查询
+  - [ ] ORDER-EXPORT 订单导出
+  - [ ] ORDER-RECOVERY 异常恢复
+```
+
+## 下一步
+
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流管理
+- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义
+- [architecture-design](/skills/skills-reference/high/architecture-design) - 架构设计
+- [tech-decision](/skills/skills-reference/high/tech-decision) - 技术选型
+- [dev](/skills/skills-reference/high/dev) - 功能实施
+- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis) - 变更影响分析
