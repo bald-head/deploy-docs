@@ -1,0 +1,516 @@
+---
+title: crud-development
+description: CRUD 业务开发 - 手工实现完整的增删改查纵向业务切片
+order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`crud-development` 是 **High 优先级** Skill，负责手工实现完整的 CRUD 纵向业务切片，覆盖数据模型、API、Service 与页面联动。
+
+**适用场景**：
+- 手工实现 CRUD 业务功能
+- 需要完整的前后端联动
+- 已完成技术选型和数据库设计
+
+**不适用场景**：
+- 调用代码生成器 → 使用 `crud`
+- 复杂业务逻辑 → 使用 `dev` 或 `universal-development`
+- 专业领域（认证/缓存）→ 使用对应专业 Skill
+
+## 快速开始
+
+### 开发 CRUD 功能的完整流程
+
+```bash
+# 1. 确认 TODO 中有 CRUD 功能
+# 查看 docs/<developer-id>/tasks/todo/*.md
+
+# 2. 确认已完成前置规划
+# - 数据库设计 (database-design)
+# - 技术选型 (tech-decision)
+# - API 设计 (api-development)
+
+# 3. 开始实现
+"实现用户管理的 CRUD 功能"
+
+# 4. 实施顺序
+# → 数据模型 (Entity)
+# → 数据访问 (Mapper/Repository)
+# → 业务逻辑 (Service)
+# → API 接口 (Controller)
+# → 前端页面 (Vue/React)
+
+# 5. 验证
+npm run dev
+# 测试增删改查功能
+
+# 6. Review
+/code-review
+
+# 7. 提交
+/git-commit
+```
+
+## 使用示例
+
+### 场景 1：实现用户管理 CRUD
+
+**TODO 中的功能**：
+```markdown
+- [ ] `USER-MANAGE` 用户管理；Owner: alice-chen
+  - 来源: PRD#用户管理
+  - 目标: 管理员可以增删改查用户
+  - 验收:
+    - AC-001: 可以查询用户列表（分页）
+    - AC-002: 可以新增用户
+    - AC-003: 可以编辑用户信息
+    - AC-004: 可以删除用户
+  - 交付面: data / api / backend / web
+```
+
+**实施步骤**：
+
+1. **数据模型**：
+   ```java
+   // src/main/java/entity/UserEntity.java
+   @Entity
+   @Table(name = "users")
+   public class UserEntity {
+       @Id
+       private Long id;
+       private String username;
+       private String email;
+       private String phone;
+       private Integer status;
+       private LocalDateTime createTime;
+       private LocalDateTime updateTime;
+   }
+   ```
+
+2. **数据访问**：
+   ```java
+   // src/main/java/mapper/UserMapper.java
+   @Mapper
+   public interface UserMapper {
+       List<UserEntity> selectPage(UserQuery query);
+       UserEntity selectById(Long id);
+       int insert(UserEntity user);
+       int updateById(UserEntity user);
+       int deleteById(Long id);
+   }
+   ```
+
+3. **业务逻辑**：
+   ```java
+   // src/main/java/service/UserService.java
+   @Service
+   public class UserService {
+       @Autowired
+       private UserMapper userMapper;
+       
+       public PageResult<UserVO> list(UserQuery query) {
+           List<UserEntity> list = userMapper.selectPage(query);
+           return PageResult.of(list);
+       }
+       
+       public UserVO getById(Long id) {
+           UserEntity entity = userMapper.selectById(id);
+           return convert(entity);
+       }
+       
+       public void create(UserDTO dto) {
+           UserEntity entity = convert(dto);
+           userMapper.insert(entity);
+       }
+       
+       public void update(Long id, UserDTO dto) {
+           UserEntity entity = convert(dto);
+           entity.setId(id);
+           userMapper.updateById(entity);
+       }
+       
+       public void delete(Long id) {
+           userMapper.deleteById(id);
+       }
+   }
+   ```
+
+4. **API 接口**：
+   ```java
+   // src/main/java/controller/UserController.java
+   @RestController
+   @RequestMapping("/api/v1/users")
+   public class UserController {
+       @Autowired
+       private UserService userService;
+       
+       @GetMapping
+       public Result<PageResult<UserVO>> list(UserQuery query) {
+           return Result.ok(userService.list(query));
+       }
+       
+       @GetMapping("/{id}")
+       public Result<UserVO> getById(@PathVariable Long id) {
+           return Result.ok(userService.getById(id));
+       }
+       
+       @PostMapping
+       public Result<Void> create(@RequestBody UserDTO dto) {
+           userService.create(dto);
+           return Result.ok();
+       }
+       
+       @PutMapping("/{id}")
+       public Result<Void> update(@PathVariable Long id, @RequestBody UserDTO dto) {
+           userService.update(id, dto);
+           return Result.ok();
+       }
+       
+       @DeleteMapping("/{id}")
+       public Result<Void> delete(@PathVariable Long id) {
+           userService.delete(id);
+           return Result.ok();
+       }
+   }
+   ```
+
+5. **前端页面**：
+   ```vue
+   <!-- src/pages/user/list.vue -->
+   <template>
+     <div>
+       <el-button @click="showCreateDialog">新增用户</el-button>
+       <el-table :data="userList">
+         <el-table-column prop="username" label="用户名" />
+         <el-table-column prop="email" label="邮箱" />
+         <el-table-column label="操作">
+           <template #default="{ row }">
+             <el-button @click="showEditDialog(row)">编辑</el-button>
+             <el-button @click="deleteUser(row.id)">删除</el-button>
+           </template>
+         </el-table-column>
+       </el-table>
+       <el-pagination
+         :total="total"
+         :page-size="pageSize"
+         @current-change="handlePageChange"
+       />
+     </div>
+   </template>
+   
+   <script setup>
+   import { ref, onMounted } from 'vue'
+   import { userApi } from '@/api/user'
+   
+   const userList = ref([])
+   const total = ref(0)
+   const pageSize = ref(20)
+   
+   const loadUsers = async (page = 1) => {
+     const res = await userApi.list({ page, pageSize: pageSize.value })
+     userList.value = res.data.records
+     total.value = res.data.total
+   }
+   
+   onMounted(() => {
+     loadUsers()
+   })
+   </script>
+   ```
+
+6. **验证**：
+   ```bash
+   # 启动后端
+   cd backend && mvn spring-boot:run
+   
+   # 启动前端
+   cd frontend && npm run dev
+   
+   # 访问 http://localhost:5173/user/list
+   # 测试功能:
+   # ✅ 列表展示
+   # ✅ 分页切换
+   # ✅ 新增用户
+   # ✅ 编辑用户
+   # ✅ 删除用户
+   ```
+
+### 场景 2：带权限和审计的 CRUD
+
+**TODO 中的功能**：
+```markdown
+- [ ] `DEPT-MANAGE` 部门管理；Owner: alice-chen
+  - 目标: 管理员可以管理部门
+  - 验收:
+    - AC-001: 只有超级管理员可以操作
+    - AC-002: 操作有审计日志
+  - 交付面: data / api / backend / web / permission
+```
+
+**实施步骤**：
+
+1. **权限注解**：
+   ```java
+   @RestController
+   @RequestMapping("/api/v1/departments")
+   @RequirePermission("dept:manage")
+   public class DepartmentController {
+       
+       @PostMapping
+       @RequireRole("SUPER_ADMIN")
+       @Audit(action = "创建部门")
+       public Result<Void> create(@RequestBody DeptDTO dto) {
+           deptService.create(dto);
+           return Result.ok();
+       }
+   }
+   ```
+
+2. **审计日志**：
+   ```java
+   @Service
+   public class DepartmentService {
+       
+       @Autowired
+       private AuditLogService auditLogService;
+       
+       @Transactional
+       public void create(DeptDTO dto) {
+           DeptEntity entity = convert(dto);
+           deptMapper.insert(entity);
+           
+           // 记录审计日志
+           auditLogService.log(
+               "CREATE_DEPT",
+               "创建部门: " + entity.getName(),
+               getCurrentUser()
+           );
+       }
+   }
+   ```
+
+3. **前端权限控制**：
+   ```vue
+   <template>
+     <div>
+       <el-button 
+         v-if="hasPermission('dept:create')"
+         @click="showCreateDialog"
+       >
+         新增部门
+       </el-button>
+     </div>
+   </template>
+   ```
+
+### 场景 3：适配现有项目规范
+
+**发现项目规范**：
+
+```bash
+# 1. 检查项目结构
+tree src/main/java/com/example/
+
+# 2. 查看现有 CRUD 实现
+# src/main/java/com/example/order/controller/OrderController.java
+# src/main/java/com/example/order/service/OrderService.java
+
+# 3. 发现项目规范:
+# - 使用 MyBatis-Plus
+# - 继承 BaseEntity 和 BaseMapper
+# - 使用 IService 接口
+# - 统一 Result 响应
+# - 统一异常处理
+```
+
+**按规范实现**：
+
+```java
+// 1. 继承 BaseEntity
+@TableName("products")
+public class ProductEntity extends BaseEntity {
+    private String name;
+    private BigDecimal price;
+    // 自动包含: id, createTime, updateTime, deleted
+}
+
+// 2. 继承 BaseMapper
+@Mapper
+public interface ProductMapper extends BaseMapper<ProductEntity> {
+    // 自动拥有: insert, selectById, updateById, deleteById
+}
+
+// 3. 继承 IService
+@Service
+public class ProductService extends ServiceImpl<ProductMapper, ProductEntity>
+        implements IService<ProductEntity> {
+    // 自动拥有: save, getById, updateById, removeById, page
+}
+
+// 4. 使用统一响应
+@RestController
+@RequestMapping("/api/v1/products")
+public class ProductController {
+    @GetMapping
+    public Result<IPage<ProductVO>> list(ProductQuery query) {
+        IPage<ProductEntity> page = productService.page(
+            new Page<>(query.getPage(), query.getPageSize()),
+            new QueryWrapper<ProductEntity>()
+                .like("name", query.getName())
+        );
+        return Result.ok(page);
+    }
+}
+```
+
+## 关键规则
+
+### 1. 纵向完整交付
+
+```markdown
+<!-- 正确: 纵向完整 -->
+交付面: data / api / backend / web
+→ Entity + Mapper + Service + Controller + Page
+
+<!-- 错误: 只完成一层 -->
+交付面: backend
+→ 只写 Service，不写 Controller 和 Page
+```
+
+### 2. 真实前后端联动
+
+```markdown
+<!-- 正确: 真实调用 -->
+前端页面调用真实 API
+→ axios.get('/api/v1/users')
+→ 显示真实数据
+
+<!-- 错误: Mock 数据 -->
+前端页面使用 Mock 数据
+→ const users = [{ id: 1, name: 'test' }]
+```
+
+### 3. 适配项目规范
+
+```bash
+# 必须先发现项目规范
+1. 语言、框架、ORM
+2. 分层方式 (Controller → Service → Mapper)
+3. 主键、审计字段、逻辑删除
+4. 查询、分页、响应类型
+5. 现有 CRUD 实现示例
+
+# 再按规范实现
+→ 复用现有基类
+→ 复用现有工具类
+→ 复用现有响应格式
+```
+
+### 4. 一次验证和 Review
+
+```bash
+# 完成全部交付面后
+1. 启动后端
+2. 启动前端
+3. 测试所有 CRUD 操作
+4. 一次 code-review
+5. 提交代码
+```
+
+## Skill 协调
+
+`crud-development` 协调以下专业 Skill：
+
+| 阶段 | 调用 Skill |
+|------|-----------|
+| 前置 | database-design, tech-decision, api-development |
+| 实施 | database-ops, ui-pc, universal-development |
+| 后置 | security-guard, data-permission, code-review |
+
+<Aside type="note">
+CRUD 功能的数据模型、API、Service、权限和页面在同一 Feature 中完成，不拆成独立 checkbox。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### 选择决策
+
+```text
+纯 CRUD 手工实现 → crud-development
+调用代码生成器 → crud
+复杂业务逻辑 → dev
+通用开发 → universal-development
+```
+
+### Related Skills
+
+**前置依赖**:
+- `database-design` - 数据库设计
+- `tech-decision` - 技术选型
+- `api-development` - API 设计
+
+**后续推荐**:
+- `security-guard` - 权限控制
+- `data-permission` - 数据权限
+- `code-review` - 代码审查
+
+## 最佳实践
+
+### 1. 先建立适配档案
+
+```markdown
+<!-- 必须先确认 -->
+1. 框架: Spring Boot 2.7 + MyBatis-Plus
+2. 分层: Controller → Service → Mapper
+3. 主键: Snowflake ID
+4. 审计: createTime, updateTime
+5. 逻辑删除: deleted 字段
+6. 分页: IPage<T>
+7. 响应: Result<T>
+
+<!-- 再开始实现 -->
+```
+
+### 2. 复用现有基类和工具
+
+```java
+// 正确: 复用现有
+public class UserEntity extends BaseEntity {
+    // 自动包含审计字段
+}
+
+public interface UserMapper extends BaseMapper<UserEntity> {
+    // 自动包含基础 CRUD
+}
+
+// 错误: 重新实现
+public class UserEntity {
+    private Long id;
+    private LocalDateTime createTime;  // 重复定义
+    private LocalDateTime updateTime;  // 重复定义
+}
+```
+
+### 3. 完整验证闭环
+
+```bash
+# 每个 CRUD 功能必须
+1. 启动后端和前端
+2. 测试列表查询（分页）
+3. 测试新增
+4. 测试编辑
+5. 测试删除
+6. 测试权限控制（如有）
+7. 记录证据
+```
+
+## 下一步
+
+- [database-design](/skills/skills-reference/medium/database-design) - 数据库设计
+- [api-development](/skills/skills-reference/high/api-development) - API 开发
+- [ui-pc](/skills/skills-reference/high/ui-pc) - PC 端界面
+- [code-review](/skills/skills-reference/high/code-review) - 代码审查
+- [universal-development](/skills/skills-reference/high/universal-development) - 通用开发

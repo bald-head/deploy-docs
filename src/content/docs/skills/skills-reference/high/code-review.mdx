@@ -1,0 +1,471 @@
+---
+title: code-review
+description: 代码审查 - 缺陷优先的完整 Review，核对验收与交付证据
+order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`code-review` 是 **High 优先级** Skill，对指定 diff 做缺陷优先的完整 Review，并核对验收与交付证据。
+
+**适用场景**：
+- 代码实现完成后的质量审查
+- 核对文档意图与实际实现
+- 审计生成代码
+- 判断发布证据是否充分
+
+**不适用场景**：
+- 代码实现 → 使用 `dev` 或 `universal-development`
+- 产品定义 → 使用 `product-manager`
+- 架构设计 → 使用 `architecture-design`
+- 测试编写 → 使用 `test-development`
+
+## 快速开始
+
+### 代码审查的完整流程
+
+```bash
+# 1. 确认代码已实现
+git status
+git diff
+
+# 2. 执行 Review
+/code-review
+
+# 3. 查看 findings
+# - 严重 (Critical): 必须修复
+# - 重要 (Major): 应该修复
+# - 次要 (Minor): 可选修复
+# - 信息 (Info): 建议
+
+# 4. 修复问题
+# 修复所有严重和重要问题
+
+# 5. 重新 Review
+/code-review
+
+# 6. 通过后提交
+/git-commit
+```
+
+## 使用示例
+
+### 场景 1：Review 登录功能实现
+
+**实现的代码**：
+```java
+@RestController
+@RequestMapping("/api/v1/auth")
+public class AuthController {
+    
+    @PostMapping("/login")
+    public Result<LoginResponse> login(@RequestBody LoginRequest request) {
+        // 查询用户
+        UserEntity user = userMapper.selectByEmail(request.getEmail());
+        
+        // 验证密码
+        if (!user.getPassword().equals(request.getPassword())) {
+            throw new BusinessException("密码错误");
+        }
+        
+        // 生成 Token
+        String token = UUID.randomUUID().toString();
+        
+        return Result.ok(new LoginResponse(token, user.getId()));
+    }
+}
+```
+
+**Review findings**：
+
+```markdown
+## Critical Findings
+
+### CRIT-001: 密码明文比较
+- 位置: AuthController.java:12
+- 问题: 使用明文比较密码，应该使用 BCrypt 等加密算法
+- 影响: 严重安全漏洞
+- 修复:
+  ```java
+  if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+      throw new BusinessException(ErrorCode.INVALID_PASSWORD, "密码错误");
+  }
+  ```
+
+### CRIT-002: 缺少用户存在性检查
+- 位置: AuthController.java:10
+- 问题: 用户不存在时会抛出 NullPointerException
+- 影响: 系统崩溃
+- 修复:
+  ```java
+  if (user == null) {
+      throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
+  }
+  ```
+
+### CRIT-003: Token 生成不安全
+- 位置: AuthController.java:17
+- 问题: 使用 UUID 作为 Token，不包含用户信息和过期时间
+- 影响: 无法验证 Token 合法性
+- 修复:
+  ```java
+  String token = jwtTokenProvider.generateToken(user.getId());
+  ```
+
+## Major Findings
+
+### MAJ-001: 缺少参数校验
+- 位置: AuthController.java:9
+- 问题: 请求参数未添加 @Valid 注解
+- 影响: 无效参数可能导致异常
+- 修复:
+  ```java
+  public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+  ```
+
+### MAJ-002: 错误码不统一
+- 位置: AuthController.java:13
+- 问题: 直接传字符串而非错误码枚举
+- 影响: 客户端无法统一处理错误
+- 修复:
+  ```java
+  throw new BusinessException(ErrorCode.INVALID_PASSWORD, "密码错误");
+  ```
+
+## Minor Findings
+
+### MIN-001: 缺少 API 文档
+- 位置: AuthController.java:8
+- 建议: 添加 Swagger/OpenAPI 注解
+- 修复:
+  ```java
+  @Operation(summary = "用户登录", description = "邮箱密码登录")
+  ```
+```
+
+**修复后重新 Review**：
+
+```markdown
+## Review 结果: PASS
+
+✅ 所有 Critical findings 已修复
+✅ 所有 Major findings 已修复
+✅ 验收标准已满足:
+   - AC-001: 用户可以登录 ✓
+   - AC-002: 返回 JWT Token ✓
+   - AC-003: 密码安全加密 ✓
+
+可以提交代码。
+```
+
+### 场景 2：Review CRUD 实现
+
+**实现的代码**：
+```java
+@RestController
+@RequestMapping("/api/v1/users")
+public class UserController {
+    
+    @GetMapping
+    public List<UserEntity> list() {
+        return userMapper.selectAll();
+    }
+    
+    @PostMapping
+    public void create(@RequestBody UserEntity user) {
+        userMapper.insert(user);
+    }
+}
+```
+
+**Review findings**：
+
+```markdown
+## Critical Findings
+
+### CRIT-001: 直接暴露 Entity
+- 位置: UserController.java:7
+- 问题: 直接返回 Entity，可能暴露敏感字段（如密码）
+- 影响: 数据泄露风险
+- 修复:
+  ```java
+  public Result<List<UserVO>> list() {
+      List<UserEntity> entities = userMapper.selectAll();
+      List<UserVO> vos = entities.stream()
+          .map(this::convertToVO)
+          .collect(Collectors.toList());
+      return Result.ok(vos);
+  }
+  ```
+
+### CRIT-002: 缺少分页
+- 位置: UserController.java:7
+- 问题: 查询全部用户，数据量大时会 OOM
+- 影响: 系统崩溃
+- 修复:
+  ```java
+  public Result<PageResult<UserVO>> list(UserQuery query) {
+      Page<UserEntity> page = new Page<>(query.getPage(), query.getPageSize());
+      IPage<UserEntity> result = userMapper.selectPage(page, null);
+      return Result.ok(PageResult.of(result));
+  }
+  ```
+
+## Major Findings
+
+### MAJ-001: 缺少统一响应格式
+- 位置: UserController.java:7, 12
+- 问题: 未使用 Result<T> 包装响应
+- 修复: 所有接口返回 Result<T>
+
+### MAJ-002: 缺少参数校验
+- 位置: UserController.java:11
+- 问题: 创建用户时未校验参数
+- 修复:
+  ```java
+  public Result<Void> create(@Valid @RequestBody CreateUserRequest request) {
+  ```
+
+### MAJ-003: 缺少事务控制
+- 位置: UserController.java:12
+- 问题: 业务逻辑应该在 Service 层
+- 修复:
+  ```java
+  @Service
+  public class UserService {
+      @Transactional
+      public void create(CreateUserRequest request) {
+          // 业务逻辑
+      }
+  }
+  ```
+```
+
+### 场景 3：Review 后的修复验证
+
+**原始问题**：
+```java
+// 问题: SQL 注入风险
+String sql = "SELECT * FROM users WHERE username = '" + username + "'";
+List<User> users = jdbcTemplate.query(sql, userRowMapper);
+```
+
+**修复后**：
+```java
+// 修复: 使用参数化查询
+String sql = "SELECT * FROM users WHERE username = ?";
+List<User> users = jdbcTemplate.query(sql, userRowMapper, username);
+```
+
+**验证步骤**：
+```bash
+# 1. 查看 diff
+git diff src/main/java/repository/UserRepository.java
+
+# 2. 确认修复
+- String sql = "SELECT * FROM users WHERE username = '" + username + "'";
++ String sql = "SELECT * FROM users WHERE username = ?";
++ List<User> users = jdbcTemplate.query(sql, userRowMapper, username);
+
+# 3. 重新 Review
+/code-review
+
+# 结果: PASS
+✅ CRIT-001: SQL 注入风险 已修复
+```
+
+## 关键规则
+
+### 1. 同一 diff 只 Review 一次
+
+```markdown
+<!-- 正确 -->
+完成全部交付面 → 一次 code-review → 修复 findings → 提交
+
+<!-- 错误 -->
+完成数据库 → code-review
+完成 API → code-review
+完成前端 → code-review
+```
+
+### 2. 严重和重要问题必须修复
+
+```text
+Finding 级别:
+- Critical (严重): 必须修复才能提交
+- Major (重要): 应该修复才能提交
+- Minor (次要): 可选修复
+- Info (信息): 建议改进
+```
+
+### 3. 核对验收标准
+
+```markdown
+<!-- Review 必须核对 -->
+验收标准:
+- AC-001: 用户可以登录 → 已实现 ✓
+- AC-002: 返回 JWT Token → 已实现 ✓
+- AC-003: 密码安全加密 → 已实现 ✓
+
+全部通过 → Review PASS
+```
+
+### 4. 保护现有改动
+
+```bash
+# Review 范围
+git diff  # 只 Review 当前任务的改动
+
+# 不 Review
+- 任务开始前的既有改动
+- 其他开发者的改动
+- 不属于当前 Feature 的文件
+```
+
+## Review 检查清单
+
+### 功能完整性
+
+```markdown
+- [ ] 所有验收标准已满足
+- [ ] 菜单/入口已实现
+- [ ] 前后端联动正常
+- [ ] 数据库迁移已创建
+- [ ] 权限控制已实现
+```
+
+### 代码质量
+
+```markdown
+- [ ] 无 SQL 注入风险
+- [ ] 无 XSS 风险
+- [ ] 密码已加密
+- [ ] 敏感数据不暴露
+- [ ] 参数已校验
+- [ ] 错误处理完整
+- [ ] 事务控制正确
+- [ ] 日志记录合理
+```
+
+### 性能
+
+```markdown
+- [ ] 分页查询已实现
+- [ ] 索引已创建
+- [ ] 无 N+1 查询
+- [ ] 缓存策略合理
+```
+
+### 可维护性
+
+```markdown
+- [ ] 代码风格一致
+- [ ] 命名清晰
+- [ ] 注释充分
+- [ ] 无重复代码
+- [ ] 符合项目规范
+```
+
+## Skill 协调
+
+`code-review` 在以下阶段执行：
+
+| 阶段 | 说明 |
+|------|------|
+| business-development 完成后 | 强制一次 Review |
+| 修复 findings 后 | 重新 Review 验证 |
+| 提交前 | 最终 Review |
+
+<Aside type="note">
+同一 diff 只做一次完整 Review，修复后只核对 findings 关闭状态。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### 选择决策
+
+```text
+代码实现 → dev/universal-development
+代码审查 → code-review
+专项检查 → check
+测试编写 → test-development
+```
+
+### Related Skills
+
+**前置依赖**:
+- `dev` - 通用功能开发
+- `universal-development` - 通用开发
+- `crud-development` - CRUD 开发
+
+**后续推荐**:
+- `test-development` - 测试开发
+- `git-commit` - Git 提交
+
+**协作 Skill**:
+- `security-guard` - 安全审查
+- `performance-doctor` - 性能审查
+- `check` - 专项规范检查
+
+## 最佳实践
+
+### 1. 完整 diff Review
+
+```bash
+# 正确: Review 完整 diff
+git diff  # 查看所有改动
+/code-review  # Review 全部
+
+# 错误: 只 Review 最后修改的文件
+git diff src/main/java/controller/UserController.java
+```
+
+### 2. 修复后验证
+
+```bash
+# 修复 findings
+git diff  # 确认修复
+
+# 重新 Review
+/code-review
+
+# 确认通过
+# ✅ 所有 Critical findings 已修复
+# ✅ 所有 Major findings 已修复
+```
+
+### 3. 核对验收标准
+
+```markdown
+<!-- 每次 Review 必须核对 -->
+验收标准:
+- AC-001: ... → 已实现 ✓
+- AC-002: ... → 已实现 ✓
+- AC-003: ... → 已实现 ✓
+```
+
+### 4. 保持修复最小化
+
+```java
+// 正确: 只修复 finding
+- if (!user.getPassword().equals(request.getPassword())) {
++ if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+
+// 错误: 修复时重构整个方法
+- public Result<LoginResponse> login(...) {
+-     // 旧实现
+- }
++ public Result<LoginResponse> login(...) {
++     // 完全重写
++ }
+```
+
+## 下一步
+
+- [dev](/skills/skills-reference/high/dev) - 通用功能开发
+- [universal-development](/skills/skills-reference/high/universal-development) - 通用开发
+- [test-development](/skills/skills-reference/medium/test-development) - 测试开发
+- [git-commit](/skills/skills-reference/high/git-commit) - Git 提交
+- [security-guard](/skills/skills-reference/high/security-guard) - 安全防护

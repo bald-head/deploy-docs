@@ -1,0 +1,559 @@
+---
+title: api-development
+description: API 开发 - 设计实现 API 契约、校验、错误语义和文档
+order: 8
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`api-development` 是 **High 优先级** Skill，负责设计实现 API 契约、校验、错误语义和文档。
+
+**适用场景**：
+- 设计和实现 REST API
+- 定义 API 契约和校验规则
+- 实现错误处理和文档
+
+**不适用场景**：
+- 前端 UI 实现 → 使用 `ui-pc` 或 `ui-app`
+- 数据库物理设计 → 使用 `database-design`
+- 业务逻辑实现 → 使用 `universal-development`
+
+## 快速开始
+
+### 开发 API 的完整流程
+
+```bash
+# 1. 确认前置规划
+# - 架构设计 (architecture-design)
+# - 技术选型 (tech-decision)
+# - 数据库设计 (database-design)
+
+# 2. 发现项目 API 规范
+# 查看现有 API 实现
+ls src/main/java/controller/
+cat src/main/java/controller/UserController.java
+
+# 3. 开始实现
+"实现用户登录 API"
+
+# 4. 实施顺序
+# → 请求 DTO 定义
+# → 响应 VO 定义
+# → Controller 实现
+# → 参数校验
+# → 错误处理
+# → API 文档
+
+# 5. 测试
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","password":"123456"}'
+
+# 6. Review
+/code-review
+```
+
+## 使用示例
+
+### 场景 1：实现登录 API
+
+**TODO 中的功能**：
+```markdown
+- [ ] `USER-LOGIN-API` 用户登录 API；Owner: alice-chen
+  - 来源: PRD#用户登录
+  - 目标: 提供邮箱密码登录接口
+  - 验收:
+    - AC-001: 接受邮箱和密码
+    - AC-002: 返回 JWT Token
+    - AC-003: 参数校验和错误处理
+  - 交付面: api / backend
+```
+
+**实施步骤**：
+
+1. **定义请求 DTO**：
+   ```java
+   // src/main/java/dto/LoginRequest.java
+   @Data
+   public class LoginRequest {
+       @NotBlank(message = "邮箱不能为空")
+       @Email(message = "邮箱格式不正确")
+       private String email;
+       
+       @NotBlank(message = "密码不能为空")
+       @Size(min = 6, max = 20, message = "密码长度6-20位")
+       private String password;
+   }
+   ```
+
+2. **定义响应 VO**：
+   ```java
+   // src/main/java/vo/LoginResponse.java
+   @Data
+   public class LoginResponse {
+       private String token;
+       private Long userId;
+       private String username;
+       private Long expiresIn;
+   }
+   ```
+
+3. **实现 Controller**：
+   ```java
+   // src/main/java/controller/AuthController.java
+   @RestController
+   @RequestMapping("/api/v1/auth")
+   @Tag(name = "认证", description = "用户认证相关接口")
+   public class AuthController {
+       
+       @Autowired
+       private AuthService authService;
+       
+       @PostMapping("/login")
+       @Operation(summary = "用户登录", description = "邮箱密码登录")
+       public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+           LoginResponse response = authService.login(request);
+           return Result.ok(response);
+       }
+   }
+   ```
+
+4. **实现业务逻辑**：
+   ```java
+   // src/main/java/service/AuthService.java
+   @Service
+   public class AuthService {
+       
+       @Autowired
+       private UserMapper userMapper;
+       
+       @Autowired
+       private JwtTokenProvider tokenProvider;
+       
+       public LoginResponse login(LoginRequest request) {
+           // 查询用户
+           UserEntity user = userMapper.selectByEmail(request.getEmail());
+           if (user == null) {
+               throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
+           }
+           
+           // 验证密码
+           if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+               throw new BusinessException(ErrorCode.INVALID_PASSWORD, "密码错误");
+           }
+           
+           // 生成 Token
+           String token = tokenProvider.generateToken(user.getId());
+           
+           // 构造响应
+           LoginResponse response = new LoginResponse();
+           response.setToken(token);
+           response.setUserId(user.getId());
+           response.setUsername(user.getUsername());
+           response.setExpiresIn(tokenProvider.getExpirationTime());
+           
+           return response;
+       }
+   }
+   ```
+
+5. **全局异常处理**：
+   ```java
+   // src/main/java/exception/GlobalExceptionHandler.java
+   @RestControllerAdvice
+   public class GlobalExceptionHandler {
+       
+       @ExceptionHandler(BusinessException.class)
+       public Result<Void> handleBusinessException(BusinessException e) {
+           return Result.error(e.getCode(), e.getMessage());
+       }
+       
+       @ExceptionHandler(MethodArgumentNotValidException.class)
+       public Result<Void> handleValidationException(MethodArgumentNotValidException e) {
+           String message = e.getBindingResult()
+               .getFieldErrors()
+               .stream()
+               .map(FieldError::getDefaultMessage)
+               .collect(Collectors.joining(", "));
+           return Result.error(ErrorCode.INVALID_PARAM, message);
+       }
+   }
+   ```
+
+6. **测试**：
+   ```bash
+   # 正常登录
+   curl -X POST http://localhost:8080/api/v1/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{
+       "email": "test@example.com",
+       "password": "123456"
+     }'
+   
+   # 响应:
+   # {
+   #   "code": 200,
+   #   "message": "success",
+   #   "data": {
+   #     "token": "eyJhbGciOiJIUzI1NiIs...",
+   #     "userId": 1,
+   #     "username": "test",
+   #     "expiresIn": 86400
+   #   }
+   # }
+   
+   # 参数校验
+   curl -X POST http://localhost:8080/api/v1/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{
+       "email": "invalid-email",
+       "password": "123"
+     }'
+   
+   # 响应:
+   # {
+   #   "code": 400,
+   #   "message": "邮箱格式不正确, 密码长度6-20位",
+   #   "data": null
+   # }
+   ```
+
+### 场景 2：实现分页查询 API
+
+**TODO 中的功能**：
+```markdown
+- [ ] `USER-LIST-API` 用户列表查询 API；Owner: alice-chen
+  - 目标: 分页查询用户列表
+  - 验收:
+    - AC-001: 支持分页（page, pageSize）
+    - AC-002: 支持条件筛选（username, email）
+    - AC-003: 支持排序（按创建时间降序）
+```
+
+**实施步骤**：
+
+1. **定义查询参数**：
+   ```java
+   // src/main/java/dto/UserQuery.java
+   @Data
+   public class UserQuery {
+       @Min(value = 1, message = "页码最小为1")
+       private Integer page = 1;
+       
+       @Min(value = 1, message = "每页大小最小为1")
+       @Max(value = 100, message = "每页大小最大为100")
+       private Integer pageSize = 20;
+       
+       private String username;
+       private String email;
+       private String sortBy = "createTime";
+       private String sortOrder = "desc";
+   }
+   ```
+
+2. **定义分页响应**：
+   ```java
+   // src/main/java/vo/PageResult.java
+   @Data
+   public class PageResult<T> {
+       private Long total;
+       private Integer page;
+       private Integer pageSize;
+       private List<T> records;
+       
+       public static <T> PageResult<T> of(Long total, Integer page, Integer pageSize, List<T> records) {
+           PageResult<T> result = new PageResult<>();
+           result.setTotal(total);
+           result.setPage(page);
+           result.setPageSize(pageSize);
+           result.setRecords(records);
+           return result;
+       }
+   }
+   ```
+
+3. **实现 Controller**：
+   ```java
+   @RestController
+   @RequestMapping("/api/v1/users")
+   public class UserController {
+       
+       @GetMapping
+       @Operation(summary = "用户列表", description = "分页查询用户列表")
+       public Result<PageResult<UserVO>> list(@Valid UserQuery query) {
+           PageResult<UserVO> result = userService.list(query);
+           return Result.ok(result);
+       }
+   }
+   ```
+
+4. **实现业务逻辑**：
+   ```java
+   @Service
+   public class UserService {
+       
+       public PageResult<UserVO> list(UserQuery query) {
+           // 构建查询条件
+           QueryWrapper<UserEntity> wrapper = new QueryWrapper<>();
+           if (StringUtils.isNotBlank(query.getUsername())) {
+               wrapper.like("username", query.getUsername());
+           }
+           if (StringUtils.isNotBlank(query.getEmail())) {
+               wrapper.like("email", query.getEmail());
+           }
+           wrapper.orderBy(true, "desc".equals(query.getSortOrder()), query.getSortBy());
+           
+           // 分页查询
+           Page<UserEntity> page = new Page<>(query.getPage(), query.getPageSize());
+           IPage<UserEntity> result = userMapper.selectPage(page, wrapper);
+           
+           // 转换为 VO
+           List<UserVO> records = result.getRecords()
+               .stream()
+               .map(this::convertToVO)
+               .collect(Collectors.toList());
+           
+           return PageResult.of(result.getTotal(), query.getPage(), query.getPageSize(), records);
+       }
+   }
+   ```
+
+### 场景 3：适配现有 API 规范
+
+**发现项目规范**：
+
+```bash
+# 1. 查看现有 API
+cat src/main/java/controller/OrderController.java
+
+# 2. 发现规范:
+# - 统一响应格式: Result<T>
+# - 统一异常处理: GlobalExceptionHandler
+# - 参数校验: @Valid + Bean Validation
+# - API 文档: Springdoc OpenAPI 3
+# - 路径规范: /api/v1/{resource}
+# - 命名规范: Request/Response 后缀
+```
+
+**按规范实现**：
+
+```java
+// 1. 复用统一响应
+@Data
+public class Result<T> {
+    private Integer code;
+    private String message;
+    private T data;
+    
+    public static <T> Result<T> ok(T data) {
+        Result<T> result = new Result<>();
+        result.setCode(200);
+        result.setMessage("success");
+        result.setData(data);
+        return result;
+    }
+    
+    public static <T> Result<T> error(Integer code, String message) {
+        Result<T> result = new Result<>();
+        result.setCode(code);
+        result.setMessage(message);
+        return result;
+    }
+}
+
+// 2. 复用异常定义
+public class BusinessException extends RuntimeException {
+    private Integer code;
+    
+    public BusinessException(ErrorCode errorCode, String message) {
+        super(message);
+        this.code = errorCode.getCode();
+    }
+}
+
+// 3. 使用 Springdoc 注解
+@RestController
+@RequestMapping("/api/v1/products")
+@Tag(name = "商品管理")
+public class ProductController {
+    
+    @GetMapping("/{id}")
+    @Operation(summary = "获取商品详情")
+    @Parameter(name = "id", description = "商品ID", required = true)
+    public Result<ProductResponse> getById(@PathVariable Long id) {
+        ProductResponse response = productService.getById(id);
+        return Result.ok(response);
+    }
+}
+```
+
+## 关键规则
+
+### 1. 先发现项目规范
+
+```bash
+# 必须先确认
+1. API 类型、版本策略
+2. 请求/响应格式
+3. 参数校验方式
+4. 错误处理机制
+5. API 文档工具
+6. 现有 API 示例
+```
+
+### 2. 完整的契约定义
+
+```java
+// 正确: 完整定义
+@Data
+public class CreateOrderRequest {
+    @NotNull(message = "商品ID不能为空")
+    private Long productId;
+    
+    @NotNull(message = "数量不能为空")
+    @Min(value = 1, message = "数量至少为1")
+    private Integer quantity;
+    
+    @NotBlank(message = "收货地址不能为空")
+    private String address;
+}
+
+// 错误: 缺少校验
+@Data
+public class CreateOrderRequest {
+    private Long productId;  // 缺少校验
+    private Integer quantity;  // 缺少校验
+    private String address;  // 缺少校验
+}
+```
+
+### 3. 统一错误处理
+
+```java
+// 正确: 全局异常处理
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    
+    @ExceptionHandler(BusinessException.class)
+    public Result<Void> handleBusinessException(BusinessException e) {
+        return Result.error(e.getCode(), e.getMessage());
+    }
+}
+
+// 错误: 每个接口自己处理
+@PostMapping
+public Result<Void> create(@RequestBody CreateRequest request) {
+    try {
+        service.create(request);
+        return Result.ok();
+    } catch (Exception e) {
+        return Result.error(500, e.getMessage());
+    }
+}
+```
+
+### 4. 完整的 API 文档
+
+```java
+// 正确: 完整文档
+@RestController
+@Tag(name = "用户管理", description = "用户相关接口")
+public class UserController {
+    
+    @PostMapping
+    @Operation(summary = "创建用户", description = "创建新用户账号")
+    @ApiResponse(responseCode = "200", description = "创建成功")
+    @ApiResponse(responseCode = "400", description = "参数错误")
+    public Result<UserResponse> create(@Valid @RequestBody CreateUserRequest request) {
+        // ...
+    }
+}
+```
+
+## Skill 协调
+
+`api-development` 协调以下专业 Skill：
+
+| 阶段 | 调用 Skill |
+|------|-----------|
+| 前置 | architecture-design, tech-decision, database-design |
+| 实施 | universal-development |
+| 后置 | security-guard, error-handler, code-review |
+
+<Aside type="note">
+API 契约定义、实现和文档在同一遍中完成，不分开成多个 Feature。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### 选择决策
+
+```text
+API 契约和实现 → api-development
+数据库设计 → database-design
+安全防护 → security-guard
+业务逻辑 → universal-development
+```
+
+### Related Skills
+
+**前置依赖**:
+- `architecture-design` - 架构设计
+- `tech-decision` - 技术选型
+- `database-design` - 数据库设计
+
+**后续推荐**:
+- `security-guard` - 安全防护
+- `error-handler` - 错误处理
+- `code-review` - 代码审查
+
+## 最佳实践
+
+### 1. 复用项目规范
+
+```java
+// 正确: 复用现有
+public class Result<T> {
+    // 使用项目已有的统一响应格式
+}
+
+// 错误: 创建新的
+public class ApiResponse<T> {
+    // 新建不同的响应格式
+}
+```
+
+### 2. 完整的参数校验
+
+```java
+// 必须包含
+@NotNull、@NotBlank、@Size
+@Min、@Max、@Pattern
+@Email、@Valid
+
+// 自定义校验消息
+@NotBlank(message = "用户名不能为空")
+```
+
+### 3. 清晰的错误语义
+
+```java
+// 正确: 明确错误
+throw new BusinessException(
+    ErrorCode.USER_NOT_FOUND,
+    "用户不存在: " + userId
+);
+
+// 错误: 模糊错误
+throw new RuntimeException("error");
+```
+
+## 下一步
+
+- [database-design](/skills/skills-reference/medium/database-design) - 数据库设计
+- [security-guard](/skills/skills-reference/high/security-guard) - 安全防护
+- [error-handler](/skills/skills-reference/medium/error-handler) - 错误处理
+- [code-review](/skills/skills-reference/high/code-review) - 代码审查
+- [universal-development](/skills/skills-reference/high/universal-development) - 通用开发
