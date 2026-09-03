@@ -1,0 +1,432 @@
+---
+title: update-status
+description: 状态更新 - 按代码、Review 和 Git 事实直接更新唯一 TODO
+order: 14
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`update-status` 是 **Medium 优先级** Skill，负责按代码、Review 和 Git 事实直接更新当前开发者唯一 TODO。
+
+**适用场景**：
+- 功能开始时标记 `[~]`
+- 功能完成时标记 `[x]`
+- 功能阻塞时标记 `[!]`
+- 释放功能回到 `[ ]`
+
+**不适用场景**：
+- 创建新 TODO → 使用 `task-todo-workflow`
+- 追加新功能 → 使用 `add-todo`
+- 统计进度 → 使用 `progress`
+- 代码实现 → 使用 `dev` 或 `universal-development`
+
+## 快速开始
+
+### 更新状态的完整流程
+
+```bash
+# 1. 开始功能
+"开始实现 USER-LOGIN 功能"
+# TODO 更新: [ ] → [~]
+
+# 2. 实现代码
+# ... 编写代码 ...
+
+# 3. 完成功能
+"USER-LOGIN 功能已完成"
+# TODO 更新: [~] → [x]
+
+# 4. 遇到阻塞
+"USER-LOGIN 被阻塞了"
+# TODO 更新: [~] → [!]
+
+# 5. 恢复阻塞
+"USER-LOGIN 恢复了"
+# TODO 更新: [!] → [~]
+```
+
+## 使用示例
+
+### 场景 1：开始功能
+
+**TODO 当前状态**：
+```markdown
+- [ ] `USER-LOGIN` 用户登录；Owner: alice-chen
+  - 来源: PRD#用户登录
+  - 目标: 用户可以通过邮箱密码登录
+  - 验收: AC-001, AC-002, AC-003
+  - 依赖: 无
+  - 交付面: data / api / backend / web
+```
+
+**用户输入**：
+```
+开始实现 USER-LOGIN 功能
+```
+
+**自动更新 TODO**：
+```markdown
+- [~] `USER-LOGIN` 用户登录；Owner: alice-chen；执行实例: abc123
+  - 来源: PRD#用户登录
+  - 目标: 用户可以通过邮箱密码登录
+  - 验收: AC-001, AC-002, AC-003
+  - 依赖: 无
+  - 交付面: data / api / backend / web
+  - 开始时间: 2026-09-03 10:30
+```
+
+### 场景 2：完成功能
+
+**TODO 当前状态**：
+```markdown
+- [~] `USER-LOGIN` 用户登录；Owner: alice-chen；执行实例: abc123
+  - 开始时间: 2026-09-03 10:30
+```
+
+**代码事实**：
+```bash
+# 代码已实现
+git diff
+# modified: src/main/java/controller/AuthController.java
+# modified: src/main/java/service/AuthService.java
+# modified: src/pages/login.vue
+
+# Review 已通过
+/code-review
+# ✅ Review PASS
+
+# 代码已提交
+git log -1
+# commit a1b2c3d
+# feat: 实现用户登录功能
+```
+
+**用户输入**：
+```
+USER-LOGIN 功能已完成
+```
+
+**自动更新 TODO**：
+```markdown
+- [x] `USER-LOGIN` 用户登录；Owner: alice-chen
+  - 来源: PRD#用户登录
+  - 目标: 用户可以通过邮箱密码登录
+  - 验收证据:
+    - AC-001: 用户可以输入邮箱密码 ✓ (手工测试通过)
+    - AC-002: 登录成功返回 Token ✓ (DevTools 验证)
+    - AC-003: Token 存储在 localStorage ✓ (验证通过)
+  - 交付面: data / api / backend / web
+  - 完成时间: 2026-09-03 14:30
+  - Review: pass
+  - Commit: a1b2c3d
+```
+
+### 场景 3：功能阻塞
+
+**TODO 当前状态**：
+```markdown
+- [~] `ORDER-PAYMENT` 订单支付；Owner: alice-chen；执行实例: abc123
+  - 目标: 集成第三方支付
+```
+
+**用户输入**：
+```
+ORDER-PAYMENT 被阻塞了，等待支付接口开通
+```
+
+**自动更新 TODO**：
+```markdown
+- [!] `ORDER-PAYMENT` 订单支付；Owner: alice-chen
+  - 目标: 集成第三方支付
+  - 阻塞原因: 等待第三方支付接口开通
+  - 阻塞时间: 2026-09-03 11:00
+  - 恢复条件: 收到支付接口开通邮件
+  - 预计恢复: 2 天
+```
+
+### 场景 4：恢复阻塞
+
+**TODO 当前状态**：
+```markdown
+- [!] `ORDER-PAYMENT` 订单支付；Owner: alice-chen
+  - 阻塞原因: 等待第三方支付接口开通
+  - 阻塞时间: 2026-09-03 11:00
+  - 恢复条件: 收到支付接口开通邮件
+```
+
+**用户输入**：
+```
+ORDER-PAYMENT 恢复了，支付接口已开通
+```
+
+**自动更新 TODO**：
+```markdown
+- [~] `ORDER-PAYMENT` 订单支付；Owner: alice-chen；执行实例: abc123
+  - 目标: 集成第三方支付
+  - 阻塞历史: 等待支付接口开通 (2026-09-03 11:00 - 2026-09-05 09:00)
+  - 恢复原因: 支付接口已开通，测试连接成功
+  - 恢复时间: 2026-09-05 09:00
+```
+
+### 场景 5：释放功能
+
+**TODO 当前状态**：
+```markdown
+- [~] `USER-EXPORT` 用户导出；Owner: alice-chen；执行实例: abc123
+  - 开始时间: 2026-09-03 14:00
+```
+
+**用户输入**：
+```
+暂停 USER-EXPORT，先做优先级更高的任务
+```
+
+**自动更新 TODO**：
+```markdown
+- [ ] `USER-EXPORT` 用户导出；Owner: alice-chen
+  - 目标: 导出用户列表为 Excel
+  - 暂停原因: 优先级调整，先完成 USER-IMPORT
+  - 暂停时间: 2026-09-03 15:00
+```
+
+## 关键规则
+
+### 1. 状态转换规则
+
+```text
+状态转换:
+[ ] → [~]  开始功能
+[~] → [x]  完成功能
+[~] → [!]  功能阻塞
+[!] → [~]  恢复功能
+[~] → [ ]  释放功能
+
+禁止转换:
+[ ] → [x]  不能跳过实施
+[x] → [~]  不能重新打开已完成
+[!] → [x]  不能直接完成阻塞功能
+```
+
+### 2. 完成条件
+
+```markdown
+可以标记 [x] 的条件:
+- ✅ 全部适用生产代码已完成
+- ✅ API、权限、错误处理与验收一致
+- ✅ 前端页面完成真实接入
+- ✅ 外部集成闭环
+- ✅ 构建检查通过
+- ✅ 每条 AC 都有证据
+- ✅ Review 无未关闭严重/重要 finding
+- ✅ 代码已授权 commit&push
+
+不能标记 [x]:
+- ❌ 静态页面（无 API 调用）
+- ❌ mock 数据
+- ❌ 原型
+- ❌ 孤立接口（无前端）
+- ❌ 只有迁移文件
+```
+
+### 3. 阻塞必须明确
+
+```markdown
+阻塞时必须记录:
+- 阻塞原因（具体是什么阻塞）
+- 阻塞时间
+- 恢复条件（什么条件下可以恢复）
+- 预计恢复时间
+
+例子:
+- 阻塞原因: 等待第三方支付接口开通
+- 恢复条件: 收到支付接口开通邮件
+- 预计恢复: 2 天
+```
+
+### 4. 只更新自己的 TODO
+
+```bash
+# 正确: 更新自己的 TODO
+当前开发者: alice-chen
+更新: docs/alice-chen/tasks/todo/user-system.md
+
+# 错误: 更新其他人的 TODO
+当前开发者: alice-chen
+更新: docs/bob-zhang/tasks/todo/order-system.md  # 不允许
+```
+
+## 状态更新检查清单
+
+### 开始功能前
+
+```markdown
+- [ ] 依赖全部完成
+- [ ] 无并行写集冲突
+- [ ] 功能范围明确
+- [ ] 技术选型已完成
+```
+
+### 完成功能前
+
+```markdown
+- [ ] 代码已实现
+- [ ] 前后端已联调
+- [ ] 验收证据完整
+- [ ] Review 已通过
+- [ ] 代码已提交
+```
+
+### 阻塞功能前
+
+```markdown
+- [ ] 阻塞原因明确
+- [ ] 恢复条件明确
+- [ ] 预计恢复时间
+- [ ] 通知相关方
+```
+
+## 自动更新 vs 手动更新
+
+### 自动更新（推荐）
+
+```bash
+# 由 Runtime Hook 自动管理
+# 开始时自动标记 [~]
+# 完成时自动标记 [x]
+# 阻塞时自动标记 [!]
+
+# 使用 todo-continuation.cjs
+node runtime-hooks/scripts/todo-continuation.cjs \
+  --claim <feature-id>  # 开始
+  
+node runtime-hooks/scripts/todo-continuation.cjs \
+  --complete <feature-id>  # 完成
+  
+node runtime-hooks/scripts/todo-continuation.cjs \
+  --block <feature-id> \
+  --reason "阻塞原因"  # 阻塞
+```
+
+### 手动更新（不推荐）
+
+```bash
+# 直接编辑 TODO 文件
+vim docs/alice-chen/tasks/todo/user-system.md
+
+# 风险:
+- 可能产生状态冲突
+- 可能破坏状态机
+- 可能丢失执行实例信息
+```
+
+<Aside type="caution">
+推荐使用自动更新，避免手动编辑 TODO 文件产生状态冲突。
+</Aside>
+
+## Skill 协调
+
+`update-status` 与以下 Skill 配合：
+
+| 阶段 | Skill | update-status 操作 |
+|------|-------|--------------------|
+| 功能追加后 | add-todo | 保持 `[ ]` 状态 |
+| 开始实现 | dev/universal-development | 标记 `[~]` |
+| Review 通过后 | code-review | 记录 Review 结果 |
+| 提交后 | git-commit | 记录 Commit OID |
+| 完成后 | - | 标记 `[x]` |
+| 阻塞时 | - | 标记 `[!]` |
+| 统计进度 | progress | 读取最新状态 |
+
+<Aside type="note">
+update-status 只负责更新状态，不负责代码实现、Review 或 Git 操作。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### 选择决策
+
+```text
+创建 TODO → task-todo-workflow
+追加功能 → add-todo
+更新状态 → update-status
+统计进度 → progress
+```
+
+### Related Skills
+
+**前置依赖**:
+- `add-todo` - 追加功能
+- `universal-development` - 代码实现
+- `code-review` - 代码审查
+- `git-commit` - Git 提交
+
+**后续推荐**:
+- `progress` - 进度统计
+
+**协作 Skill**:
+- `task-todo-workflow` - TODO 工作流
+- `git-workflow` - Git 工作流
+
+## 最佳实践
+
+### 1. 及时更新状态
+
+```bash
+# 正确: 及时更新
+开始功能 → 立即标记 [~]
+完成功能 → 立即标记 [x]
+遇到阻塞 → 立即标记 [!]
+
+# 错误: 延迟更新
+完成多个功能后 → 一起更新状态
+```
+
+### 2. 完整记录证据
+
+```markdown
+<!-- 正确: 完整证据 -->
+- [x] USER-LOGIN 用户登录
+  - 验收证据:
+    - AC-001: 用户可以输入邮箱密码 ✓ (手工测试通过)
+    - AC-002: 登录成功返回 Token ✓ (DevTools 验证)
+  - Review: pass
+  - Commit: a1b2c3d
+
+<!-- 错误: 缺少证据 -->
+- [x] USER-LOGIN 用户登录
+  - 已完成
+```
+
+### 3. 明确阻塞原因
+
+```markdown
+<!-- 正确: 明确原因 -->
+- [!] ORDER-PAYMENT 订单支付
+  - 阻塞原因: 等待第三方支付接口开通
+  - 恢复条件: 收到支付接口开通邮件
+  - 预计恢复: 2 天
+
+<!-- 错误: 模糊原因 -->
+- [!] ORDER-PAYMENT 订单支付
+  - 阻塞了
+```
+
+### 4. 使用自动化脚本
+
+```bash
+# 正确: 使用脚本
+node runtime-hooks/scripts/todo-continuation.cjs --claim USER-LOGIN
+
+# 错误: 手动编辑
+vim docs/alice-chen/tasks/todo/user-system.md
+```
+
+## 下一步
+
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
+- [add-todo](/skills/skills-reference/medium/add-todo) - 追加功能
+- [progress](/skills/skills-reference/medium/progress) - 进度统计
+- [code-review](/skills/skills-reference/high/code-review) - 代码审查
+- [git-commit](/skills/skills-reference/high/git-commit) - Git 提交
