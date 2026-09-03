@@ -1,0 +1,460 @@
+---
+title: git-commit
+description: Git 提交 - 精确暂存、提交并推送代码
+order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`git-commit` 是 **High 优先级** Skill，负责经授权精确提交并推送 Git。
+
+**适用场景**：
+- 用户已明确授权提交或推送
+- 代码已通过 Review
+- 目标文件范围明确
+
+**不适用场景**：
+- 代码实现 → 使用 `dev` 或 `universal-development`
+- 分支操作 → 使用 `git-workflow`
+- 产品定义 → 使用 `product-manager`
+
+## 快速开始
+
+### 提交代码的完整流程
+
+```bash
+# 1. 确认代码已完成
+git status
+git diff
+
+# 2. Review 通过
+/code-review
+# ✅ Review PASS
+
+# 3. 提交代码
+/git-commit
+# 或明确授权:
+"提交这些改动"
+"提交并推送"
+
+# 4. 查看结果
+git log -1
+git status
+```
+
+## 使用示例
+
+### 场景 1：提交单个功能
+
+**完成的改动**：
+```bash
+git status
+# On branch feature/user-login
+# Changes not staged for commit:
+#   modified:   src/main/java/controller/AuthController.java
+#   modified:   src/main/java/service/AuthService.java
+#   modified:   src/pages/login.vue
+```
+
+**Review 通过**：
+```bash
+/code-review
+# ✅ Review PASS
+# ✅ 所有验收标准已满足
+```
+
+**提交**：
+```bash
+/git-commit
+
+# 自动执行:
+# 1. 精确暂存改动文件
+git add src/main/java/controller/AuthController.java
+git add src/main/java/service/AuthService.java
+git add src/pages/login.vue
+
+# 2. 生成提交信息
+git commit -m "feat: 实现用户登录功能
+
+- 新增邮箱密码登录接口
+- 实现 JWT Token 生成
+- 完成登录页面联动
+
+验收:
+- AC-001: 用户可以输入邮箱密码 ✓
+- AC-002: 登录成功返回 Token ✓
+- AC-003: Token 存储在 localStorage ✓"
+
+# 3. 推送到远端
+git push origin feature/user-login
+```
+
+### 场景 2：多仓库提交
+
+**项目结构**：
+```
+project/
+├── backend/          # 独立 Git 仓库
+│   └── .git/
+├── frontend/         # 独立 Git 仓库
+│   └── .git/
+└── shared/           # 独立 Git 仓库
+    └── .git/
+```
+
+**改动范围**：
+```bash
+# backend 仓库
+cd backend && git status
+# modified: src/main/java/controller/UserController.java
+
+# frontend 仓库
+cd frontend && git status
+# modified: src/pages/user/list.vue
+
+# shared 仓库
+cd shared && git status
+# modified: src/types/user.ts
+```
+
+**提交**：
+```bash
+/git-commit
+
+# 自动分别提交三个仓库:
+
+# 1. backend 仓库
+cd backend
+git add src/main/java/controller/UserController.java
+git commit -m "feat: 新增用户列表接口"
+git push origin main
+
+# 2. frontend 仓库
+cd frontend
+git add src/pages/user/list.vue
+git commit -m "feat: 新增用户列表页面"
+git push origin main
+
+# 3. shared 仓库
+cd shared
+git add src/types/user.ts
+git commit -m "feat: 新增用户类型定义"
+git push origin main
+```
+
+### 场景 3：保护已有改动
+
+**当前状态**：
+```bash
+git status
+# On branch feature/order-manage
+# Changes not staged for commit:
+#   modified:   src/main/java/service/OrderService.java  (你的改动)
+#   modified:   src/main/java/utils/DateUtils.java      (其他人的改动)
+```
+
+**当前任务改动**：
+```bash
+git diff src/main/java/service/OrderService.java
+# 只有订单管理相关的改动
+```
+
+**提交**：
+```bash
+/git-commit
+
+# 只暂存当前任务的文件
+git add src/main/java/service/OrderService.java
+
+# 不暂存其他文件
+# src/main/java/utils/DateUtils.java 保持未暂存状态
+
+git commit -m "feat: 实现订单查询功能"
+git push
+```
+
+### 场景 4：提交信息规范
+
+**Conventional Commit 格式**：
+```bash
+# 格式: <type>(<scope>): <中文描述>
+
+# 新功能
+feat: 实现用户登录功能
+feat(auth): 实现 JWT Token 认证
+
+# Bug 修复
+fix: 修复订单号生成重复的问题
+fix(order): 修复订单状态更新失败
+
+# 文档
+docs: 更新 API 文档
+
+# 样式
+style: 格式化代码
+
+# 重构
+refactor: 重构用户服务
+
+# 性能
+perf: 优化订单查询性能
+
+# 测试
+test: 添加用户服务单元测试
+
+# 构建
+build: 升级 Spring Boot 到 2.7.5
+
+# CI
+ci: 更新 GitHub Actions 配置
+
+# 其他
+chore: 更新依赖版本
+```
+
+**提交信息示例**：
+```bash
+# 好的提交信息 (中文描述)
+git commit -m "feat: 实现用户注册功能
+
+- 新增邮箱注册接口
+- 实现邮箱验证
+- 完成注册页面
+
+验收:
+- AC-001: 用户可以填写注册表单 ✓
+- AC-002: 系统发送验证邮件 ✓"
+
+# 不好的提交信息 (英文描述)
+git commit -m "feat: implement user registration
+
+- Add email registration API
+- Implement email verification
+- Complete registration page"
+```
+
+## 关键规则
+
+### 1. 必须授权后才提交
+
+```bash
+# 正确: 明确授权
+用户: "提交这些改动"
+用户: "提交并推送"
+用户: /git-commit
+
+# 错误: 未授权自动提交
+# 不能在没有授权的情况下自动提交
+```
+
+### 2. Review 通过才能提交
+
+```bash
+# 正确: Review 通过
+/code-review
+# ✅ Review PASS
+/git-commit
+
+# 错误: 有未修复的 findings
+/code-review
+# ❌ CRIT-001: SQL 注入风险
+/git-commit  # 不能提交
+```
+
+### 3. 精确暂存
+
+```bash
+# 正确: 只暂存当前任务的文件
+git add src/main/java/controller/UserController.java
+git add src/pages/user/list.vue
+
+# 错误: 暂存所有文件
+git add .  # 可能包含其他改动
+git add -A  # 可能包含无关文件
+```
+
+### 4. 中文提交信息
+
+```bash
+# 正确: 中文描述
+feat: 实现用户登录功能
+
+# 错误: 英文描述
+feat: implement user login
+```
+
+### 5. 不包含 AI 署名
+
+```bash
+# 正确: 不包含 AI 署名
+git commit -m "feat: 实现用户登录功能"
+
+# 错误: 包含 AI 署名
+git commit -m "feat: 实现用户登录功能
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
+## 提交检查清单
+
+### 提交前检查
+
+```markdown
+- [ ] 代码已实现完成
+- [ ] Review 已通过（无严重/重要 findings）
+- [ ] 测试已通过（如有）
+- [ ] 用户已明确授权提交
+- [ ] 提交范围明确（只包含当前任务）
+- [ ] 提交信息使用中文
+- [ ] 提交信息符合 Conventional Commit 格式
+```
+
+### 推送前检查
+
+```markdown
+- [ ] 当前分支正确
+- [ ] 远端分支正确
+- [ ] 没有冲突
+- [ ] 没有未跟踪的重要文件
+- [ ] 用户已授权推送
+```
+
+## 提交信息模板
+
+### 功能开发
+
+```bash
+feat: 实现<功能名称>
+
+- <变更点1>
+- <变更点2>
+- <变更点3>
+
+验收:
+- AC-001: <验收条件1> ✓
+- AC-002: <验收条件2> ✓
+```
+
+### Bug 修复
+
+```bash
+fix: 修复<问题描述>
+
+问题: <问题详情>
+原因: <根因分析>
+解决: <解决方案>
+
+影响范围: <影响的功能/模块>
+```
+
+### 重构
+
+```bash
+refactor: 重构<模块名称>
+
+- 优化<优化点1>
+- 简化<简化点2>
+- 统一<统一点3>
+
+无功能变更
+```
+
+## Skill 协调
+
+`git-commit` 在以下阶段执行：
+
+| 阶段 | 说明 |
+|------|------|
+| code-review 通过后 | 提交代码 |
+| test-run 通过后 | 提交测试 |
+| git-delivery 阶段 | 推送到远端 |
+
+<Aside type="note">
+提交和推送必须经过用户明确授权，不能自动执行。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### 选择决策
+
+```text
+普通提交和推送 → git-commit
+分支操作 → git-workflow
+合并冲突 → git-workflow
+历史改写 → git-workflow
+```
+
+### Related Skills
+
+**前置依赖**:
+- `code-review` - 代码审查
+- `test-development` - 测试开发
+
+**后续推荐**:
+- `git-workflow` - Git 工作流
+- `update-status` - 更新状态
+
+## 最佳实践
+
+### 1. 小步提交
+
+```bash
+# 正确: 每个功能独立提交
+git commit -m "feat: 实现用户登录"
+git commit -m "feat: 实现用户注册"
+
+# 错误: 多个功能一起提交
+git commit -m "feat: 实现用户模块"
+```
+
+### 2. 清晰的提交信息
+
+```bash
+# 正确: 清晰描述
+feat: 实现用户登录功能
+
+- 新增邮箱密码登录接口
+- 实现 JWT Token 生成
+- 完成登录页面联动
+
+# 错误: 模糊描述
+feat: 更新代码
+feat: 修改文件
+feat: fix bug
+```
+
+### 3. 保护分支
+
+```bash
+# 正确: 在 feature 分支开发
+git checkout -b feature/user-login
+git commit
+git push origin feature/user-login
+
+# 错误: 直接在 main 分支提交
+git checkout main
+git commit  # 不推荐
+```
+
+### 4. 及时推送
+
+```bash
+# 正确: 功能完成后及时推送
+git commit
+git push
+
+# 错误: 积累多个提交不推送
+git commit
+git commit
+git commit
+# ... 很久不推送
+```
+
+## 下一步
+
+- [code-review](/skills/skills-reference/high/code-review) - 代码审查
+- [git-workflow](/skills/skills-reference/high/git-workflow) - Git 工作流
+- [update-status](/skills/skills-reference/high/update-status) - 更新状态
+- [test-development](/skills/skills-reference/medium/test-development) - 测试开发
