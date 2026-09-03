@@ -1,0 +1,590 @@
+---
+title: add-todo
+description: 追加 TODO 项 - 向当前开发者唯一 TODO 追加去重、可验收的功能
+order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`add-todo` 是 **Medium 优先级** Skill，负责向当前开发者已有的唯一 TODO 文件追加新功能。追加时进行去重检查、保持纵向完整性，并正确处理依赖关系。
+
+**核心职责**：
+- 向现有 TODO 追加去重功能
+- 保持纵向完整性（不按技术层拆分）
+- 计算依赖关系并正确排序
+- 检查并行写集冲突
+- 只追加已完成产品、方案、设计规划的功能
+
+<Aside type="note">
+本 Skill 只追加任务，不实现代码、不 Review、不操作 Git。
+</Aside>
+
+## 触发条件
+
+### Triggers（触发词）
+
+**中文**：
+- 加个功能
+- 追加任务
+- 添加TODO
+- 新增功能
+- 再加一个
+- 补充任务
+- 增加功能点
+
+**English**：
+- add todo
+- add task
+- add feature
+- append task
+- new task
+
+### Gates（前置条件）
+
+1. **已有批准需求或明确功能点**
+2. **需求已完成产品、方案、设计规划**
+3. **当前开发者已有唯一活动 TODO**
+
+### Not For（不适用场景）
+
+- 创建全新 TODO（使用 task-todo-workflow）
+- 产品定义和需求规划（使用 product-manager）
+- 架构设计（使用 architecture-design）
+- 代码实现（使用对应开发 Skill）
+- 更新现有任务状态（使用 update-status）
+
+## 使用场景
+
+### 场景 1：追加单个功能
+
+**当前 TODO**：
+```markdown
+# 用户管理系统 TODO
+
+Owner: alice-chen
+
+## Feature: USER-LOGIN 用户登录
+
+- [x] `USER-LOGIN` 用户登录；Owner: alice-chen
+  - 来源: PRD#用户登录
+  - 目标: 用户可以通过邮箱密码登录
+  - 验收: AC-001, AC-002
+  - 依赖: 无
+  - 交付面: api / backend / web
+```
+
+**用户输入**：
+```
+再加一个用户注册功能
+```
+
+**add-todo 行为**：
+
+1. **检查前置规划**：
+   ```markdown
+   是否已有产品定义？ → 否
+   → 先调用 product-manager 完成产品定义
+   → 再调用 architecture-design 确认架构
+   → 再调用 tech-decision 确认技术
+   → 然后追加到 TODO
+   ```
+
+2. **去重检查**：
+   ```markdown
+   检查已有 Feature:
+   - USER-LOGIN: 用户登录 ✓
+   - USER-REG: 用户注册 ✗（不存在，可追加）
+   ```
+
+3. **追加 Feature**：
+   ```markdown
+   ## Feature: USER-REG 用户注册
+
+   - [ ] `USER-REG` 用户注册；Owner: alice-chen
+     - 来源: PRD#用户注册
+     - 来源锚点: `docs/prd.md#用户注册`；用户结果：用户可以通过邮箱注册；技术结论：Spring Boot + Vue 3
+     - 菜单/入口: /register (公开路由)
+     - 用户/调用方: 新用户
+     - 目标: 用户可以通过邮箱注册账号
+     - 验收: 
+       - AC-001: 用户可以填写注册表单
+       - AC-002: 系统发送验证邮件
+       - AC-003: 用户点击链接激活账号
+     - 依赖: 无
+     - 并行写集: `src/api/auth/register/`, `src/pages/register.vue`
+     - 交付面: data / api / backend / web
+     - 验证: Evidence-only
+     - 规划: Standard + Build
+   ```
+
+### 场景 2：追加 Epic 聚合多个子功能
+
+**用户输入**：
+```
+增加订单管理模块，包含订单查询、订单导出、订单统计三个功能
+```
+
+**add-todo 行为**：
+
+1. **检查是否需要 Epic**：
+   ```markdown
+   是否可拆成多个独立可验收的纵向 Feature？
+   - 订单查询: 独立功能 ✓
+   - 订单导出: 独立功能 ✓
+   - 订单统计: 独立功能 ✓
+   
+   结论: 需要 Epic
+   ```
+
+2. **追加 Epic + 子 Feature**：
+   ```markdown
+   ## Epic: ORDER-MANAGE 【订单管理】
+
+   Owner: alice-chen
+   目标: 订单查询、导出和统计全部可用
+   菜单/入口: order.*
+
+   ### 子功能 1: 订单查询
+
+   - [ ] `ORDER-QUERY` 【订单查询】；Owner: alice-chen
+     - 来源: PRD#订单查询
+     - 来源锚点: `docs/prd.md#订单查询`
+     - 菜单/入口: order.list
+     - 用户/调用方: 运营人员
+     - 目标: 按条件查询订单
+     - 验收: AC-001, AC-002
+     - 依赖: 无
+     - 并行写集: `src/api/order/query/`, `src/pages/order/list.vue`
+     - 交付面: api / backend / web
+     - 验证: Evidence-only
+     - 规划: Standard + Build
+
+   ### 子功能 2: 订单导出
+
+   - [ ] `ORDER-EXPORT` 【订单导出】；Owner: alice-chen
+     - 来源: PRD#订单导出
+     - 来源锚点: `docs/prd.md#订单导出`
+     - 菜单/入口: order.export
+     - 用户/调用方: 运营人员
+     - 目标: 导出订单为 Excel
+     - 验收: AC-001, AC-002
+     - 依赖: `ORDER-QUERY`
+     - 并行写集: `src/api/order/export/`, `src/pages/order/export.vue`
+     - 交付面: api / backend / web / integration
+     - 验证: Evidence-only
+     - 规划: Standard + Build
+
+   ### 子功能 3: 订单统计
+
+   - [ ] `ORDER-STATS` 【订单统计】；Owner: alice-chen
+     - 来源: PRD#订单统计
+     - 来源锚点: `docs/prd.md#订单统计`
+     - 菜单/入口: order.stats
+     - 用户/调用方: 管理员
+     - 目标: 查看订单统计报表
+     - 验收: AC-001, AC-002
+     - 依赖: `ORDER-QUERY`
+     - 并行写集: `src/api/order/stats/`, `src/pages/order/stats.vue`
+     - 交付面: api / backend / web
+     - 验证: Evidence-only
+     - 规划: Standard + Build
+   ```
+
+### 场景 3：去重检查避免重复功能
+
+**当前 TODO**：
+```markdown
+- [x] `USER-LOGIN` 用户登录；Owner: alice-chen
+  - 目标: 用户可以通过邮箱密码登录
+```
+
+**用户输入**：
+```
+再加一个邮箱登录功能
+```
+
+**add-todo 行为**：
+
+```markdown
+## 去重检查
+
+已有 Feature: USER-LOGIN
+- 菜单/入口: /login
+- 用户结果: 用户可以通过邮箱密码登录
+- 验收: AC-001: 邮箱登录成功
+
+新需求: 邮箱登录功能
+- 菜单/入口: /login
+- 用户结果: 用户可以通过邮箱登录
+
+## 去重结论
+
+USER-LOGIN 已覆盖邮箱登录功能，无需追加。
+
+是否需要扩展 USER-LOGIN？
+- 如果是增加第三方登录（微信、QQ），则追加新 Feature
+- 如果只是邮箱登录，已有功能已覆盖
+```
+
+<Aside type="caution">
+去重时比较 featureId、菜单/入口、用户结果、验收和范围，避免语义重复。
+</Aside>
+
+### 场景 4：依赖计算与排序
+
+**当前 TODO**：
+```markdown
+- [ ] `USER-INFO-API` 用户信息 API；Owner: alice-chen
+  - 依赖: 无
+```
+
+**用户输入**：
+```
+增加用户信息页面
+```
+
+**add-todo 行为**：
+
+```markdown
+## 依赖分析
+
+新 Feature: USER-INFO-PAGE (用户信息页面)
+- 依赖: USER-INFO-API (必须先有 API)
+
+## 追加位置
+
+正确顺序:
+1. USER-INFO-API (无依赖)
+2. USER-INFO-PAGE (依赖 USER-INFO-API) ← 追加到此
+
+追加后的 TODO:
+
+- [ ] `USER-INFO-API` 用户信息 API；Owner: alice-chen
+  - 依赖: 无
+
+- [ ] `USER-INFO-PAGE` 用户信息页面；Owner: alice-chen
+  - 依赖: `USER-INFO-API`
+  - 并行写集: `src/pages/user/info.vue`
+```
+
+### 场景 5：并行写集冲突检查
+
+**当前 TODO**：
+```markdown
+- [~] `ORDER-QUERY` 订单查询；Owner: alice-chen
+  - 并行写集: `src/api/order/`, `src/pages/order/list.vue`
+```
+
+**用户输入**：
+```
+增加订单详情页面
+```
+
+**add-todo 行为**：
+
+```markdown
+## 并行写集冲突检查
+
+当前进行中: ORDER-QUERY
+- 并行写集: `src/api/order/`, `src/pages/order/list.vue`
+
+新 Feature: ORDER-DETAIL
+- 并行写集: `src/api/order/`, `src/pages/order/detail.vue`
+
+## 冲突检测
+
+共享路径: `src/api/order/`
+- ORDER-QUERY 正在写入 `src/api/order/query.ts`
+- ORDER-DETAIL 需要写入 `src/api/order/detail.ts`
+
+## 结论
+
+存在并行写集冲突（共享 `src/api/order/` 目录）
+
+建议:
+1. 等待 ORDER-QUERY 完成后再领取 ORDER-DETAIL
+2. 或调整 ORDER-DETAIL 的并行写集为 `src/api/order-detail/`
+```
+
+<Aside type="caution">
+唯一 TODO 可以有多个 `[~]`，但必须是不同执行实例独占的不同 Feature，且并行写集两两互斥。
+</Aside>
+
+## 工作原理
+
+### 追加流程（8 步）
+
+1. **定位唯一 TODO**: 按 `<developer-id>` 定位 `docs/<developer-id>/tasks/todo/` 中的一份活动 TODO
+
+2. **去重检查**: 比较 featureId、菜单/入口、用户结果、验收和范围
+
+3. **前置规划检查**: 新功能必须已完成产品、方案、设计、架构和技术规划
+
+4. **追加 Feature**: 按"功能点 + 菜单/入口"追加可执行 Feature checkbox
+
+5. **Epic 判断**: 大型目标拆成多个独立纵向 Feature 时才增加 Epic
+
+6. **纵向完整性**: 数据、API、后端、Web/App/Desktop、权限、联调、Review 和 Git 属于同一 Feature
+
+7. **Owner 检查**: 新项 `Owner` 必须等于当前 `<developer-id>`
+
+8. **状态机更新**: 追加完成后由状态机重新计算 Ready
+
+### 去重规则
+
+比较维度：
+- ✅ featureId
+- ✅ 菜单/入口
+- ✅ 用户结果
+- ✅ 验收条件
+- ✅ 范围边界
+
+**示例**：
+
+```markdown
+<!-- 已有 Feature -->
+USER-LOGIN:
+  - 菜单/入口: /login
+  - 用户结果: 用户可以通过邮箱密码登录
+  - 验收: AC-001: 邮箱登录成功
+
+<!-- 新需求 1: 重复 -->
+邮箱登录功能
+  → 与 USER-LOGIN 重复，不追加
+
+<!-- 新需求 2: 不重复 -->
+微信登录功能
+  → 新入口，不重复，追加为 USER-LOGIN-WECHAT
+```
+
+### 依赖计算
+
+**依赖类型**：
+- 技术依赖: 页面依赖 API，API 依赖数据库表
+- 业务依赖: 订单导出依赖订单查询
+- 数据依赖: 用户信息依赖用户账号
+
+**计算规则**：
+```text
+if Feature B 需要 Feature A 的产出:
+  B.依赖 = A.featureId
+
+if Feature B 依赖 Epic A:
+  B 必须等待 Epic A 的全部子 Feature 完成
+```
+
+### 并行写集冲突检查
+
+**写集格式**：
+- 目录前缀: `src/api/order/`
+- 独占资源: `resource:db-migration-sequence`
+
+**冲突判断**：
+```javascript
+function hasConflict(writeSetA, writeSetB) {
+  for (const pathA of writeSetA) {
+    for (const pathB of writeSetB) {
+      // 路径前缀重叠
+      if (pathA.startsWith(pathB) || pathB.startsWith(pathA)) {
+        return true;
+      }
+      // 独占资源相同
+      if (pathA === pathB && pathA.startsWith('resource:')) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+```
+
+### Epic vs Feature 判断
+
+**需要 Epic 的场景**：
+- ✅ 可拆成 2+ 个独立可验收的纵向 Feature
+- ✅ 各子 Feature 有独立用户结果
+- ✅ 各子 Feature 有稳定 AC
+- ✅ 各子 Feature 有互斥写集
+- ✅ 各子 Feature 可独立 commit&push
+
+**不需要 Epic 的场景**：
+- ❌ 只有 1 个 Feature
+- ❌ 按技术层拆分（数据库、API、前端）
+- ❌ 无法独立验收
+
+<Aside type="note">
+数据、API、后端、Web/App/Desktop、权限、联调、Review 和 Git 是同一 Feature 的内部完成面，不拆成独立 checkbox。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### Conflicts（职责边界）
+
+| Skill | 边界说明 |
+|-------|---------|
+| `task-todo-workflow` | `task-todo-workflow` 负责创建和维护 TODO 完整生命周期；`add-todo` 只负责向现有 TODO 追加去重功能 |
+| `project-manager` | `project-manager` 负责完整规划并生成 TODO；`add-todo` 负责向现有 TODO 追加单个功能 |
+| `change-impact-analysis` | `change-impact-analysis` 负责需求变更影响分析；`add-todo` 负责追加全新独立功能 |
+
+### Related Skills
+
+**前置依赖** (before):
+- `product-manager` - 需求定义完成后才能追加
+- `architecture-design` - 技术方案确定后才能追加
+
+**后续推荐** (after):
+- `update-status` - 追加后更新执行状态
+
+**协作 Skill** (complement):
+- `task-todo-workflow` - 配合维护 TODO 完整性
+- `project-navigator` - 发现现有项目结构
+
+## 最佳实践
+
+### 1. 追加前必须完成规划
+
+```markdown
+<!-- 错误: 直接追加 -->
+用户: 增加用户导出功能
+→ 直接追加到 TODO
+
+<!-- 正确: 先规划 -->
+用户: 增加用户导出功能
+→ product-manager: 产品定义
+→ architecture-design: 架构设计
+→ tech-decision: 技术选型
+→ add-todo: 追加到 TODO
+```
+
+### 2. 去重时比较用户结果
+
+```markdown
+<!-- 错误: 只比较名称 -->
+已有: USER-LOGIN
+新增: 用户登录页面
+结论: 名称不同，追加
+
+<!-- 正确: 比较用户结果 -->
+已有: USER-LOGIN
+  - 用户结果: 用户可以通过邮箱密码登录
+  - 交付面: api / backend / web
+
+新增: 用户登录页面
+  - 用户结果: 用户可以通过邮箱密码登录
+  - 交付面: web
+
+结论: USER-LOGIN 已覆盖（包含 web 交付面），不追加
+```
+
+### 3. Epic 只在必要时使用
+
+```markdown
+<!-- 错误: 单个功能用 Epic -->
+Epic: USER-REG
+  - Feature: USER-REG （唯一子功能）
+
+<!-- 正确: 单个功能不用 Epic -->
+Feature: USER-REG
+
+---
+
+<!-- 错误: 按技术层拆 Epic -->
+Epic: USER-REG
+  - Feature: USER-REG-DB (数据库)
+  - Feature: USER-REG-API (后端)
+  - Feature: USER-REG-PAGE (前端)
+
+<!-- 正确: 纵向完整 Feature -->
+Feature: USER-REG
+  - 交付面: data / api / backend / web
+```
+
+### 4. 依赖必须精确
+
+```markdown
+<!-- 错误: 模糊依赖 -->
+依赖: 后端 API
+
+<!-- 正确: 精确 Feature ID -->
+依赖: `USER-INFO-API`
+```
+
+### 5. 并行写集必须明确
+
+```markdown
+<!-- 错误: 空写集 -->
+并行写集: (空)
+
+<!-- 正确: 明确目录前缀 -->
+并行写集: `src/api/user/`, `src/pages/user/info.vue`
+
+<!-- 正确: 独占资源 -->
+并行写集: `resource:db-migration-001`, `src/migrations/`
+```
+
+## 故障排查
+
+### 问题 1: 找不到唯一 TODO
+
+**症状**: 提示"当前开发者无活动 TODO"
+
+**原因**: TODO 路径不符合规则
+
+**解决方案**:
+```bash
+# 检查路径
+ls docs/alice-chen/tasks/todo/*.md
+
+# 应该只有一个文件
+docs/alice-chen/tasks/todo/user-system.md
+```
+
+### 问题 2: 追加重复功能
+
+**症状**: TODO 中有语义重复的 Feature
+
+**原因**: 未进行去重检查
+
+**解决方案**:
+- 比较菜单/入口
+- 比较用户结果
+- 比较验收条件
+- 合并重复功能
+
+### 问题 3: 依赖顺序错误
+
+**症状**: 页面先于 API 完成
+
+**原因**: 未正确计算依赖
+
+**解决方案**:
+```markdown
+<!-- 错误顺序 -->
+- [ ] USER-INFO-PAGE
+- [ ] USER-INFO-API
+
+<!-- 正确顺序 -->
+- [ ] USER-INFO-API
+- [ ] USER-INFO-PAGE
+  - 依赖: `USER-INFO-API`
+```
+
+### 问题 4: 并行写集冲突
+
+**症状**: 两个 Feature 同时修改同一文件
+
+**原因**: 未检查并行写集冲突
+
+**解决方案**:
+- 调整并行写集范围
+- 或串行执行（增加依赖）
+
+## 下一步
+
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
+- [update-status](/skills/skills-reference/high/update-status) - 更新 TODO 状态
+- [project-manager](/skills/skills-reference/high/project-manager) - 生成功能 TODO
+- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis) - 变更影响分析
+- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义

@@ -1,0 +1,767 @@
+---
+title: architecture-design
+description: 系统架构设计 - 设计系统、模块、数据所有权、部署和仓库边界
+order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`architecture-design` 是 **High 优先级** Skill，负责系统架构设计。定义系统边界、模块职责、数据所有权、依赖规则、部署单元和仓库拓扑，为技术选型和实施提供架构约束。
+
+**核心职责**：
+- 定义系统边界与模块划分
+- 确定数据所有权与一致性边界
+- 设计依赖规则与调用方向
+- 冻结 environmentMatrix（环境矩阵）
+- 冻结 repositoryMatrix（仓库矩阵）
+- 定义演进步骤、兼容层和回滚点
+
+<Aside type="note">
+产品定义回答"产品由哪些能力、旅程和入口构成"，本 Skill 回答"这些能力受哪些系统、数据、仓库和部署边界约束"。
+</Aside>
+
+## 触发条件
+
+### Triggers（触发词）
+
+**中文**：
+- 架构设计
+- 系统设计
+- 模块划分
+- 领域边界
+- 架构
+- 系统架构
+- 模块设计
+- 服务拆分
+
+**English**：
+- architecture design
+- system design
+- module design
+- domain boundary
+
+### Gates（前置条件）
+
+1. **已消费完整产品定义**（能力、旅程、菜单）
+2. **已消费适用的 UI/UX 设计**
+3. **需要定义系统边界、模块职责或数据所有权**
+
+### Not For（不适用场景）
+
+- 具体代码实现
+- 数据库物理设计
+- API 详细设计
+- 前端组件
+
+## 使用场景
+
+### 场景 1：新项目架构设计
+
+**用户输入**：
+```
+用户管理系统的产品定义已完成，设计系统架构
+```
+
+**前置完成**：
+- ✅ product-manager: 完整产品定义
+- ✅ frontend-design: UI/UX 设计基线
+
+**architecture-design 行为**：
+
+1. **消费项目记忆**：
+   ```markdown
+   PROJECT-MEMORY.md:
+   
+   Quick facts:
+   - 目标: 企业内部用户权限管理系统
+   - 用户量: 预计 1000 人
+   - 部署: 私有化部署，单机部署
+   
+   Reuse map:
+   - 后端框架: Spring Boot 2.7
+   - 数据库: MySQL 8.0
+   - 前端框架: Vue 3
+   
+   Boundaries:
+   - 不对接外部 HR 系统
+   - 单租户架构
+   ```
+
+2. **架构设计输出**：
+   ```markdown
+   # 用户管理系统架构设计
+   
+   ## 范围与目标
+   
+   **核心能力**:
+   - CAP-001: 用户注册与激活
+   - CAP-002: 用户登录与认证
+   - CAP-003: 角色权限管理
+   
+   **约束**:
+   - 用户量: 1000 人
+   - 部署: 单机私有化部署
+   - 可用性: 工作时间 99% 可用
+   - 性能: 登录响应 < 500ms
+   
+   ---
+   
+   ## 已确认事实
+   
+   **来源: 项目记忆 + 产品定义**
+   - 后端框架: Spring Boot 2.7 (已有)
+   - 数据库: MySQL 8.0 (已有)
+   - 前端: Vue 3 (已有)
+   - 部署目标: 单机 Linux 服务器
+   - 不需要多租户隔离
+   - 不对接外部系统
+   
+   ---
+   
+   ## 待确认假设
+   
+   - 假设: 数据库与应用部署在同一服务器
+   - 验证: 与运维确认部署拓扑
+   
+   - 假设: 无高并发要求，单机足够
+   - 验证: 与用户确认峰值并发量
+   
+   ---
+   
+   ## 推荐架构
+   
+   ### 架构候选比较
+   
+   **方案 A: 单体分层架构**
+   - 优点: 简单直接，单机部署，运维成本低
+   - 缺点: 扩展性受限
+   - 适用: 用户量 < 10,000，单机足够
+   
+   **方案 B: 微服务架构**
+   - 优点: 可独立扩展，故障隔离
+   - 缺点: 运维复杂度高，需要服务发现、网关
+   - 适用: 用户量 > 100,000 或需要独立扩缩
+   
+   **选择: 方案 A（单体分层架构）**
+   
+   **理由**: 用户量 1000 人，单机部署足够；避免过度设计
+   
+   ---
+   
+   ## 模块划分
+   
+   ### 按业务能力划分
+   
+   ```
+   user-system/
+   ├── user-auth/          # 用户认证模块
+   │   ├── registration    # 注册
+   │   ├── login           # 登录
+   │   └── session         # 会话管理
+   ├── user-permission/    # 权限管理模块
+   │   ├── role            # 角色管理
+   │   ├── permission      # 权限配置
+   │   └── assignment      # 角色分配
+   ├── user-profile/       # 用户信息模块
+   │   ├── info            # 个人信息
+   │   └── settings        # 个人设置
+   └── shared/             # 共享模块
+       ├── entity          # 实体定义
+       ├── dto             # 数据传输对象
+       └── utils           # 工具类
+   ```
+   
+   **职责边界**:
+   - user-auth: 拥有用户账号数据，负责认证
+   - user-permission: 拥有角色权限数据，负责授权
+   - user-profile: 拥有用户信息数据，负责个人信息管理
+   - shared: 只放稳定的跨模块契约，不堆积所有 DTO
+   
+   ---
+   
+   ## 依赖规则
+   
+   **允许方向**:
+   ```
+   user-profile → user-auth (查询用户状态)
+   user-permission → user-auth (查询用户信息)
+   user-auth ← user-profile (禁止反向依赖)
+   ```
+   
+   **禁止**:
+   - 跨模块直接访问数据库表
+   - 跨模块直接访问私有类
+   - 循环依赖
+   
+   **跨模块调用**:
+   - 通过公开接口 (Service 接口)
+   - 失败语义: 返回错误码，不传播异常
+   - 超时: 默认 3 秒
+   
+   ---
+   
+   ## 数据所有权
+   
+   ### 数据归属
+   
+   | 表 | 所有者 | 写入者 | 读取者 |
+   |---|--------|--------|--------|
+   | users | user-auth | user-auth | 全部模块 (通过接口) |
+   | roles | user-permission | user-permission | user-auth (检查权限) |
+   | permissions | user-permission | user-permission | user-auth (检查权限) |
+   | user_profiles | user-profile | user-profile | user-auth (登录时展示) |
+   
+   **一致性**:
+   - 用户注册: 单事务（users + user_profiles）
+   - 角色分配: 单事务（user_roles）
+   - 跨模块查询: 最终一致性
+   
+   **主键策略**:
+   - 使用 Snowflake ID (IdWorker#nextId())
+   - 不使用 AUTO_INCREMENT
+   - 不使用 MyBatis-Plus ASSIGN_ID
+   
+   **关联**:
+   - 逻辑外键 (user_id, role_id)
+   - 不使用物理 FOREIGN KEY
+   - 服务层校验完整性
+   
+   **审计字段** (新表统一采用):
+   - create_dept: 创建部门
+   - create_by: 创建人
+   - create_time: 创建时间
+   - update_by: 更新人
+   - update_time: 更新时间
+   - remark: 备注
+   
+   ---
+   
+   ## environmentMatrix (环境矩阵)
+   
+   | 环境 ID | 用途 | 运行目标 | 数据隔离 | 配置来源 | 晋级来源 | 人工门禁 |
+   |---------|------|----------|----------|----------|----------|----------|
+   | local | 开发本地 | 开发者机器 | 独立数据库 | application-local.yml | - | 无 |
+   | test | 集成测试 | 测试服务器 | 独立数据库 | application-test.yml | local | 无 |
+   | prod | 生产环境 | 生产服务器 | 生产数据库 | application-prod.yml | test | 需管理员批准 |
+   
+   **晋级规则**:
+   - local → test: 自动部署
+   - test → prod: 手动触发 + 管理员审批
+   
+   ---
+   
+   ## repositoryMatrix (仓库矩阵)
+   
+   | repoId | root | 边界 | 说明 |
+   |--------|------|------|------|
+   | user-system | . | 单体应用 | 包含前后端全部代码 |
+   
+   **仓库结构**:
+   ```
+   user-system/
+   ├── backend/          # Spring Boot 后端
+   ├── frontend/         # Vue 3 前端
+   ├── docs/             # 文档
+   └── deploy/           # 部署脚本
+   ```
+   
+   **交给 tech-decision 补齐**:
+   - provider: GitHub / GitLab / Gitee
+   - remote: 仓库 URL
+   - targetBranch: main
+   - deliveryMode: direct-push / PR
+   - requiredChecks: 构建、测试
+   - approvalPolicy: 需要 Code Review
+   
+   ---
+   
+   ## 非功能需求
+   
+   ### 认证授权
+   - JWT Token 认证
+   - 基于角色的访问控制 (RBAC)
+   - Token 有效期: 7 天
+   
+   ### 性能
+   - 登录响应: < 500ms (P95)
+   - 列表查询: < 1s (P95)
+   - 并发: 支持 50 并发用户
+   
+   ### 可用性
+   - 工作时间 (9:00-18:00) 99% 可用
+   - 允许计划内维护窗口
+   
+   ### 备份恢复
+   - 数据库每日备份
+   - 备份保留 30 天
+   - RTO: 4 小时
+   - RPO: 24 小时
+   
+   ### 日志/监控
+   - 应用日志: SLF4J + Logback
+   - 审计日志: 登录、权限变更记录
+   - 监控: JVM 指标、数据库连接池
+   
+   ### 配置/密钥
+   - 配置文件: application-{env}.yml
+   - 密钥: 环境变量注入
+   - 数据库密码: 加密存储
+   
+   ---
+   
+   ## 演进步骤
+   
+   ### Phase 1: 基础框架 (Week 1)
+   - 搭建 Spring Boot 骨架
+   - 数据库表结构
+   - 前端项目初始化
+   
+   ### Phase 2: 用户认证 (Week 2)
+   - 用户注册
+   - 用户登录
+   - JWT Token 生成
+   
+   ### Phase 3: 权限管理 (Week 3)
+   - 角色管理
+   - 权限配置
+   - 权限校验
+   
+   ### Phase 4: 部署上线 (Week 4)
+   - 测试环境部署
+   - 生产环境部署
+   - 监控告警配置
+   
+   ---
+   
+   ## 回滚点
+   
+   - Phase 1 → Phase 2: 可回滚（无数据迁移）
+   - Phase 2 → Phase 3: 需要数据库迁移回滚脚本
+   - Phase 3 → Phase 4: 需要保留旧版本镜像
+   
+   ---
+   
+   ## 验证方式
+   
+   - 架构测试: ArchUnit 检查依赖方向
+   - 集成测试: 跨模块调用测试
+   - 性能测试: JMeter 压测登录接口
+   - 部署演练: 测试环境全流程部署
+   ```
+
+3. **推进阶段状态机**：
+   ```bash
+   node runtime-hooks/scripts/todo-continuation.cjs \
+     --plan-advance \
+     --stage technical-plan \
+     --next-stage technical-confirmation \
+     --artifact "docs/architecture.md" \
+     --result "架构设计完成：单体分层架构，3个业务模块，单仓部署"
+   ```
+
+### 场景 2：微服务拆分决策
+
+**用户输入**：
+```
+系统用户量增长到 10 万，考虑拆分微服务
+```
+
+**architecture-design 分析**：
+
+```markdown
+# 微服务拆分评估
+
+## 当前问题
+
+- 用户量: 10 万
+- 当前架构: 单体应用
+- 性能瓶颈: 权限校验慢（每次请求都查数据库）
+- 扩展问题: 无法独立扩展权限模块
+
+---
+
+## 候选方案
+
+### 方案 A: 保持单体 + 缓存优化
+
+**变化**:
+- 增加 Redis 缓存权限数据
+- 优化数据库索引
+
+**优点**:
+- 改动小，风险低
+- 运维成本不变
+
+**缺点**:
+- 扩展性仍受限
+- 无法独立部署权限模块
+
+**成本**: 1 周开发 + 1 周测试
+
+---
+
+### 方案 B: 拆分权限微服务
+
+**变化**:
+- user-permission 拆分为独立服务
+- 增加 API 网关
+- 增加服务注册中心
+
+**优点**:
+- 权限服务可独立扩展
+- 故障隔离（权限服务挂了不影响查询用户信息）
+
+**缺点**:
+- 运维复杂度增加
+- 需要处理分布式一致性
+
+**成本**: 4 周开发 + 2 周测试 + 持续运维成本
+
+---
+
+## 推荐方案
+
+**阶段 1: 方案 A（缓存优化）**
+- 理由: 快速解决当前性能问题
+- 时间: 2 周
+- 风险: 低
+
+**阶段 2: 方案 B（微服务拆分）- 可选**
+- 触发条件: 用户量达到 50 万 或 权限校验成为瓶颈
+- 理由: 现在拆分过早，增加复杂度
+
+---
+
+## 演进步骤（如果选择方案 B）
+
+### Step 1: 抽取权限接口
+
+- 定义 PermissionService 接口
+- user-auth 和 user-profile 通过接口调用
+- 接口实现仍在单体内
+
+### Step 2: 数据库拆分
+
+- 权限表迁移到独立数据库
+- 双写期: 同时写入主库和权限库
+- 验证: 数据一致性检查
+
+### Step 3: 服务拆分
+
+- user-permission 独立部署
+- API 网关路由权限请求
+- 服务注册中心: Nacos
+
+### Step 4: 清理双写
+
+- 切换到权限库
+- 删除主库权限表
+- 监控: 3 天观察期
+
+---
+
+## 回滚点
+
+- Step 1 → Step 2: 随时回滚（只是接口抽取）
+- Step 2 → Step 3: 停止双写，恢复主库
+- Step 3 → Step 4: 保留双写，回滚服务拆分
+```
+
+### 场景 3: 多仓库项目架构
+
+**用户输入**：
+```
+前后端分离，独立仓库部署
+```
+
+**repositoryMatrix 输出**：
+
+```markdown
+## repositoryMatrix (仓库矩阵)
+
+| repoId | root | 边界 | 说明 |
+|--------|------|------|------|
+| user-backend | backend/ | 后端服务 | Spring Boot API |
+| user-frontend | frontend/ | 前端应用 | Vue 3 SPA |
+| user-shared | shared/ | 共享契约 | DTO、API 定义 |
+
+**仓库依赖**:
+```
+user-frontend → user-shared (引用 API 定义)
+user-backend → user-shared (引用 DTO 定义)
+```
+
+**部署拓扑**:
+```
+user-backend:
+  - 部署目标: 后端服务器
+  - 端口: 8080
+  - 依赖: MySQL, Redis
+
+user-frontend:
+  - 部署目标: Nginx 静态服务器
+  - 端口: 80
+  - 依赖: user-backend API
+
+user-shared:
+  - 发布目标: Maven / npm 私有仓库
+  - 版本: 语义化版本
+```
+
+**交给 tech-decision 补齐**:
+- provider: GitHub
+- remote: 各仓库 URL
+- targetBranch: main
+- deliveryMode: PR (需要 Code Review)
+- requiredChecks: 构建、单元测试、集成测试
+- approvalPolicy: 至少 1 人审批
+```
+
+## 工作原理
+
+### 架构设计流程（9 步）
+
+1. **目标与约束**: 写清用户、核心用例、吞吐/延迟、可用性、合规、成本、团队能力、交付期限、目标运行环境、发布窗口和不可变约束
+
+2. **现状图**: 记录入口、组件/模块、数据存储、外部系统、异步链路和部署拓扑；未知项标记未知，不补模板
+
+3. **边界划分**: 按业务能力、数据所有权、变化频率、事务边界和团队所有权划分；避免只按技术层创建无业务边界的模块
+
+4. **依赖规则**: 定义允许方向、公开接口、事件/消息、共享内核和禁止环依赖；每个跨边界调用说明失败和超时语义
+
+5. **数据设计**: 确认主数据、写入者、一致性、幂等、历史/审计、初始化、迁移和回滚
+
+6. **环境与仓库矩阵**: 冻结 environmentMatrix 和 repositoryMatrix
+
+7. **架构候选比较**: 比较单体/模块化/服务边界、部署单元、数据所有权或仓库拓扑等真实候选
+
+8. **渐进演进**: 给最小可交付切片、兼容层、双写/回填、灰度/开关、观察窗、回滚点和删除旧路径的门禁
+
+9. **验证**: 用代码依赖检查、架构测试、契约测试、空库迁移演练、负载/故障测试或可观测数据验证关键假设
+
+### 共享数据基线（Java 业务系统）
+
+<Aside type="note">
+用户明确指定的新建 Java 业务数据基线属于架构约束输入；具体数据库和 ID 实施仍需进入 tech-decision。
+</Aside>
+
+**数据库选择**:
+- 新项目: PostgreSQL（第一选择）
+- 已有系统: 沿用真实数据库
+
+**主键策略**:
+- 使用 `snowflake-id` Skill 提供的 `IdWorkerOptions` + `IdWorker#nextId()`
+- 不引入 Yitter JAR
+- 不使用 MyBatis-Plus 内置 `ASSIGN_ID`
+- 不使用 `AUTO_INCREMENT`
+
+**关联规则**:
+- 统一使用逻辑外键字段
+- 必要索引
+- 服务层/事务校验
+- 禁止新增数据库物理 `FOREIGN KEY`
+
+**审计字段** (新建关系型表):
+- create_dept: 创建部门
+- create_by: 创建人
+- create_time: 创建时间
+- update_by: 更新人
+- update_time: 更新时间
+- remark: 备注
+
+**可选能力** (从需求与仓库事实启用):
+- 租户
+- 逻辑删除
+- 乐观锁
+- 版本
+- 状态
+- 分区
+
+### 模块与代码边界
+
+**命名规则**:
+- 沿用目标仓库命名
+- 新命名从业务能力产生
+- 不套用固定示例（如"商城、物联网、系统模块"）
+
+**分层原则**:
+- 分层不是默认答案
+- 只有职责、依赖和测试收益成立时才增加层次
+- 避免过度抽象
+
+**共享模块**:
+- 只放稳定、真正跨域的契约
+- 禁止把所有 DTO、工具和表模型堆入 "common"
+
+**跨模块复用**:
+- 优先公开接口/事件
+- 不直接访问其他模块内部表
+- 不直接访问私有包或实现类
+
+<Aside type="caution">
+任何框架 API、基类、响应包装、Mapper/Repository 和转换工具都必须由目标仓库证实。
+</Aside>
+
+### 分布式与集成决策
+
+**微服务拆分原则**:
+- 不因"以后可能扩展"拆微服务
+- 先证明独立扩缩、故障隔离、数据所有权或团队自治收益
+
+**同步调用**:
+- 必须定义超时
+- 必须定义重试策略（仅用于安全操作）
+- 必须定义幂等性
+- 必须定义熔断规则
+- 必须定义错误传播
+
+**异步事件**:
+- 必须定义投递语义
+- 必须定义顺序要求
+- 必须定义去重策略
+- 必须定义重放机制
+- 必须定义死信处理
+- 必须定义 Schema 演进
+- 必须定义可观测关联
+
+**分布式事务**:
+- 优先通过明确边界
+- 使用 Saga/补偿机制
+- 使用 Outbox 模式
+- 不假装跨服务强一致没有成本
+
+**中间件**:
+- 缓存、搜索、消息队列、工作流和对象存储只有需求和依赖证据成立时加入
+
+### 非功能门禁
+
+方案至少覆盖：
+- ✅ 认证授权
+- ✅ 敏感数据
+- ✅ 容量
+- ✅ 性能预算
+- ✅ 可用性目标
+- ✅ 备份恢复
+- ✅ 日志/指标/追踪
+- ✅ 配置/密钥
+- ✅ 部署回滚
+- ✅ 数据迁移
+- ✅ 运维所有权
+
+<Aside type="caution">
+不能验证的目标明确标为风险，不用星级或空泛"高可用"代替指标。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### Conflicts（职责边界）
+
+| Skill | 边界说明 |
+|-------|---------|
+| `tech-decision` | `tech-decision` 负责具体技术选型；`architecture-design` 负责系统边界和模块划分 |
+| `database-design` | `database-design` 负责数据库物理设计；`architecture-design` 负责数据所有权边界 |
+| `api-development` | `api-development` 负责 API 实现；`architecture-design` 负责服务边界和契约定义 |
+
+### Related Skills
+
+**前置依赖** (before):
+- `product-manager` - 提供完整产品定义
+- `frontend-design` - 提供 UI/UX 设计
+
+**后续推荐** (after):
+- `tech-decision` - 具体技术选型
+- `database-design` - 数据库物理设计
+- `api-development` - API 实现
+
+**协作 Skill** (complement):
+- `project-manager` - 压缩架构结论进 TODO
+
+## 最佳实践
+
+### 1. 先消费项目记忆
+
+```markdown
+<!-- 错误: 从模板开始 -->
+推荐使用 Spring Boot + MySQL + Redis
+
+<!-- 正确: 从项目记忆开始 -->
+PROJECT-MEMORY.md Quick facts:
+- 后端框架: Spring Boot 2.7 (已有)
+- 数据库: PostgreSQL 14 (已有)
+
+推荐沿用 Spring Boot 2.7 + PostgreSQL 14
+```
+
+### 2. 边界划分从业务能力出发
+
+```markdown
+<!-- 错误: 按技术层划分 -->
+modules:
+  - controller/
+  - service/
+  - repository/
+
+<!-- 正确: 按业务能力划分 -->
+modules:
+  - user-auth/ (用户认证)
+  - user-permission/ (权限管理)
+  - user-profile/ (用户信息)
+```
+
+### 3. 架构候选必须比较
+
+```markdown
+<!-- 错误: 直接给方案 -->
+推荐使用微服务架构
+
+<!-- 正确: 比较候选 -->
+方案 A: 单体架构
+  - 优点: 简单，单机部署
+  - 缺点: 扩展性受限
+  - 适用: 用户量 < 10,000
+
+方案 B: 微服务架构
+  - 优点: 可独立扩展
+  - 缺点: 运维复杂
+  - 适用: 用户量 > 100,000
+
+选择: 方案 A（理由: 当前用户量 1000）
+```
+
+### 4. environmentMatrix 必须冻结
+
+```markdown
+<!-- 错误: 模板环境 -->
+环境: dev, test, prod
+
+<!-- 正确: 完整环境矩阵 -->
+| 环境 ID | 用途 | 运行目标 | 数据隔离 | 配置来源 | 晋级来源 | 人工门禁 |
+|---------|------|----------|----------|----------|----------|----------|
+| local | 开发 | 本地 | 独立DB | application-local.yml | - | 无 |
+| staging | 预发布 | 预发布服务器 | 独立DB | application-staging.yml | test | 需测试通过 |
+| prod | 生产 | 生产服务器 | 生产DB | application-prod.yml | staging | 需管理员批准 |
+```
+
+### 5. repositoryMatrix 必须明确 repoId/root
+
+```markdown
+<!-- 错误: 只有目录 -->
+前端: frontend/
+后端: backend/
+
+<!-- 正确: 完整仓库矩阵 -->
+| repoId | root | 边界 | 说明 |
+|--------|------|------|------|
+| user-frontend | frontend/ | 前端应用 | Vue 3 SPA |
+| user-backend | backend/ | 后端服务 | Spring Boot API |
+```
+
+## 下一步
+
+- [tech-decision](/skills/skills-reference/high/tech-decision) - 具体技术选型
+- [database-design](/skills/skills-reference/medium/database-design) - 数据库物理设计
+- [api-development](/skills/skills-reference/high/api-development) - API 实现
+- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义
+- [frontend-design](/skills/skills-reference/high/frontend-design) - UI/UX 设计
