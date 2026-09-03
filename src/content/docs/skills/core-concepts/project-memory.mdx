@@ -1,0 +1,689 @@
+---
+title: 项目记忆
+description: 深入理解项目记忆的结构、按需加载和自动维护机制
+order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 项目记忆概述
+
+每个项目有唯一的 `PROJECT-MEMORY.md` 文件，记录稳定的项目事实和复用地图。它是**单一真相源**，由 `project-details` Skill 自动维护，不需要手工编辑。
+
+**核心特性**：
+
+- ✅ **单一文件**：每个项目唯一的记忆文件
+- ✅ **稳定事实**：技术栈、架构、约定、复用地图
+- ✅ **按需加载**：只注入与当前问题相关的摘要
+- ✅ **自动维护**：`project-details` 自动归并新确认的事实
+- ✅ **不保存状态**：不保存 TODO、执行日志、临时决策
+
+<Aside type="tip">
+项目记忆不是 PRD、架构文档或任务清单的替代品，而是实际用于规划、实现和 Review 的快速参考。
+</Aside>
+
+## 文件位置
+
+项目记忆文件按以下优先级查找：
+
+1. `docs/PROJECT-MEMORY.md`
+2. `docs/project-memory.md`
+3. `PROJECT-MEMORY.md`（项目根目录）
+
+**自动创建**：
+
+```bash
+# Runtime Hook 在首次请求时自动检查
+项目根目录: /path/to/project
+检查: docs/PROJECT-MEMORY.md
+  不存在 → 创建空模板
+  存在但为空 → 提示调用 init-docs 采集事实
+```
+
+## 文件结构
+
+```markdown
+# Project Memory
+
+## Quick facts
+
+### 技术栈
+- 前端: Vue 3.4 + TypeScript + Vite 5.2
+- 后端: Spring Boot 3.1 + Java 17
+- 数据库: PostgreSQL 15
+
+### 架构
+- 前后端分离
+- RESTful API
+- JWT 身份验证
+
+### 开发约定
+- 统一使用 Composition API（不使用 Options API）
+- API 路径统一 `/api/v1` 前缀
+- 错误码统一使用 `src/constants/error-codes.ts`
+
+## Reuse map
+
+### API 工具类
+- 路径: `src/utils/request.ts`
+- 用途: 封装 axios，统一请求/响应拦截
+- 使用: `import { request } from '@/utils/request'`
+
+### 表单组件
+- 路径: `src/components/Form/`
+- 组件: `FormInput.vue`, `FormSelect.vue`, `FormDatePicker.vue`
+- 用途: 统一表单样式和验证
+- 使用: 参考 `src/pages/user/register.vue`
+
+### 数据库工具类
+- 路径: `src/main/java/com/example/util/DbUtils.java`
+- 用途: 数据库连接池、事务管理
+- 使用: 参考 `UserService.java`
+
+## Boundaries
+
+### 不使用的技术
+- jQuery（已移除，使用原生 DOM API 或 Vue 方法）
+- Moment.js（使用 Day.js 替代）
+- class 组件（统一使用 Composition API）
+
+### 禁止的模式
+- 直接修改 props（使用 emit 或 v-model）
+- 在组件内直接调用 localStorage（使用 Pinia store）
+- 硬编码 API 地址（使用环境变量）
+
+### 数据权限边界
+- 普通用户只能查看自己的数据
+- 管理员可以查看所有用户数据
+- 数据隔离通过 Row-Level Security 实现
+
+## Project context (optional)
+
+### 业务背景
+用户管理系统，支持注册、登录、个人信息管理。
+
+### 关键决策
+- 2024-09-01: 选择 Vue 3 而非 React（团队熟悉度）
+- 2024-09-02: 使用 PostgreSQL 而非 MySQL（支持 JSONB）
+
+### 已知问题
+- 密码重置功能暂未实现（计划 v1.1）
+- 邮件通知依赖第三方服务（需要配置 SMTP）
+```
+
+## 章节详解
+
+### Quick facts - 快速事实
+
+记录项目的基本信息，用于快速了解项目背景：
+
+```markdown
+## Quick facts
+
+### 技术栈
+- 前端框架及版本
+- 后端框架及版本
+- 数据库及版本
+- 关键依赖
+
+### 架构
+- 系统架构模式（前后端分离、单体、微服务）
+- 通信方式（RESTful、GraphQL、gRPC）
+- 认证方式（JWT、Session、OAuth）
+
+### 开发约定
+- 代码风格（Composition API、函数式）
+- 命名规范（驼峰、下划线）
+- 目录结构约定
+```
+
+**使用场景**：
+
+- 新成员了解项目
+- 技术选型时参考现有技术栈
+- 确保新代码符合项目约定
+
+**按需加载示例**：
+
+```markdown
+用户问题: "如何实现用户登录？"
+
+相关事实（注入上下文）:
+- 技术栈: Vue 3.4 + Spring Boot 3.1
+- 架构: RESTful API + JWT 身份验证
+- 开发约定: Composition API
+
+不相关事实（不注入）:
+- 数据库: PostgreSQL 15（登录不直接涉及数据库操作）
+```
+
+### Reuse map - 复用地图
+
+记录可复用的组件、工具类、API，避免重复造轮。
+
+```markdown
+## Reuse map
+
+### <组件/工具类名称>
+- 路径: 文件路径
+- 用途: 功能描述
+- 使用: 使用方法或参考示例
+- 注意: 特殊说明（可选）
+```
+
+**示例**：
+
+```markdown
+### API 请求工具
+- 路径: `src/utils/request.ts`
+- 用途: 封装 axios，统一处理请求/响应、错误、Loading
+- 使用: 
+  ```typescript
+  import { request } from '@/utils/request'
+  const data = await request.get('/api/v1/users')
+  ```
+- 注意: 自动添加 Authorization header，无需手动处理
+
+### 表单验证 Hook
+- 路径: `src/hooks/useFormValidation.ts`
+- 用途: 统一表单验证逻辑
+- 使用: 参考 `src/pages/user/register.vue`
+- 注意: 支持异步验证（如用户名唯一性）
+
+### 分页组件
+- 路径: `src/components/Pagination.vue`
+- 用途: 统一分页样式和逻辑
+- 使用:
+  ```vue
+  <Pagination 
+    :total="100" 
+    :page-size="10" 
+    @change="handlePageChange" 
+  />
+  ```
+```
+
+**使用场景**：
+
+- 实现新功能前查找可复用组件
+- 避免重复封装已有工具类
+- 确保项目内使用统一的工具和组件
+
+**按需加载示例**：
+
+```markdown
+用户问题: "实现用户列表的分页功能"
+
+相关复用项（注入上下文）:
+- 分页组件: src/components/Pagination.vue
+- API 请求工具: src/utils/request.ts（处理分页请求）
+
+不相关复用项（不注入）:
+- 表单验证 Hook（分页不涉及表单）
+- 上传组件（分页不涉及上传）
+```
+
+### Boundaries - 边界
+
+记录项目的约束和禁忌，避免引入不符合项目规范的代码。
+
+```markdown
+## Boundaries
+
+### 不使用的技术
+- 技术名称（原因或替代方案）
+
+### 禁止的模式
+- 反模式描述（原因）
+
+### 数据权限边界
+- 权限规则和隔离机制
+```
+
+**示例**：
+
+```markdown
+### 不使用的技术
+- jQuery（已移除，使用原生 DOM API 或 Vue 方法）
+- Moment.js（体积大，使用 Day.js 替代）
+- class 组件（统一使用 Composition API）
+- Redux（使用 Pinia 作为状态管理）
+
+### 禁止的模式
+- 直接修改 props（违反 Vue 单向数据流，使用 emit 或 v-model）
+- 在组件内直接调用 localStorage（使用 Pinia store 统一管理）
+- 硬编码 API 地址（使用环境变量 import.meta.env.VITE_API_BASE）
+- any 类型（除非确实无法推断，使用 unknown 或具体类型）
+
+### 数据权限边界
+- 普通用户只能查看自己的数据（uid 字段过滤）
+- 管理员可以查看所有用户数据（role: admin）
+- 数据隔离通过 Row-Level Security 实现（PostgreSQL RLS）
+- 跨租户查询需要显式权限检查
+```
+
+**使用场景**：
+
+- 技术选型时避免引入禁止的技术
+- Code Review 时检查是否违反边界
+- 新成员了解项目约束
+
+**按需加载示例**：
+
+```markdown
+用户问题: "如何处理日期格式化？"
+
+相关边界（注入上下文）:
+- 不使用 Moment.js，使用 Day.js 替代
+
+不相关边界（不注入）:
+- 数据权限边界（日期格式化不涉及权限）
+```
+
+### Project context - 项目上下文（可选）
+
+记录业务背景、关键决策、已知问题等补充信息。
+
+```markdown
+## Project context
+
+### 业务背景
+项目的业务目标和背景
+
+### 关键决策
+- 日期: 决策内容（原因）
+
+### 已知问题
+- 问题描述（计划或临时方案）
+```
+
+<Aside type="caution">
+Project context 是可选章节，不是所有项目都需要。如果项目简单，可以省略。
+</Aside>
+
+## 按需加载机制
+
+Runtime Hook 不会注入整个记忆文件，而是根据当前问题选择相关事实。
+
+### 加载流程
+
+```
+1. 用户输入
+   "实现用户登录功能"
+   
+2. 分析问题关键词
+   关键词: "用户登录", "实现"
+   
+3. 读取完整 PROJECT-MEMORY.md
+   
+4. 计算相关性
+   Quick facts:
+     - 技术栈 ✓ (需要知道用什么框架)
+     - 架构 ✓ (需要知道认证方式)
+     - 开发约定 ✓ (需要遵循代码风格)
+   
+   Reuse map:
+     - API 请求工具 ✓ (登录需要调用 API)
+     - 表单组件 ✓ (登录页面需要表单)
+     - 上传组件 ✗ (登录不涉及上传)
+   
+   Boundaries:
+     - 不使用的技术 ✓ (避免引入禁止的技术)
+     - 数据权限边界 ✗ (登录不直接涉及数据权限)
+   
+5. 注入相关事实（控制在 3000 bytes）
+```
+
+### 相关性计算
+
+**高相关**：
+
+- 问题直接涉及的技术（"Vue 页面" → 技术栈.前端）
+- 需要复用的组件（"表单" → 表单组件）
+- 需要遵循的约定（"API" → 开发约定.API路径）
+
+**中相关**：
+
+- 间接相关的技术（"页面" → 架构）
+- 可能复用的工具（"请求" → API 请求工具）
+
+**低相关**：
+
+- 不直接涉及的技术（"前端页面" → 后端框架）
+- 无关的复用项（"表单" → 上传组件）
+
+### 注入示例
+
+**完整记忆文件**（约 5000 bytes）：
+
+```markdown
+## Quick facts
+- 技术栈: Vue 3, Spring Boot, PostgreSQL
+- 架构: 前后端分离, RESTful API, JWT
+- 开发约定: Composition API, /api/v1 前缀
+
+## Reuse map
+- API 请求工具: src/utils/request.ts
+- 表单组件: src/components/Form/
+- 上传组件: src/components/Upload/
+- 分页组件: src/components/Pagination.vue
+
+## Boundaries
+- 不使用 jQuery, Moment.js, class 组件
+- 禁止直接修改 props, 硬编码 API
+- 数据权限: RLS 隔离
+```
+
+**实际注入**（约 1500 bytes）：
+
+```markdown
+<project_memory path="PROJECT-MEMORY.md" status="present">
+Quick facts: 
+- 技术栈: Vue 3 + TypeScript, Spring Boot 3.1, JWT 身份验证
+- 开发约定: Composition API, /api/v1 前缀
+
+Reuse map:
+- API 请求工具: src/utils/request.ts（自动添加 Authorization）
+- 表单组件: src/components/Form/（参考 register.vue）
+
+Boundaries:
+- 不使用 class 组件，统一使用 Composition API
+- 不硬编码 API 地址，使用环境变量
+</project_memory>
+```
+
+<Aside type="tip">
+**预算控制**：项目记忆注入控制在 3000 bytes 内，超过预算时自动截断并提示直接读取文件。
+</Aside>
+
+## 自动维护机制
+
+项目记忆由 `project-details` Skill 自动维护，不需要手工编辑。
+
+### 初始化
+
+**触发条件**：
+
+1. 项目记忆文件不存在
+2. 或主要章节为空（Quick facts / Reuse map / Boundaries）
+
+**自动流程**：
+
+```
+1. Runtime Hook 检测到记忆文件缺失或为空
+   ↓
+2. 自动路由 init-docs Skill
+   ↓
+3. init-docs 采集项目事实:
+   - 读取 package.json / pom.xml（技术栈）
+   - 扫描目录结构（架构）
+   - 分析代码模式（开发约定）
+   - 提取工具类和组件（复用地图）
+   ↓
+4. 生成初始记忆内容
+   ↓
+5. 自动路由 project-details Skill
+   ↓
+6. project-details 核对并归并到 PROJECT-MEMORY.md
+```
+
+**示例**：
+
+```bash
+用户首次运行: "实现用户登录"
+
+系统检测:
+  PROJECT-MEMORY.md 不存在
+  ↓
+自动路由:
+  init-docs → 采集项目事实
+  ↓
+  project-details → 归并到 PROJECT-MEMORY.md
+  ↓
+继续执行:
+  实现用户登录功能
+```
+
+### 增量更新
+
+**触发条件**：
+
+在规划或实施过程中确认了新的稳定事实：
+
+- 新的复用组件
+- 新的开发约定
+- 新的边界规则
+
+**更新流程**：
+
+```
+1. 当前 Skill 确认新事实
+   例如: tech-decision 确认使用 Day.js
+   ↓
+2. 当轮交由 project-details 归并
+   ↓
+3. project-details 读取 PROJECT-MEMORY.md
+   ↓
+4. 原位归并新事实:
+   - Quick facts 增加新技术栈
+   - Reuse map 增加新组件
+   - Boundaries 增加新约束
+   ↓
+5. 写回 PROJECT-MEMORY.md
+```
+
+**示例**：
+
+```markdown
+# tech-decision 确认使用 Day.js
+
+当轮交由 project-details:
+  新事实: "使用 Day.js 处理日期（不使用 Moment.js）"
+  
+project-details 归并:
+  读取 PROJECT-MEMORY.md
+  ↓
+  更新 Boundaries:
+    - Moment.js（体积大，使用 Day.js 替代）  # 新增
+  ↓
+  写回 PROJECT-MEMORY.md
+```
+
+<Aside type="tip">
+**原位归并**：project-details 直接修改现有章节，不创建副本或历史版本。
+</Aside>
+
+### 来源锚点
+
+每个 Feature 首次领取前必须有**来源锚点**，指向记忆文件的原始章节。
+
+```markdown
+- [ ] `USER-LOGIN` 用户登录
+  - 来源: PROJECT-MEMORY.md#reuse-map（API 请求工具）
+  - 来源: PROJECT-MEMORY.md#boundaries（不硬编码 API）
+```
+
+**作用**：
+
+- 确保实施时回读原始规划
+- 上下文压缩、换设备后可以恢复背景
+- 不能只靠聊天摘要或 checkbox 继续
+
+**检查流程**：
+
+```bash
+每轮继续 [~] Feature 时:
+  检查来源锚点:
+    存在 → 回读对应章节，确认边界和复用
+    不存在 → 调用 project-details 检查当前 Feature 的真实 Owner、边界和细节
+```
+
+## 不保存的内容
+
+项目记忆**不保存**以下内容：
+
+### ❌ TODO 和任务状态
+
+```markdown
+# 错误示例（不要保存到记忆）
+## Current tasks
+- [x] USER-REG 用户注册
+- [~] USER-LOGIN 用户登录
+```
+
+**原因**：TODO 状态是动态的，保存在 `docs/<developer-id>/tasks/todo/` 中。
+
+### ❌ 执行日志
+
+```markdown
+# 错误示例（不要保存到记忆）
+## Execution log
+- 2024-09-03 10:30: 开始实现用户登录
+- 2024-09-03 11:00: 完成 API 接口
+```
+
+**原因**：执行日志是临时的，不是稳定事实。
+
+### ❌ 临时决策
+
+```markdown
+# 错误示例（不要保存到记忆）
+## Temporary decisions
+- 暂时使用硬编码的 API 地址（后续修改）
+```
+
+**原因**：临时决策会变化，只有确认为稳定约定后才进入记忆。
+
+### ❌ Code Review 结果
+
+```markdown
+# 错误示例（不要保存到记忆）
+## Review findings
+- src/api/user.ts: 缺少错误处理
+```
+
+**原因**：Review 结果属于具体 Feature，保存在 TODO 的 AC 证据中。
+
+### ❌ 大型上下文或 JSON
+
+```markdown
+# 错误示例（不要保存到记忆）
+## API response schema
+{
+  "user": {
+    "id": "string",
+    "name": "string",
+    ...
+  }
+}
+```
+
+**原因**：详细 schema 保存在代码或 API 文档中，记忆只记录路径引用。
+
+<Aside type="caution">
+**记住**：项目记忆只保存**稳定事实**和**复用地图**，不是万能的存储。
+</Aside>
+
+## 使用最佳实践
+
+### 1. 定期回读记忆
+
+在关键决策前回读项目记忆：
+
+```bash
+# 实现新功能前
+"查看项目记忆中的复用组件"
+
+# 技术选型前
+"查看项目记忆中的技术栈和边界"
+
+# Code Review 前
+"确认代码符合项目约定"
+```
+
+### 2. 及时更新边界
+
+确认新约束后及时更新：
+
+```bash
+# 确认不使用某技术
+tech-decision → project-details 归并
+
+# 确认新的开发约定
+团队讨论 → project-details 归并
+```
+
+### 3. 保持精简
+
+只记录真正稳定和常用的事实：
+
+```markdown
+✅ 好：技术栈、复用组件、关键约定
+❌ 差：详细配置、临时决策、过时信息
+```
+
+### 4. 不要手工编辑
+
+让 `project-details` 自动维护：
+
+```markdown
+❌ 错误：直接编辑 PROJECT-MEMORY.md
+✅ 正确：通过 project-details Skill 归并
+```
+
+**原因**：
+
+- 手工编辑可能不符合格式
+- 可能引入错误或过时信息
+- 自动维护确保一致性
+
+## 故障排查
+
+### 记忆文件未创建
+
+```bash
+# 检查路径
+ls -la docs/PROJECT-MEMORY.md
+
+# 手动触发初始化
+"初始化项目记忆"
+
+# 或直接调用
+node <skills-root>/init-docs/scripts/init-project-memory.mjs
+```
+
+### 记忆内容过时
+
+```bash
+# 手动触发更新
+"更新项目记忆"
+
+# 或通过 project-details
+"调用 project-details 归并最新事实"
+```
+
+### 记忆注入不完整
+
+```bash
+# 检查上下文预算
+node runtime-hooks/scripts/skill-catalog-context.cjs --check
+
+# 如果超过预算，直接读取文件
+"读取 PROJECT-MEMORY.md 的完整内容"
+```
+
+### 多人协作冲突
+
+```bash
+# 项目记忆是共享的，多人可能同时修改
+# 解决方案：
+1. 使用 Git 合并（project-details 自动处理）
+2. 最新的归并覆盖旧的
+3. 冲突时手动解决（罕见）
+```
+
+## 下一步
+
+- [使用指南](/skills/usage/feature-development) - 在实际开发中使用项目记忆
+- [TODO 管理](/skills/usage/todo-management) - 结合 TODO 和项目记忆
+- [最佳实践](/skills/best-practices) - 项目记忆的最佳实践

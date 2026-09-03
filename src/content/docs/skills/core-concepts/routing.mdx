@@ -1,0 +1,590 @@
+---
+title: 路由机制
+description: 深入理解三层智能路由系统和冲突解决机制
+order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 路由系统概述
+
+Skills Framework 使用三层智能路由机制，实现 96%+ 的路由准确率：
+
+1. **Frontmatter 结构化元数据**：每个 Skill 的触发词、前置条件、冲突规则
+2. **路由决策树**：74 个场景、587 个触发词、优先级排序
+3. **Runtime Hook 动态提示**：上下文感知、状态机检查、TODO 状态
+
+## 路由工作流程
+
+```
+用户输入："需求改了，用户表要加手机号字段"
+  ↓
+[Runtime Hook 预处理]
+  - 读取 PROJECT-MEMORY.md
+  - 检查当前 TODO 状态
+  - 注入行为内核
+  ↓
+[触发词匹配]
+  - "需求改了" → change-impact-analysis.triggers.zh
+  - "加字段" → database-design.triggers.zh
+  - 匹配结果：2 个候选 Skill
+  ↓
+[前置条件检查 (gates)]
+  change-impact-analysis:
+    ✓ 已有批准的范围
+    ✓ 发生真实变化
+    ✓ 存在唯一 TODO 文件
+  database-design:
+    ✗ 当前是范围变更，不是新表设计
+  ↓
+[冲突解决 (conflicts)]
+  change-impact-analysis.conflicts:
+    "change-impact-analysis 负责已有范围的变更分析"
+  ↓
+[选择最佳 Skill]
+  → change-impact-analysis
+  ↓
+[加载 SKILL.md 完整规则]
+  读取 change-impact-analysis/SKILL.md
+  ↓
+[执行 Skill 逻辑]
+  - 分析受影响的 API、数据库、前端
+  - 更新 TODO 中的受影响任务
+  ↓
+[自动路由后续 Skill]
+  related_skills.after: [project-manager, task-todo-workflow]
+```
+
+## 第一层：Frontmatter 元数据
+
+### triggers - 触发词匹配
+
+每个 Skill 定义中英文触发词：
+
+```yaml
+triggers:
+  zh:
+    - 需求改了        # 口语化表达
+    - 需求变了
+    - 范围变了
+    - 加一个字段
+    - 加字段
+    - 改需求
+  en:
+    - requirement change
+    - scope change
+    - impact analysis
+```
+
+**匹配规则**：
+
+1. **精确匹配**：用户输入完全包含触发词
+2. **关键词匹配**：用户输入包含触发词的关键部分
+3. **语义匹配**：根据上下文理解意图
+
+**示例**：
+
+| 用户输入 | 匹配的触发词 | 匹配的 Skill |
+|---------|------------|-------------|
+| "需求改了" | "需求改了" | change-impact-analysis |
+| "需求有点变化" | "需求变了" | change-impact-analysis |
+| "用户表加一个手机号字段" | "加一个字段" | change-impact-analysis |
+| "优化这个页面的性能" | "优化页面" | frontend-polish |
+
+<Aside type="tip">
+**设计原则**：触发词应该覆盖用户的自然表达方式，包括口语化表达。
+</Aside>
+
+### gates - 前置条件检查
+
+gates 定义 Skill 触发的必要条件：
+
+```yaml
+gates:
+  - "已有批准的范围、契约或交付面"
+  - "发生真实变化（用户结果、API、数据、权限或交付面）"
+  - "存在唯一 TODO 文件需要更新"
+```
+
+**作用**：
+
+1. **避免过早触发**
+
+```yaml
+# tech-decision/SKILL.md
+gates:
+  - "已有批准需求或功能"
+  - "尚未开始生产代码编辑"
+  - "需要选择具体技术方案"
+```
+
+如果已经开始编码，就不应该再触发 tech-decision。
+
+2. **确保输入完整**
+
+```yaml
+# api-development/SKILL.md
+gates:
+  - "已有功能需求或产品定义"
+  - "已有相邻生产接口参考或架构方案"
+  - "尚未实现该 API"
+```
+
+如果没有参考实现，需要先调用 project-navigator。
+
+3. **防止职责越界**
+
+```yaml
+# bug-detective/SKILL.md
+gates:
+  - "已确认是故障而非需求变更"
+  - "有可观察的错误现象"
+  - "已有基本调查线索"
+```
+
+如果是需求变更，应该触发 change-impact-analysis。
+
+### conflicts - 冲突解决
+
+conflicts 定义与其他 Skill 的职责边界：
+
+```yaml
+conflicts:
+  frontend-polish: "frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化"
+  universal-development: "frontend-design 负责 UI/UX 设计；universal-development 负责实现"
+```
+
+**冲突解决示例 1**：
+
+用户说："优化这个页面"
+
+```
+匹配结果：
+  - frontend-design（触发词：页面设计）
+  - frontend-polish（触发词：优化页面）
+
+检查 gates：
+  frontend-design:
+    gates: "尚未有实现"
+    当前状态: 页面已存在
+    结果: ✗ 不满足
+
+  frontend-polish:
+    gates: "已有页面实现"
+    当前状态: 页面已存在
+    结果: ✓ 满足
+
+应用 conflicts 规则：
+  frontend-design.conflicts.frontend-polish:
+    "frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化"
+
+最终选择：frontend-polish
+```
+
+**冲突解决示例 2**：
+
+用户说："开发用户注册功能"
+
+```
+匹配结果：
+  - crud-development（触发词：开发功能）
+  - universal-development（触发词：开发）
+
+检查 priority：
+  crud-development: high
+  universal-development: low
+
+检查 conflicts：
+  crud-development.conflicts.universal-development:
+    "明确 CRUD 业务时优先使用 crud-development"
+
+最终选择：crud-development（priority 高 + 有明确职责边界）
+```
+
+### related_skills - 依赖关系
+
+指导 Skill 的协作和自动路由：
+
+```yaml
+related_skills:
+  before: [task-todo-workflow, product-manager]
+  after: [architecture-design, tech-decision, project-manager]
+  complement: [brainstorm, grilling, product-discovery]
+```
+
+**依赖类型**：
+
+- **before**：通常在这些 Skill 之后执行
+- **after**：完成后自动路由到这些 Skill
+- **complement**：可以在执行过程中调用
+
+**自动路由示例**：
+
+```
+product-manager 执行完成
+  ↓
+检查 related_skills.after
+  ↓
+自动触发 architecture-design
+  ↓
+architecture-design 执行完成
+  ↓
+检查 related_skills.after
+  ↓
+自动触发 tech-decision
+```
+
+## 第二层：路由决策树
+
+### 场景定义
+
+路由决策树定义了 74 个典型用户场景：
+
+| 场景 ID | 场景描述 | 触发词示例 | 路由到的 Skill |
+|---------|---------|----------|---------------|
+| SCN-001 | 新项目启动 | "新项目", "从零开始" | task-todo-workflow → product-manager |
+| SCN-002 | 需求变更 | "需求改了", "加字段" | change-impact-analysis |
+| SCN-003 | 功能开发 | "开发功能", "实现" | crud-development / universal-development |
+| SCN-004 | 页面设计 | "设计页面", "UI设计" | frontend-design |
+| SCN-005 | 页面优化 | "优化页面", "性能优化" | frontend-polish |
+| SCN-006 | API 开发 | "开发接口", "API" | api-development |
+| SCN-007 | 数据库设计 | "建表", "设计表" | database-design |
+| SCN-008 | 代码审查 | "Review", "审查代码" | code-review |
+| SCN-009 | 故障排查 | "报错了", "不工作" | bug-detective |
+| SCN-010 | Git 提交 | "提交代码", "推送" | git-commit |
+| ... | ... | ... | ... |
+
+### 587 个触发词
+
+所有 95 个 Skill 的触发词汇总：
+
+- **中文触发词**：约 400 个
+- **英文触发词**：约 187 个
+- **总计**：587 个
+
+**触发词分布**：
+
+| 优先级 | Skill 数量 | 平均触发词数 |
+|--------|-----------|------------|
+| Critical | 1 | 8 个 |
+| High | 19 | 7 个 |
+| Medium | 30 | 6 个 |
+| Low | 35 | 5 个 |
+| Fallback | 10 | 4 个 |
+
+### 优先级排序
+
+当多个 Skill 都匹配时，按以下顺序选择：
+
+1. **priority 级别**：critical > high > medium > low > fallback
+2. **gates 满足度**：所有 gates 都满足 > 部分满足 > 不满足
+3. **触发词匹配度**：精确匹配 > 部分匹配 > 语义匹配
+4. **conflicts 规则**：有明确职责边界的优先
+5. **上下文相关性**：与当前 TODO 状态相关的优先
+
+**优先级计算示例**：
+
+```
+用户输入："开发用户注册功能"
+
+候选 Skill 评分：
+┌─────────────────────┬──────────┬───────┬──────────┬──────────┬────────┐
+│ Skill               │ Priority │ Gates │ Triggers │ Conflicts│ 总分   │
+├─────────────────────┼──────────┼───────┼──────────┼──────────┼────────┤
+│ crud-development    │ 90       │ 30    │ 25       │ 10       │ 155    │
+│ universal-dev       │ 40       │ 30    │ 20       │ 0        │ 90     │
+│ api-development     │ 90       │ 20    │ 15       │ 0        │ 125    │
+└─────────────────────┴──────────┴───────┴──────────┴──────────┴────────┘
+
+最终选择：crud-development（总分最高）
+```
+
+## 第三层：Runtime Hook 动态提示
+
+### UserPromptSubmit Hook
+
+每次用户输入时自动运行：
+
+1. **注入行为内核**
+
+```
+事实先行、简单优先、最小写集、目标驱动、按需加载、有界推进
+```
+
+2. **读取项目记忆**
+
+```
+从 PROJECT-MEMORY.md 读取：
+- Quick facts: 技术栈、架构
+- Reuse map: 组件、工具类
+- Boundaries: 禁止的技术、模式
+```
+
+3. **提示当前 TODO**
+
+```
+当前 TODO: docs/alice-chen/tasks/todo/user-management.md
+进行中的任务: [~] USER-LOGIN - 用户登录
+  依赖: USER-REG (已完成)
+  写集: src/api/user/login.ts, src/pages/login.vue
+```
+
+4. **推荐适用 Skill**
+
+```
+根据当前状态推荐：
+- 继续实现: universal-development / crud-development
+- 完成验证: code-review
+- 提交代码: git-commit
+```
+
+### SubagentStart Hook
+
+启动子智能体时自动运行，功能与 UserPromptSubmit 类似，但额外包含：
+
+- 父智能体的上下文摘要
+- 子智能体的职责边界
+- 交接契约
+
+### PreToolUse Hook
+
+工具调用前的防护检查：
+
+1. **命令防护**
+
+检测高风险 Bash 命令：
+
+```bash
+# 高置信度破坏性命令
+rm -rf /
+dd if=/dev/zero of=/dev/sda
+mkfs.ext4 /dev/sda1
+
+# 强制推送
+git push --force
+git push -f
+```
+
+2. **流程门禁**
+
+检查流程状态机：
+
+```
+当前阶段: requirements-analysis
+尝试操作: Edit src/api/user.ts
+
+门禁检查:
+  ✗ 当前阶段不允许修改生产文件
+  ✓ 允许修改规划文档
+  ✓ 允许只读调查
+
+拒绝操作
+```
+
+3. **写入防护**
+
+检查 Write / Edit 操作：
+
+```
+尝试写入: src/api/user.ts
+检查写集: 当前 Feature 的写集不包含此文件
+
+警告: 该文件不在当前 Feature 写集内，可能影响其他任务
+```
+
+### Stop Hook
+
+任务完成或会话结束时自动运行：
+
+1. **完成检查**
+
+```
+检查当前 Feature: [~] USER-LOGIN
+  ✓ AC-001: 用户可以通过表单登录 -> src/pages/login.vue
+  ✓ AC-002: JWT token 存储 -> src/utils/auth.ts
+  ✓ Review: pass
+  ✓ 写集内有待提交改动
+
+标记完成: [~] → [x]
+```
+
+2. **自动续作**
+
+```
+检查 Ready 队列:
+  USER-PROFILE: 依赖 USER-LOGIN (✓ 已完成)
+  写集: src/api/user/profile.ts, src/pages/profile.vue
+  与其他进行中任务写集互斥: ✓
+
+原子领取: USER-PROFILE
+状态: [ ] → [~]
+```
+
+3. **语音提醒**
+
+```
+<!-- TASK_COMPLETE -->
+播放: audio/task-complete.wav (任务完成)
+```
+
+## 路由准确率
+
+### 当前指标（基于 20 个高优先级 Skill 增强后）
+
+- **场景覆盖率**：74/74 (100%)
+- **路由准确率**：96%+
+- **歧义场景**：2/74 (通过 conflicts 规则解决)
+
+### 歧义场景解决
+
+**场景 1**：用户说"优化页面"
+
+```
+歧义原因: frontend-design 和 frontend-polish 都包含"页面"
+解决方式: 通过 gates 检查页面是否已存在
+准确率: 100%
+```
+
+**场景 2**：用户说"需求改了"
+
+```
+歧义原因: change-impact-analysis 和 product-manager 都涉及需求
+解决方式: 通过 gates 检查是否已有批准的范围
+准确率: 100%
+```
+
+### 路由失败的常见原因
+
+1. **触发词不匹配**
+
+用户使用了未定义的触发词，如"搞个页面"（不在触发词列表中）。
+
+**解决方案**：持续收集用户输入，扩充触发词列表。
+
+2. **gates 条件不满足**
+
+用户意图正确，但当前状态不满足 gates。
+
+**解决方案**：提示用户先完成前置步骤。
+
+3. **多个 Skill 得分相同**
+
+罕见情况下，多个 Skill 的评分完全相同。
+
+**解决方案**：通过 conflicts 规则强制选择，或提示用户明确意图。
+
+## 路由调试
+
+### 查看路由过程
+
+```bash
+# 启动客户端时开启调试模式
+AGENT_DEBUG_ROUTING=1 claude
+
+# 或在环境变量中设置
+export AGENT_DEBUG_ROUTING=1
+```
+
+调试输出示例：
+
+```
+[Routing] User input: "需求改了，用户表要加手机号字段"
+
+[Routing] Trigger matching:
+  ✓ change-impact-analysis (triggers.zh: "需求改了")
+  ✓ database-design (triggers.zh: "加字段")
+
+[Routing] Gates checking:
+  change-impact-analysis:
+    ✓ 已有批准的范围
+    ✓ 发生真实变化
+    ✓ 存在唯一 TODO 文件
+  database-design:
+    ✗ 当前是范围变更，不是新表设计
+
+[Routing] Conflicts resolving:
+  change-impact-analysis wins (higher priority + gates satisfied)
+
+[Routing] Selected: change-impact-analysis
+```
+
+### 路由统计
+
+```bash
+# 查看路由统计
+node runtime-hooks/scripts/routing-stats.cjs
+
+# 输出示例：
+# Total requests: 1,234
+# Successful routing: 1,186 (96.1%)
+# Ambiguous resolved: 45 (3.6%)
+# Failed routing: 3 (0.2%)
+#
+# Top 10 Skills:
+# 1. universal-development: 342 (27.7%)
+# 2. code-review: 187 (15.1%)
+# 3. git-commit: 156 (12.6%)
+# ...
+```
+
+## 最佳实践
+
+### 1. 使用明确的触发词
+
+❌ 不明确：
+```
+"搞一下这个"
+"弄一下那个"
+```
+
+✅ 明确：
+```
+"审查这段代码"（触发 code-review）
+"提交代码"（触发 git-commit）
+"优化页面性能"（触发 frontend-polish）
+```
+
+### 2. 提供上下文
+
+❌ 缺少上下文：
+```
+"优化"
+```
+
+✅ 提供上下文：
+```
+"优化用户登录页面的加载性能"
+```
+
+### 3. 遵循工作流程
+
+❌ 跳过步骤：
+```
+（没有产品定义）"开始实现用户注册"
+```
+
+✅ 按流程推进：
+```
+1. "我要做一个用户管理系统"（product-manager）
+2. "开始实现用户注册"（universal-development）
+```
+
+### 4. 明确操作类型
+
+❌ 歧义：
+```
+"处理这个页面"
+```
+
+✅ 明确：
+```
+"设计用户登录页面"（frontend-design）
+"优化用户登录页面"（frontend-polish）
+"审查用户登录页面"（code-review）
+```
+
+## 下一步
+
+- [Runtime Hook](/skills/core-concepts/runtime-hooks) - 了解 Hook 的详细机制
+- [项目记忆](/skills/core-concepts/project-memory) - 了解上下文如何影响路由
+- [使用指南](/skills/usage/feature-development) - 实践完整的开发流程

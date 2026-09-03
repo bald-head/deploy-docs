@@ -1,0 +1,332 @@
+---
+title: 快速开始
+description: 手把手教你安装和使用 Skills Framework
+order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 系统要求
+
+在开始之前，请确保你的系统满足以下要求：
+
+- **Node.js**：v18.0.0 或更高版本
+- **Git**：已配置 `user.name` 和 `user.email`
+- **Claude Code 或 Codex**：已安装任一客户端
+- **操作系统**：macOS、Linux 或 Windows
+
+<Aside type="tip">
+检查 Node.js 版本：`node --version`  
+检查 Git 配置：`git config user.name`
+</Aside>
+
+## 安装步骤
+
+### 第 1 步：克隆仓库
+
+```bash
+# 克隆 Skills Framework 仓库到本地
+git clone https://github.com/your-org/skills.git ~/.agent-workflow/skills
+
+# 进入仓库目录
+cd ~/.agent-workflow/skills
+```
+
+<Aside type="caution">
+**路径说明**：
+- Claude Code 用户：建议使用 `~/.claude/skills`
+- Codex 用户：建议使用 `~/.agents/skills`
+- 也可以使用软链接或镜像方式同步
+</Aside>
+
+### 第 2 步：安装 Runtime Hook
+
+Runtime Hook 是 Skills Framework 的核心组件，负责自动上下文注入和命令防护。
+
+```bash
+# 安装 Runtime Hook
+node runtime-hooks/scripts/install.mjs
+
+# 预期输出：
+# ✓ 检测到 Claude Code
+# ✓ 备份现有配置到 ~/.claude/hooks.backup.json
+# ✓ 合并 SessionStart Hook
+# ✓ 合并 UserPromptSubmit Hook
+# ✓ 合并 PreToolUse Hook
+# ✓ 合并 Stop Hook
+# ✓ 安装完成
+```
+
+<Aside type="danger">
+**Codex 用户特别注意**：安装后必须运行 `/hooks` 命令，审查并信任新的 Hook。这是 Codex 的安全机制，不能跳过。
+</Aside>
+
+### 第 3 步：验证安装
+
+```bash
+# 检查 Runtime Hook 状态
+node runtime-hooks/scripts/skill-catalog-context.cjs --check
+
+# 预期输出：
+# Behavior kernel: 1456 bytes, 42 lines
+# Skills discovered: 95 skills
+# Root alias: <skills-root>
+# Context budget: PASS (within 8000 bytes)
+```
+
+✅ **检查点**：如果看到 "Context budget: PASS"，说明安装成功。
+
+### 第 4 步：注册 Skill 发现
+
+让 Claude Code 或 Codex 能够自动发现 Skills。
+
+```bash
+# 自动注册到当前客户端
+node add-skill/scripts/validate-skill-catalog.mjs --install-discovery --require-discovery=claude-code
+
+# 或者对于 Codex
+node add-skill/scripts/validate-skill-catalog.mjs --install-discovery --require-discovery=codex
+```
+
+✅ **检查点**：运行客户端，输入 `/skills` 应该能看到完整的 Skill 列表。
+
+## 基本概念
+
+### 什么是 Skill？
+
+Skill 是一个自包含的能力单元，包含：
+
+- **SKILL.md**：Skill 的完整规则和逻辑
+- **frontmatter**：元数据（触发词、前置条件、冲突规则）
+- **references/**：可选的参考文档和资源
+
+### 什么是 Runtime Hook？
+
+Runtime Hook 在每次用户请求时自动运行，负责：
+
+1. **注入行为内核**：跨客户端一致的行为原则
+2. **加载项目记忆**：自动读取 `PROJECT-MEMORY.md` 相关摘要
+3. **提示当前 TODO**：自动续作未完成的任务
+4. **命令防护**：拦截高风险 Bash 命令
+
+### 什么是项目记忆？
+
+每个项目有唯一的 `PROJECT-MEMORY.md`，记录：
+
+- **Quick facts**：快速事实（技术栈、架构、约定）
+- **Reuse map**：复用地图（组件、工具类、API）
+- **Boundaries**：边界（不使用的技术、禁止的模式）
+
+<Aside type="tip">
+项目记忆由 `project-details` Skill 自动维护，你不需要手工编辑。
+</Aside>
+
+## 第一个 Skill 使用示例
+
+### 场景：创建新项目的 TODO
+
+假设你要开始一个新项目，需要创建任务清单。
+
+#### 步骤 1：启动客户端
+
+```bash
+# 启动 Claude Code
+claude
+
+# 或启动 Codex
+codex
+```
+
+#### 步骤 2：自然语言输入
+
+直接用自然语言描述你的需求：
+
+```
+我要做一个用户管理系统，包括用户注册、登录、个人信息管理
+```
+
+#### 步骤 3：观察自动路由
+
+系统会自动识别这是新项目，触发以下 Skill 序列：
+
+```
+1. task-todo-workflow：建立流程状态机
+2. product-manager：完成产品定义
+3. architecture-design：设计系统架构
+4. tech-decision：选择技术方案
+5. project-manager：生成 TODO 清单
+```
+
+#### 步骤 4：查看生成的 TODO
+
+在项目根目录会生成：
+
+```
+docs/<你的用户名>/tasks/todo/user-management.md
+```
+
+内容示例：
+
+```markdown
+## 流程状态机
+- 当前阶段: task-breakdown
+- 已完成阶段: intake, requirements-analysis, ...
+
+## Epic: USER-MGMT - 用户管理系统
+- [ ] `USER-REG` 用户注册
+  - 依赖: 无
+  - Owner: alice-chen
+  - 写集: `src/api/user/register.ts`, `src/pages/register.vue`
+  
+- [ ] `USER-LOGIN` 用户登录
+  - 依赖: `USER-REG`
+  - Owner: alice-chen
+  - 写集: `src/api/user/login.ts`, `src/pages/login.vue`
+```
+
+✅ **检查点**：你应该看到完整的任务分解，包括依赖关系和写集（修改的文件）。
+
+### 场景：执行第一个任务
+
+#### 步骤 1：自然语言触发
+
+```
+开始实现用户注册功能
+```
+
+#### 步骤 2：自动领取任务
+
+Runtime Hook 会自动：
+
+1. 检查 `USER-REG` 的依赖（无依赖）
+2. 原子领取该任务（状态变为 `[~]`）
+3. 记录执行实例 ID
+4. 加载相关项目记忆
+
+#### 步骤 3：开发实施
+
+系统触发 `universal-development` 或 `crud-development` Skill：
+
+```
+正在实施 USER-REG...
+- 创建 API: src/api/user/register.ts
+- 创建页面: src/pages/register.vue
+- 添加路由配置
+- 完成基本表单验证
+```
+
+#### 步骤 4：自动验证
+
+完成后自动触发 `code-review` Skill：
+
+```
+Review 结果：
+✓ API 参数校验完整
+✓ 错误处理符合规范
+✓ 前端表单验证正确
+⚠ 建议：密码强度校验可以增强
+```
+
+#### 步骤 5：Git 提交
+
+修复 Review 问题后，自然语言触发：
+
+```
+提交代码
+```
+
+系统触发 `git-commit` Skill：
+
+```bash
+# 自动执行
+git add src/api/user/register.ts src/pages/register.vue
+git commit -m "feat: 实现用户注册功能
+
+- 添加注册 API
+- 创建注册页面
+- 完成表单验证
+
+AC-001 -> 用户可以通过表单注册
+Review: pass"
+git push origin feature/user-registration
+```
+
+✅ **检查点**：代码已推送到远程，TODO 中 `USER-REG` 自动变为 `[x]`。
+
+## 常见问题
+
+### Q1：Runtime Hook 没有生效？
+
+**诊断步骤**：
+
+```bash
+# 1. 检查 Hook 安装状态
+node runtime-hooks/scripts/install.mjs --check --json
+
+# 2. 检查客户端配置
+cat ~/.claude/settings.json | grep -A 10 hooks
+
+# 3. 重新安装
+node runtime-hooks/scripts/install.mjs
+```
+
+### Q2：找不到 Skill？
+
+**诊断步骤**：
+
+```bash
+# 1. 检查 Skill 发现
+node runtime-hooks/scripts/skill-catalog-context.cjs --check
+
+# 2. 确认客户端发现路径
+# Claude Code: ~/.claude/skills
+# Codex: ~/.agents/skills
+
+# 3. 重新注册
+node add-skill/scripts/validate-skill-catalog.mjs --install-discovery
+```
+
+### Q3：项目记忆文件在哪里？
+
+项目记忆文件位于项目根目录：
+
+```
+项目根目录/
+  └── docs/
+      └── PROJECT-MEMORY.md  # 或 project-memory.md
+```
+
+如果不存在，Runtime Hook 会在第一次请求时自动创建。
+
+### Q4：如何查看当前 TODO？
+
+```bash
+# TODO 文件路径
+docs/<你的Git用户名>/tasks/todo/<项目名>.md
+
+# 查看内容
+cat docs/alice-chen/tasks/todo/user-management.md
+```
+
+### Q5：多人协作时 TODO 冲突怎么办？
+
+每个开发者有独立的 TODO 目录：
+
+```
+docs/
+  ├── alice-chen/
+  │   └── tasks/todo/user-management.md
+  ├── bob-wang/
+  │   └── tasks/todo/user-management.md
+```
+
+通过 `写集`（修改的文件列表）自动检测冲突，不同写集可以并行开发。
+
+## 下一步
+
+<Aside type="tip">
+**推荐学习路径**：
+1. 阅读[核心概念](/skills/core-concepts)，深入理解 Skill 系统
+2. 查看[功能开发流程](/skills/usage/feature-development)，学习完整的开发流程
+3. 浏览[Skill 目录](/skills/catalog/critical-high)，了解可用的 95 个 Skill
+</Aside>

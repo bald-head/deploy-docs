@@ -1,0 +1,706 @@
+---
+title: 故障排查
+description: 常见问题的诊断和解决方案
+order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 快速诊断
+
+### 问题分类
+
+根据症状快速定位问题类型：
+
+| 症状 | 可能原因 | 跳转到 |
+|-----|---------|--------|
+| Runtime Hook 未生效 | 安装不完整 | [Hook 问题](#runtime-hook-问题) |
+| 找不到 Skill | 发现路径错误 | [Skill 发现问题](#skill-发现问题) |
+| TODO 路径不对 | Git 配置问题 | [TODO 问题](#todo-问题) |
+| 路由到错误的 Skill | 触发词歧义 | [路由问题](#路由问题) |
+| 无法领取任务 | 依赖或写集冲突 | [任务管理问题](#任务管理问题) |
+| 项目记忆未加载 | 文件路径问题 | [项目记忆问题](#项目记忆问题) |
+| 命令被拦截 | 命令防护触发 | [命令防护问题](#命令防护问题) |
+
+## Runtime Hook 问题
+
+### 症状：Hook 未生效
+
+**表现**：
+- 没有自动注入行为内核
+- 没有加载项目记忆
+- 没有 TODO 提醒
+
+**诊断步骤**：
+
+```bash
+# 1. 检查 Hook 安装状态
+node ~/.agent-workflow/skills/runtime-hooks/scripts/install.mjs --check --json
+
+# 预期输出：
+{
+  "installed": true,
+  "hooks": {
+    "SessionStart": true,
+    "UserPromptSubmit": true,
+    "PreToolUse": true,
+    "SubagentStart": true,
+    "SubagentStop": true,
+    "Stop": true
+  }
+}
+```
+
+**如果 `installed: false`**：
+
+```bash
+# 2. 重新安装
+node ~/.agent-workflow/skills/runtime-hooks/scripts/install.mjs
+
+# 3. Codex 用户需要信任 Hook
+codex
+/hooks
+# 审查并信任所有 Hook
+```
+
+**如果 `installed: true` 但仍未生效**：
+
+```bash
+# 4. 检查客户端配置
+cat ~/.claude/settings.json | grep -A 20 hooks
+
+# 或 Codex
+cat ~/.config/codex/settings.json | grep -A 20 hooks
+
+# 5. 确认路径正确
+which node
+# 确保 Hook 命令中的 node 路径正确
+```
+
+**临时禁用 Hook 测试**：
+
+```bash
+AGENT_RUNTIME_HOOKS_DISABLED=1 claude
+```
+
+如果禁用后问题消失，说明是 Hook 配置问题。
+
+### 症状：SessionStart Hook 每次都重装
+
+**原因**：Hook 版本检测认为配置不一致。
+
+**解决方案**：
+
+```bash
+# 禁用自动修复
+export AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0
+
+# 或在配置文件中设置
+echo 'AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0' >> ~/.zshrc
+```
+
+### 症状：Stop Hook 未触发
+
+**原因**：会话异常退出或客户端 bug。
+
+**解决方案**：
+
+```bash
+# 手动完成任务
+node ~/.agent-workflow/skills/runtime-hooks/scripts/todo-continuation.cjs \
+  --complete USER-LOGIN \
+  --instance <instance-id> \
+  --result "AC-001 -> evidence; Review: pass"
+
+# 然后提交代码
+git add .
+git commit -m "feat: implement user login"
+git push
+```
+
+## Skill 发现问题
+
+### 症状：找不到 Skill
+
+**表现**：
+- 输入触发词后没有反应
+- `/skills` 命令显示的 Skill 列表不完整
+
+**诊断步骤**：
+
+```bash
+# 1. 检查 Skill 目录
+ls ~/.agent-workflow/skills/
+
+# 应该看到所有 Skill 目录
+
+# 2. 检查发现机制
+node ~/.agent-workflow/skills/runtime-hooks/scripts/skill-catalog-context.cjs --check
+
+# 预期输出：
+Skills discovered: 95 skills
+Root alias: <skills-root>
+```
+
+**如果 Skill 数量不对**：
+
+```bash
+# 3. 检查 SKILL.md 格式
+cat ~/.agent-workflow/skills/product-manager/SKILL.md | head -20
+
+# 确保有 frontmatter:
+---
+name: product-manager
+description: "..."
+...
+---
+```
+
+**如果仍然找不到**：
+
+```bash
+# 4. 启用兜底发现
+export AGENT_SKILL_DISCOVERY_FALLBACK=1
+
+# 5. 重新启动客户端
+claude
+```
+
+### 症状：触发错误的 Skill
+
+**原因**：触发词歧义或路由规则问题。
+
+**解决方案**：
+
+```bash
+# 1. 使用更明确的触发词
+❌ "优化"
+✅ "优化用户登录页面的加载性能"
+
+# 2. 查看 Skill 的触发词
+cat ~/.agent-workflow/skills/frontend-polish/SKILL.md | grep -A 10 "triggers:"
+
+# 3. 启用路由调试
+export AGENT_DEBUG_ROUTING=1
+claude
+```
+
+## TODO 问题
+
+### 症状：TODO 路径不对
+
+**表现**：
+- TODO 文件不在预期路径
+- 或者找不到 TODO 文件
+
+**诊断步骤**：
+
+```bash
+# 1. 检查 Git 配置
+git config user.name
+
+# 如果为空或不正确，设置：
+git config user.name "alice-chen"
+
+# 2. 检查预期路径
+echo "docs/$(git config user.name)/tasks/todo/"
+
+# 3. 查找实际路径
+find docs/ -name "*.md" -path "*/tasks/todo/*"
+```
+
+**如果路径不一致**：
+
+```bash
+# 4. 移动 TODO 到正确路径
+mkdir -p docs/alice-chen/tasks/todo
+mv docs/wrong-path/todo/project.md docs/alice-chen/tasks/todo/
+
+# 5. 更新 Git 配置
+git config user.name "alice-chen"
+```
+
+### 症状：多个活动 TODO
+
+**表现**：
+```
+错误: 发现多个活动 TODO
+docs/alice-chen/tasks/todo/project1.md
+docs/alice-chen/tasks/todo/project2.md
+```
+
+**原因**：每个开发者只能有一个活动 TODO。
+
+**解决方案**：
+
+```bash
+# 1. 决定保留哪个 TODO
+cat docs/alice-chen/tasks/todo/project1.md
+cat docs/alice-chen/tasks/todo/project2.md
+
+# 2. 移动或删除其他 TODO
+mv docs/alice-chen/tasks/todo/project2.md docs/alice-chen/tasks/archive/
+
+# 或合并两个 TODO（手动）
+```
+
+### 症状：TODO 状态不同步
+
+**表现**：
+- 代码已提交，TODO 仍是 `[~]`
+- 或 TODO 是 `[x]`，但代码未提交
+
+**原因**：状态机异常或手动修改 TODO。
+
+**解决方案**：
+
+```bash
+# 1. 检查实际状态
+git log --oneline -10
+cat docs/alice-chen/tasks/todo/project.md
+
+# 2. 如果代码已提交但 TODO 未更新
+node ~/.agent-workflow/skills/runtime-hooks/scripts/todo-continuation.cjs \
+  --complete USER-LOGIN \
+  --instance <instance-id> \
+  --result "已提交"
+
+# 3. 如果 TODO 已完成但代码未提交
+git add .
+git commit -m "feat: implement user login"
+git push
+```
+
+<Aside type="caution">
+不要手动修改 TODO 状态，让 Stop Hook 自动管理。
+</Aside>
+
+## 路由问题
+
+### 症状：总是触发 universal-development
+
+**原因**：触发词不够明确，匹配到兜底 Skill。
+
+**解决方案**：
+
+```bash
+# 使用更明确的触发词
+
+❌ "开发"
+✅ "开发用户注册 API"（触发 api-development）
+
+❌ "实现"
+✅ "实现用户注册的 CRUD 功能"（触发 crud-development）
+
+❌ "做一个页面"
+✅ "设计用户登录页面"（触发 frontend-design）
+```
+
+### 症状：想要 A Skill 却触发了 B Skill
+
+**诊断步骤**：
+
+```bash
+# 1. 查看两个 Skill 的 triggers
+cat ~/.agent-workflow/skills/skill-a/SKILL.md | grep -A 10 "triggers:"
+cat ~/.agent-workflow/skills/skill-b/SKILL.md | grep -A 10 "triggers:"
+
+# 2. 查看 gates
+cat ~/.agent-workflow/skills/skill-a/SKILL.md | grep -A 5 "gates:"
+cat ~/.agent-workflow/skills/skill-b/SKILL.md | grep -A 5 "gates:"
+
+# 3. 查看 conflicts
+cat ~/.agent-workflow/skills/skill-a/SKILL.md | grep -A 5 "conflicts:"
+```
+
+**解决方案**：
+
+使用 Skill-A 的精确触发词，避免歧义：
+
+```
+"调用 skill-a 实现 XXX"
+```
+
+或者明确说明场景，让系统根据 gates 选择：
+
+```
+"为新页面设计 UI"（新页面 → frontend-design）
+"优化已有页面性能"（已有页面 → frontend-polish）
+```
+
+## 任务管理问题
+
+### 症状：无法领取任务
+
+**表现**：
+```
+尝试领取 USER-LOGIN
+错误: 依赖未满足 / 写集冲突
+```
+
+**诊断步骤**：
+
+```bash
+# 1. 检查依赖
+cat docs/alice-chen/tasks/todo/project.md
+
+# 查看 USER-LOGIN 的依赖
+- [ ] `USER-LOGIN` 用户登录
+  - 依赖: `USER-REG`  # 检查 USER-REG 是否 [x]
+
+# 2. 检查写集冲突
+grep '\[~\]' docs/alice-chen/tasks/todo/project.md
+
+# 查看进行中任务的写集
+[~] USER-REG
+  写集: src/api/user/register.ts, src/router/index.ts
+
+# 检查 USER-LOGIN 写集
+[ ] USER-LOGIN
+  写集: src/api/user/login.ts, src/router/index.ts
+  
+# 发现冲突: src/router/index.ts
+```
+
+**解决方案**：
+
+**依赖未满足**：
+```bash
+# 等待依赖任务完成
+"继续实现 USER-REG"
+"完成 USER-REG"
+"提交 USER-REG"
+
+# 然后领取 USER-LOGIN
+"开始实现 USER-LOGIN"
+```
+
+**写集冲突**：
+```bash
+# 方案1: 等待冲突任务完成
+"完成 USER-REG"
+
+# 方案2: 调整写集边界
+# 将 src/router/index.ts 从其中一个任务移除
+
+# 方案3: 串行执行
+# 不并行，依次完成
+```
+
+### 症状：任务一直是进行中状态
+
+**原因**：完成门禁未满足或 Stop Hook 未触发。
+
+**诊断步骤**：
+
+```bash
+# 1. 检查完成条件
+cat docs/alice-chen/tasks/todo/project.md
+
+[~] USER-LOGIN
+  AC-001: 用户可以登录 -> ?  # 缺少证据
+  AC-002: Token 存储 -> ?     # 缺少证据
+  Review: pending             # 未 Review
+```
+
+**解决方案**：
+
+```bash
+# 1. 补充 AC 证据
+"USER-LOGIN 完成验证：
+- AC-001: 用户可以登录 -> 手工测试通过
+- AC-002: Token 存储 -> DevTools 验证"
+
+# 2. 执行 code-review
+"审查 USER-LOGIN 的代码"
+
+# 3. 确认所有条件满足后
+"完成 USER-LOGIN"
+```
+
+## 项目记忆问题
+
+### 症状：项目记忆未加载
+
+**表现**：没有看到 `<project_memory>` 上下文。
+
+**诊断步骤**：
+
+```bash
+# 1. 检查文件是否存在
+ls docs/PROJECT-MEMORY.md
+ls docs/project-memory.md
+ls PROJECT-MEMORY.md
+
+# 2. 如果不存在，手动创建
+"初始化项目记忆"
+
+# 3. 检查内容
+cat docs/PROJECT-MEMORY.md
+```
+
+**解决方案**：
+
+```bash
+# 自动初始化
+"初始化项目记忆"
+
+# 系统会调用 init-docs → project-details
+```
+
+### 症状：项目记忆内容过时
+
+**解决方案**：
+
+```bash
+# 手动触发更新
+"更新项目记忆"
+
+# 或者重新采集
+"重新初始化项目记忆"
+```
+
+### 症状：项目记忆注入不完整
+
+**原因**：上下文预算超限。
+
+**解决方案**：
+
+```bash
+# 1. 检查预算
+node ~/.agent-workflow/skills/runtime-hooks/scripts/skill-catalog-context.cjs --check
+
+# 2. 直接读取完整文件
+"读取 PROJECT-MEMORY.md 的完整内容"
+
+# 3. 精简项目记忆（删除过时内容）
+```
+
+## 命令防护问题
+
+### 症状：命令被拦截
+
+**表现**：
+```
+错误: 检测到高风险命令
+rm -rf /path/to/dir
+```
+
+**诊断步骤**：
+
+```bash
+# 1. 检查命令是否真的危险
+# 如果确实是误拦截
+
+# 2. 使用更安全的命令
+rm -rf /path/to/specific/dir  # 明确路径
+
+# 3. 临时禁用命令防护（不推荐）
+AGENT_COMMAND_GUARD=0 claude
+```
+
+### 症状：Git 强制推送被拦截
+
+**原因**：命令防护保护分支。
+
+**解决方案**：
+
+```bash
+# 1. 检查是否真的需要强制推送
+git log --oneline -10
+
+# 2. 如果确实需要
+# 明确确认后手动执行
+git push --force-with-lease  # 更安全
+
+# 3. 或临时禁用
+AGENT_COMMAND_GUARD=0 git push --force
+```
+
+## 性能问题
+
+### 症状：Skill 路由很慢
+
+**原因**：目录扫描或上下文过大。
+
+**解决方案**：
+
+```bash
+# 1. 检查 Skill 数量
+ls ~/.agent-workflow/skills/ | wc -l
+
+# 2. 如果有大量自定义 Skill，考虑归档不常用的
+mkdir ~/.agent-workflow/skills-archive
+mv ~/.agent-workflow/skills/rarely-used-skill ~/.agent-workflow/skills-archive/
+
+# 3. 清理项目记忆
+# 删除过时内容，保持精简
+```
+
+### 症状：项目记忆加载慢
+
+**原因**：记忆文件过大。
+
+**解决方案**：
+
+```bash
+# 1. 检查文件大小
+wc -l docs/PROJECT-MEMORY.md
+
+# 2. 如果超过 500 行，精简内容
+# 保留核心事实，删除过时信息
+
+# 3. 或分离到独立文档
+# 将详细内容移到 docs/architecture.md
+# 在记忆中只保留引用
+```
+
+## Git 问题
+
+### 症状：提交时 TODO 未包含
+
+**原因**：忘记暂存 TODO 文件。
+
+**解决方案**：
+
+```bash
+# 1. 查看未暂存文件
+git status
+
+# 2. 暂存 TODO
+git add docs/alice-chen/tasks/todo/project.md
+
+# 3. 重新提交（修正上一次提交）
+git commit --amend --no-edit
+git push --force-with-lease
+```
+
+### 症状：远端校验失败
+
+**表现**：
+```
+错误: 本地 [x] 但远端未找到
+```
+
+**原因**：push 失败或网络问题。
+
+**解决方案**：
+
+```bash
+# 1. 检查远端
+git log origin/main --oneline -10
+
+# 2. 如果确实未推送
+git push origin main
+
+# 3. 如果推送失败，检查网络
+ping github.com
+
+# 4. 重试推送
+git push origin main
+```
+
+## 环境问题
+
+### 症状：Node 版本不兼容
+
+**表现**：
+```
+错误: Node.js v16 不支持
+```
+
+**解决方案**：
+
+```bash
+# 1. 检查 Node 版本
+node --version
+
+# 2. 升级到 v18+
+# macOS (Homebrew)
+brew install node@18
+
+# Linux (nvm)
+nvm install 18
+nvm use 18
+
+# 3. 验证
+node --version  # 应该 >= 18.0.0
+```
+
+### 症状：权限问题
+
+**表现**：
+```
+错误: EACCES: permission denied
+```
+
+**解决方案**：
+
+```bash
+# 1. 检查文件权限
+ls -la ~/.agent-workflow/skills/
+
+# 2. 修复权限
+chmod -R u+rw ~/.agent-workflow/skills/
+
+# 3. 检查目录所有者
+ls -ld ~/.agent-workflow/
+
+# 4. 如果所有者不对
+sudo chown -R $USER ~/.agent-workflow/
+```
+
+## 获取帮助
+
+### 诊断信息收集
+
+提问前收集以下信息：
+
+```bash
+# 1. 系统信息
+uname -a
+node --version
+git --version
+
+# 2. 客户端版本
+claude --version
+# 或
+codex --version
+
+# 3. Hook 状态
+node ~/.agent-workflow/skills/runtime-hooks/scripts/install.mjs --check --json
+
+# 4. Skill 发现状态
+node ~/.agent-workflow/skills/runtime-hooks/scripts/skill-catalog-context.cjs --check
+
+# 5. Git 配置
+git config user.name
+git config user.email
+
+# 6. 当前 TODO 路径
+find docs/ -path "*/tasks/todo/*.md"
+
+# 7. 项目记忆路径
+find docs/ -name "PROJECT-MEMORY.md" -o -name "project-memory.md"
+```
+
+### 社区支持
+
+- **GitHub Issues**: 报告 bug 和功能请求
+- **GitHub Discussions**: 提问和讨论
+- **文档**: 查阅完整文档
+
+### 日志调试
+
+```bash
+# 启用详细日志
+export AGENT_DEBUG=1
+export AGENT_DEBUG_ROUTING=1
+claude
+```
+
+## 下一步
+
+- [最佳实践](/skills/best-practices) - 避免常见问题
+- [核心概念](/skills/core-concepts) - 理解系统原理
+- [使用指南](/skills/usage) - 学习正确的使用方式

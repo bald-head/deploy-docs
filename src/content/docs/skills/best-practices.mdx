@@ -1,0 +1,591 @@
+---
+title: 最佳实践
+description: Skills Framework 的最佳实践和常见陷阱避坑指南
+order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 核心原则
+
+### 1. 事实先行
+
+❌ **错误做法**：
+```
+"用 React 实现用户登录页面"
+```
+（没有确认项目技术栈）
+
+✅ **正确做法**：
+```
+# 先查看项目记忆
+"查看项目技术栈"
+
+# 确认后再实施
+"使用项目现有的 Vue 3 技术栈实现用户登录页面"
+```
+
+### 2. 简单优先
+
+❌ **错误做法**：
+```
+"设计一个高可用、可扩展、支持插件的用户认证系统"
+```
+（过度设计）
+
+✅ **正确做法**：
+```
+"实现基本的用户登录功能（邮箱 + 密码 + JWT）"
+```
+
+### 3. 最小写集
+
+❌ **错误做法**：
+```
+同时修改:
+- src/api/user.ts（用户 API）
+- src/api/admin.ts（管理员 API）
+- src/utils/request.ts（请求工具）
+- src/components/Header.vue（顺手优化）
+```
+
+✅ **正确做法**：
+```
+只修改当前 Feature 需要的文件:
+- src/api/user.ts
+- src/pages/login.vue
+```
+
+### 4. 目标驱动
+
+❌ **错误做法**：
+```
+"代码写完了"（没有验证）
+```
+
+✅ **正确做法**：
+```
+"登录功能完成，已通过以下验证:
+- AC-001: 用户可以通过表单登录 ✓（手工测试）
+- AC-002: JWT token 正确存储 ✓（DevTools 验证）
+- Review: pass ✓（code-review 无问题）"
+```
+
+## 常见场景最佳路径
+
+### 场景 1：新项目启动
+
+**推荐流程**：
+
+```
+1. 创建 Git 仓库并配置 user.name
+2. 启动客户端
+3. 详细描述项目需求（越详细越好）
+4. 配合 grilling 回答澄清问题
+5. 确认需求和技术方案
+6. 等待生成完整 TODO
+7. 开始第一个任务
+```
+
+**时间预估**：2-4 小时
+
+**关键点**：
+- ✅ Git user.name 必须配置（决定 TODO 路径）
+- ✅ 需求尽量详细（减少澄清轮次）
+- ✅ 技术方案需要确认（避免后续返工）
+
+### 场景 2：功能开发
+
+**推荐流程**：
+
+```
+1. 查看当前 TODO 和项目记忆
+2. 描述要实现的功能
+3. 系统自动领取任务
+4. 实施（前后端 + 数据层）
+5. 自验（手工测试或单元测试）
+6. code-review
+7. 修复 Review 问题
+8. git-commit 提交
+9. 自动续作下一任务
+```
+
+**时间预估**：每个 Feature 1-4 小时
+
+**关键点**：
+- ✅ 先回读项目记忆和 TODO 来源锚点
+- ✅ 每个 Feature 完成前后端/数据生产层
+- ✅ Review 问题必须修复
+- ✅ 每个 AC 都要有证据
+
+### 场景 3：需求变更
+
+**推荐流程**：
+
+```
+1. 明确说明变更内容
+   "需求改了，用户表要加手机号字段"
+   
+2. 系统自动触发 change-impact-analysis
+   
+3. 查看受影响的功能列表
+   
+4. 确认影响范围
+   
+5. 系统自动更新 TODO
+   
+6. 按更新后的 TODO 实施
+```
+
+**时间预估**：30 分钟 - 2 小时
+
+**关键点**：
+- ✅ 明确说明变更内容和原因
+- ✅ 确认受影响的功能
+- ✅ 更新后的 Feature 重新 Review
+
+### 场景 4：Bug 修复
+
+**推荐流程**：
+
+```
+1. 描述 Bug 现象
+   "用户登录失败，报错 401"
+   
+2. 系统触发 bug-detective 排查
+   
+3. 确认根因
+   
+4. 修复代码
+   
+5. 验证修复（复现 → 修复后验证）
+   
+6. code-review（确保没有引入新问题）
+   
+7. git-commit 提交
+```
+
+**时间预估**：30 分钟 - 2 小时
+
+**关键点**：
+- ✅ 提供详细的错误信息
+- ✅ 提供复现步骤
+- ✅ 修复后验证原问题已解决
+
+### 场景 5：代码优化
+
+**推荐流程**：
+
+```
+1. 明确优化目标
+   "优化用户列表页面的加载性能"
+   
+2. 系统触发 frontend-polish / performance-doctor
+   
+3. 分析性能瓶颈
+   
+4. 实施优化方案
+   
+5. 对比优化前后数据
+   
+6. code-review
+   
+7. git-commit 提交
+```
+
+**时间预估**：1-3 小时
+
+**关键点**：
+- ✅ 优化前记录基准数据
+- ✅ 优化后对比效果
+- ✅ 确保功能不受影响
+
+### 场景 6：多人协作
+
+**推荐流程**：
+
+```
+1. 团队成员各自有独立的 TODO 目录
+   docs/alice-chen/tasks/todo/
+   docs/bob-wang/tasks/todo/
+   
+2. 在 TODO 中明确写集
+   Alice: src/api/user/login.ts
+   Bob: src/api/user/register.ts
+   
+3. 确保写集不冲突
+   
+4. 各自领取并实施
+   
+5. 完成后各自提交
+   
+6. 通过 PR 合并到主分支
+```
+
+**关键点**：
+- ✅ 写集必须互斥（不能改同一文件）
+- ✅ 定期同步主分支
+- ✅ 冲突时协调解决
+
+## 常见陷阱与避坑指南
+
+### 陷阱 1：跳过需求确认
+
+**症状**：
+```
+直接说："开始实现用户登录"
+系统提示："缺少产品定义"
+```
+
+**原因**：没有经过 product-manager 完成产品定义。
+
+**解决方案**：
+```
+先描述需求：
+"我要做一个用户管理系统，包括注册、登录、个人信息管理"
+
+等待产品定义完成后再实施。
+```
+
+### 陷阱 2：修改无关文件
+
+**症状**：
+```
+实现登录功能时顺手优化了公共组件
+git-commit 时提示："写集外文件"
+```
+
+**原因**：修改了不在当前 Feature 写集内的文件。
+
+**解决方案**：
+```
+1. 只修改写集内的文件
+2. 如果确实需要修改公共组件，先更新写集
+3. 或者创建独立的优化任务
+```
+
+### 陷阱 3：没有验证就提交
+
+**症状**：
+```
+"代码写完了，提交"
+系统提示："缺少 AC 证据"
+```
+
+**原因**：没有为每个 AC 提供证据。
+
+**解决方案**：
+```
+"登录功能完成:
+- AC-001: 用户可以登录 → 手工测试通过
+- AC-002: Token 存储 → DevTools 验证
+- Review: pass"
+```
+
+### 陷阱 4：Git 用户名未配置
+
+**症状**：
+```
+TODO 路径不对，或者找不到 TODO
+```
+
+**原因**：Git user.name 未配置。
+
+**解决方案**：
+```bash
+git config user.name "alice-chen"
+git config user.email "alice@example.com"
+
+# 验证
+git config user.name
+```
+
+### 陷阱 5：并行任务写集冲突
+
+**症状**：
+```
+尝试领取新任务
+系统提示："写集冲突"
+```
+
+**原因**：新任务的写集与进行中任务重叠。
+
+**解决方案**：
+```
+1. 等待冲突任务完成
+2. 或者调整写集边界
+3. 或者串行执行
+```
+
+### 陷阱 6：忘记回读项目记忆
+
+**症状**：
+```
+实现功能时引入了禁止的技术
+code-review 提示："违反 Boundaries"
+```
+
+**原因**：没有回读项目记忆中的 Boundaries。
+
+**解决方案**：
+```
+每次实现新功能前：
+"查看项目记忆的技术栈和边界"
+```
+
+### 陷阱 7：过早优化
+
+**症状**：
+```
+功能还没实现完
+就开始考虑高并发、缓存、分布式
+```
+
+**原因**：违反"简单优先"原则。
+
+**解决方案**：
+```
+1. 先实现基本功能
+2. 功能完成并验证后
+3. 如果确实有性能问题，再优化
+```
+
+### 陷阱 8：TODO 状态不同步
+
+**症状**：
+```
+代码已提交，但 TODO 仍然是 [~]
+或者 TODO 是 [x]，但代码未提交
+```
+
+**原因**：手动修改 TODO 或跳过 Stop Hook。
+
+**解决方案**：
+```
+不要手动修改 TODO 状态
+让 Stop Hook 自动管理
+```
+
+### 陷阱 9：混淆 Skill 职责
+
+**症状**：
+```
+想优化页面，却触发了 frontend-design
+想设计新页面，却触发了 frontend-polish
+```
+
+**原因**：触发词不够明确。
+
+**解决方案**：
+```
+✅ "设计用户登录页面"（新页面 → frontend-design）
+✅ "优化用户登录页面的加载性能"（已有页面 → frontend-polish）
+```
+
+### 陷阱 10：忽略 Review 问题
+
+**症状**：
+```
+code-review 发现问题
+但直接提交了代码
+```
+
+**原因**：完成门禁要求 Review: pass。
+
+**解决方案**：
+```
+1. 修复 Review 发现的所有问题
+2. 重新 Review 确认通过
+3. 再提交代码
+```
+
+## 效率提升技巧
+
+### 技巧 1：使用模板输入
+
+对于重复的操作，准备模板：
+
+```
+# 新功能模板
+我要实现 [功能名称]，包括：
+- 前端：[页面描述]
+- 后端：[API 描述]
+- 数据：[数据模型]
+- 验收：[验收条件]
+```
+
+### 技巧 2：批量领取任务
+
+如果多个任务无依赖且写集互斥，可以并行：
+
+```
+"同时实施以下任务：
+- USER-LOGIN（写集: src/api/user/login.ts）
+- USER-REG（写集: src/api/user/register.ts）"
+```
+
+### 技巧 3：利用项目记忆
+
+在项目记忆中记录常用模式：
+
+```markdown
+## Reuse map
+
+### API 请求模板
+- 路径: src/api/template.ts
+- 用途: 新 API 的标准模板
+- 使用: 复制后修改
+```
+
+### 技巧 4：自定义触发词
+
+如果团队有特定术语，添加到 Skill frontmatter：
+
+```yaml
+triggers:
+  zh:
+    - 原有触发词
+    - 团队术语1
+    - 团队术语2
+```
+
+### 技巧 5：使用 Lite 档位
+
+对于简单功能，使用 Lite 档位减少文书：
+
+```markdown
+## Feature: SIMPLE-API
+档位: Lite
+```
+
+### 技巧 6：定期查看进度
+
+使用 progress Skill 追踪进度：
+
+```
+"查看当前进度"
+```
+
+输出示例：
+```
+Epic: USER-MGMT
+进度: 6/10 (60%)
+  ✓ INFRA-DB
+  ✓ INFRA-SECURITY
+  ✓ USER-REG-API
+  ✓ USER-REG-PAGE
+  ~ USER-LOGIN-API（进行中）
+  ☐ USER-LOGIN-PAGE
+  ...
+```
+
+### 技巧 7：利用 complement Skill
+
+查看 Skill 的 complement 字段，了解可协作的 Skill：
+
+```
+product-manager:
+  complement: [brainstorm, grilling]
+
+使用：
+"产品定义前先头脑风暴一下方案"
+```
+
+### 技巧 8：保存常用命令
+
+创建别名或脚本：
+
+```bash
+# ~/.zshrc 或 ~/.bashrc
+alias todo="cat docs/\$(git config user.name)/tasks/todo/*.md"
+alias memory="cat docs/PROJECT-MEMORY.md"
+alias check-hooks="node ~/.agent-workflow/skills/runtime-hooks/scripts/install.mjs --check"
+```
+
+## 团队协作最佳实践
+
+### 1. 统一 Git 配置
+
+确保团队成员的 Git user.name 格式一致：
+
+```bash
+# 推荐格式：firstname-lastname
+git config user.name "alice-chen"
+git config user.name "bob-wang"
+
+# 不推荐格式（空格、大写）
+git config user.name "Alice Chen"  # 有空格
+git config user.name "ALICE"       # 全大写
+```
+
+### 2. 定期同步项目记忆
+
+团队应该定期同步 PROJECT-MEMORY.md：
+
+```bash
+# 每天开始前
+git pull origin main
+cat docs/PROJECT-MEMORY.md  # 查看更新
+
+# 确认新事实后
+git commit -m "chore: update project memory"
+git push
+```
+
+### 3. 明确写集边界
+
+在任务分配时明确写集：
+
+```markdown
+Alice 负责:
+- USER-LOGIN-API（写集: src/main/java/controller/AuthController.java#login）
+
+Bob 负责:
+- USER-REG-API（写集: src/main/java/controller/AuthController.java#register）
+
+注意: 两人修改同一文件，但不同方法，需要协调合并
+```
+
+### 4. 使用 PR Review
+
+每个 Feature 完成后通过 PR：
+
+```bash
+git checkout -b feature/user-login
+# 实施 USER-LOGIN
+git commit -m "feat: implement user login"
+git push origin feature/user-login
+# 创建 PR
+gh pr create --title "feat: USER-LOGIN 用户登录"
+```
+
+### 5. 定期同步 TODO
+
+使用 Git 管理 TODO：
+
+```bash
+# 每个 Feature 完成后提交 TODO
+git add docs/alice-chen/tasks/todo/user-mgmt.md
+git commit -m "chore: update TODO - USER-LOGIN completed"
+```
+
+## 质量保障清单
+
+每个 Feature 完成前检查：
+
+- [ ] 所有 AC 都有证据
+- [ ] code-review 通过
+- [ ] 写集内文件都已修改
+- [ ] 没有修改写集外文件
+- [ ] 功能手工测试通过
+- [ ] 符合项目记忆的 Boundaries
+- [ ] 复用了项目记忆的 Reuse map
+- [ ] Git commit message 规范
+- [ ] TODO 状态已更新为 [x]
+- [ ] 代码已推送到远端
+
+## 下一步
+
+- [故障排查](/skills/troubleshooting) - 遇到问题时的诊断和解决方案
+- [使用指南](/skills/usage) - 回顾具体场景的操作流程
+- [核心概念](/skills/core-concepts) - 深入理解系统原理

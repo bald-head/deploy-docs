@@ -1,0 +1,746 @@
+---
+title: 新项目开始
+description: 从零到一启动新项目的完整操作流程
+order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+本指南将手把手教你如何使用 Skills Framework 从零开始一个新项目，涵盖项目初始化、需求分析、架构设计、技术选型到生成第一个可执行的 TODO。
+
+**预计时间**：2-4 小时（取决于项目复杂度）
+
+**前置条件**：
+- ✅ 已安装 Skills Framework
+- ✅ Runtime Hook 正常工作
+- ✅ 项目目录已创建（可以是空目录）
+
+## 完整流程
+
+### 第 1 步：初始化 Git 仓库
+
+在项目目录中初始化 Git：
+
+```bash
+cd /path/to/your-project
+git init
+git config user.name "alice-chen"
+git config user.email "alice@example.com"
+```
+
+✅ **检查点**：运行 `git config user.name` 应该输出你的用户名。
+
+<Aside type="tip">
+developer-id 会从 `git config user.name` 自动获取，用于 TODO 路径 `docs/alice-chen/tasks/todo/`。
+</Aside>
+
+### 第 2 步：启动客户端
+
+```bash
+# 启动 Claude Code
+cd /path/to/your-project
+claude
+
+# 或启动 Codex
+codex
+```
+
+### 第 3 步：描述项目需求
+
+用自然语言描述你要做什么：
+
+```
+我要做一个用户管理系统，包括以下功能：
+1. 用户注册（邮箱 + 密码）
+2. 用户登录（JWT 认证）
+3. 个人信息管理（查看、编辑昵称、头像）
+4. 密码修改
+```
+
+**预期行为**：
+
+系统自动识别这是新项目，触发一系列 Skill：
+
+```
+1. task-todo-workflow - 建立流程状态机
+   ↓
+2. product-manager - 产品定义
+   ↓
+3. frontend-design - UI/UX 设计（如有页面）
+   ↓
+4. architecture-design - 系统架构
+   ↓
+5. tech-decision - 技术选型
+   ↓
+6. project-manager - 生成 TODO
+```
+
+### 第 4 步：流程状态机建立
+
+**task-todo-workflow Skill 会自动**：
+
+1. 检查是否存在 TODO 文件
+2. 不存在则创建 `docs/alice-chen/tasks/todo/user-management.md`
+3. 建立流程状态机
+
+**生成的 TODO 内容**：
+
+```markdown
+# 用户管理系统 - 任务清单
+
+## 流程状态机
+
+- 当前阶段: intake
+- 已完成阶段: 无
+- 下一阶段: requirements-analysis
+- 阶段 Owner: alice-chen
+
+### intake（需求录入）✓
+- 需求来源: 用户输入
+- 录入时间: 2024-09-03
+- 录入人: alice-chen
+
+## 功能列表（待拆分）
+
+临时记录：
+- 用户注册（邮箱 + 密码）
+- 用户登录（JWT 认证）
+- 个人信息管理
+- 密码修改
+```
+
+✅ **检查点**：查看 TODO 文件，应该看到流程状态机和临时功能列表。
+
+```bash
+cat docs/alice-chen/tasks/todo/user-management.md
+```
+
+### 第 5 步：需求分析
+
+**product-manager Skill 会自动**：
+
+1. 研究类似功能（如果项目记忆中有参考）
+2. 提出澄清问题（通过 grilling Skill）
+3. 完成产品定义
+
+**可能的澄清问题**：
+
+```
+系统会问：
+
+1. 用户注册是否需要邮箱验证？
+   你的回答: 暂时不需要，v1.0 直接注册
+
+2. 密码强度有什么要求？
+   你的回答: 至少 8 位，包含字母和数字
+
+3. 头像上传有大小限制吗？
+   你的回答: 最大 2MB，支持 JPG/PNG
+
+4. 是否需要管理员角色？
+   你的回答: 暂时不需要，所有用户平等
+```
+
+<Aside type="tip">
+grilling Skill 会一次一个问题追问，直到约 95% 清晰。可查事实会自行取证。
+</Aside>
+
+**产品定义输出**：
+
+```markdown
+## requirements-analysis（需求分析）✓
+
+### 功能范围
+
+#### F1: 用户注册
+- 用户通过邮箱 + 密码注册
+- 密码强度要求: 至少 8 位，包含字母和数字
+- 注册成功后自动登录
+- 无需邮箱验证（v1.0）
+
+#### F2: 用户登录
+- 用户通过邮箱 + 密码登录
+- 使用 JWT 进行身份验证
+- Token 有效期 7 天
+- 支持"记住我"功能
+
+#### F3: 个人信息管理
+- 查看个人信息（昵称、邮箱、头像）
+- 编辑昵称
+- 上传头像（最大 2MB，JPG/PNG）
+
+#### F4: 密码修改
+- 需要输入旧密码验证
+- 新密码符合强度要求
+- 修改成功后强制重新登录
+
+### 验收条件
+
+#### AC-REG-001
+用户可以通过注册表单完成注册，密码符合强度要求
+
+#### AC-LOGIN-001
+用户可以通过邮箱密码登录，获得 JWT token
+
+#### AC-PROFILE-001
+用户可以查看和编辑个人信息
+
+#### AC-PASSWORD-001
+用户可以修改密码，旧密码验证通过后生效
+
+### 非功能需求
+
+- 性能: 登录响应时间 < 500ms
+- 安全: 密码加密存储（bcrypt）
+- 可用性: 表单验证实时反馈
+```
+
+✅ **检查点**：TODO 文件更新，包含详细的需求分析。
+
+**推进到下一阶段**：
+
+系统自动推进：
+
+```
+当前阶段: requirements-analysis
+  ↓
+下一阶段: requirements-confirmation（需要确认）
+```
+
+**你需要确认**：
+
+```
+"确认需求"
+```
+
+或者明确说：
+
+```
+"需求没问题，继续"
+```
+
+系统执行：
+
+```bash
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
+  --plan-advance --confirmed
+```
+
+### 第 6 步：UI/UX 设计（如有前端）
+
+**frontend-design Skill 会自动**：
+
+1. 根据产品定义设计页面结构
+2. 定义交互流程
+3. 输出 DesignContract
+
+**设计输出示例**：
+
+```markdown
+## 页面结构
+
+### 1. 注册页面 (/register)
+- 表单: 邮箱输入、密码输入、确认密码
+- 实时验证: 邮箱格式、密码强度
+- 按钮: 注册、已有账号登录
+
+### 2. 登录页面 (/login)
+- 表单: 邮箱、密码
+- 记住我复选框
+- 按钮: 登录、注册新账号、忘记密码
+
+### 3. 个人信息页面 (/profile)
+- 显示: 头像、昵称、邮箱
+- 编辑: 昵称编辑框、头像上传
+- 按钮: 保存、修改密码
+
+### 4. 密码修改页面 (/change-password)
+- 表单: 旧密码、新密码、确认新密码
+- 实时验证: 密码强度
+- 按钮: 确认修改、取消
+
+## 交互流程
+
+注册流程:
+  输入邮箱密码 → 实时验证 → 提交 → 成功自动跳转登录页
+
+登录流程:
+  输入凭证 → 提交 → 成功跳转首页 → 失败显示错误
+
+信息编辑流程:
+  编辑昵称/上传头像 → 保存 → 成功提示 → 刷新显示
+```
+
+### 第 7 步：技术方案设计
+
+**architecture-design Skill 会自动**：
+
+1. 设计系统架构
+2. 定义模块边界
+3. 确定部署方案
+
+**架构输出示例**：
+
+```markdown
+## technical-plan（技术方案）
+
+### 系统架构
+
+```
+┌─────────────┐
+│  Vue 3 前端  │
+└──────┬──────┘
+       │ HTTP/REST
+┌──────▼──────┐
+│ Spring Boot │
+│   后端 API   │
+└──────┬──────┘
+       │ JDBC
+┌──────▼──────┐
+│ PostgreSQL  │
+│   数据库     │
+└─────────────┘
+```
+
+### 模块划分
+
+#### 前端模块
+- `src/pages/` - 页面组件
+- `src/components/` - 通用组件
+- `src/api/` - API 调用
+- `src/store/` - 状态管理（Pinia）
+- `src/router/` - 路由配置
+
+#### 后端模块
+- `controller/` - REST 接口
+- `service/` - 业务逻辑
+- `repository/` - 数据访问
+- `entity/` - 数据模型
+- `dto/` - 数据传输对象
+- `security/` - 安全配置
+
+### 数据模型
+
+#### User 表
+```sql
+CREATE TABLE users (
+  id BIGSERIAL PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  nickname VARCHAR(100),
+  avatar_url VARCHAR(500),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### API 设计
+
+- POST /api/v1/auth/register - 用户注册
+- POST /api/v1/auth/login - 用户登录
+- GET /api/v1/users/profile - 获取个人信息
+- PUT /api/v1/users/profile - 更新个人信息
+- POST /api/v1/users/change-password - 修改密码
+- POST /api/v1/users/upload-avatar - 上传头像
+```
+
+✅ **检查点**：TODO 文件包含技术方案，推进到 `technical-confirmation`。
+
+**你需要确认**：
+
+```
+"技术方案没问题"
+```
+
+### 第 8 步：技术选型（每个 Feature 独立）
+
+**tech-decision Skill 会自动**：
+
+1. 比较可行技术
+2. 选出最优方案
+3. 记录决策理由
+
+**技术选型输出示例**：
+
+```markdown
+## 技术栈确认
+
+### 前端
+- 框架: Vue 3.4（团队熟悉）
+- 状态管理: Pinia（Vue 3 官方推荐）
+- 路由: Vue Router 4
+- UI 组件: Element Plus（快速开发）
+- 构建: Vite 5.2（快速热更新）
+
+### 后端
+- 框架: Spring Boot 3.1（成熟稳定）
+- 数据库: PostgreSQL 15（支持 JSONB，未来扩展性好）
+- ORM: Spring Data JPA
+- 认证: Spring Security + JWT
+- 密码加密: BCrypt
+
+### 工具
+- API 文档: Swagger/OpenAPI
+- 代码检查: ESLint + Prettier（前端）, Checkstyle（后端）
+- 测试: Vitest（前端）, JUnit 5（后端）
+
+## 决策记录
+
+### 为什么选择 Vue 3 而非 React?
+- 团队成员更熟悉 Vue
+- 学习曲线更平缓
+- Composition API 符合函数式编程习惯
+
+### 为什么选择 PostgreSQL 而非 MySQL?
+- 支持 JSONB，未来可能存储非结构化数据
+- 更好的并发性能
+- 更强的数据一致性保证
+
+### 为什么选择 JWT 而非 Session?
+- 无状态，易扩展
+- 支持移动端
+- 适合前后端分离架构
+```
+
+### 第 9 步：生成完整 TODO
+
+**project-manager Skill 会自动**：
+
+1. 基于产品、设计、架构、技术生成 TODO
+2. 拆分成可独立验收的 Feature
+3. 标注依赖关系和写集
+
+**生成的 TODO 示例**：
+
+```markdown
+# 用户管理系统 - 任务清单
+
+## 流程状态机
+
+- 当前阶段: task-breakdown
+- 已完成阶段: intake, requirements-analysis, requirements-confirmation, 
+  technical-plan, technical-confirmation
+- 下一阶段: business-development
+- 阶段 Owner: alice-chen
+
+## Epic: USER-MGMT - 用户管理系统
+
+### 基础设施
+
+- [ ] `INFRA-DB` 数据库初始化
+  - 依赖: 无
+  - Owner: alice-chen
+  - 并行写集: `db/migrations/001_create_users_table.sql`
+  - AC-001: users 表创建成功
+  - AC-002: 索引创建完成（email 唯一索引）
+
+- [ ] `INFRA-SECURITY` Spring Security 配置
+  - 依赖: 无
+  - Owner: alice-chen
+  - 并行写集: `src/main/java/config/SecurityConfig.java`, 
+    `src/main/java/security/JwtTokenProvider.java`
+  - AC-001: JWT token 生成和验证正常
+  - AC-002: 密码加密配置正确（BCrypt）
+
+### 用户注册
+
+- [ ] `USER-REG-API` 注册 API
+  - 依赖: `INFRA-DB`, `INFRA-SECURITY`
+  - Owner: alice-chen
+  - 并行写集: `src/main/java/controller/AuthController.java#register`,
+    `src/main/java/service/UserService.java#register`,
+    `src/main/java/dto/RegisterRequest.java`
+  - AC-001: POST /api/v1/auth/register 返回 201 和 token
+  - AC-002: 邮箱重复返回 409 错误
+  - AC-003: 密码强度不足返回 400 错误
+
+- [ ] `USER-REG-PAGE` 注册页面
+  - 依赖: `USER-REG-API`
+  - Owner: alice-chen
+  - 并行写集: `src/pages/register.vue`, 
+    `src/api/auth.ts#register`,
+    `src/router/index.ts`
+  - AC-001: 表单实时验证邮箱格式
+  - AC-002: 表单实时验证密码强度
+  - AC-003: 注册成功后自动跳转登录页
+
+### 用户登录
+
+- [ ] `USER-LOGIN-API` 登录 API
+  - 依赖: `INFRA-DB`, `INFRA-SECURITY`
+  - Owner: alice-chen
+  - 并行写集: `src/main/java/controller/AuthController.java#login`,
+    `src/main/java/service/UserService.java#login`,
+    `src/main/java/dto/LoginRequest.java`
+  - AC-001: POST /api/v1/auth/login 返回 JWT token
+  - AC-002: 凭证错误返回 401
+  - AC-003: Token 有效期 7 天
+
+- [ ] `USER-LOGIN-PAGE` 登录页面
+  - 依赖: `USER-LOGIN-API`
+  - Owner: alice-chen
+  - 并行写集: `src/pages/login.vue`,
+    `src/api/auth.ts#login`,
+    `src/store/user.ts`,
+    `src/router/index.ts`
+  - AC-001: 登录成功后跳转首页
+  - AC-002: "记住我"功能正常
+  - AC-003: Token 自动存储到 localStorage
+
+### 个人信息
+
+- [ ] `USER-PROFILE-API` 个人信息 API
+  - 依赖: `USER-LOGIN-API`
+  - Owner: alice-chen
+  - 并行写集: `src/main/java/controller/UserController.java`,
+    `src/main/java/service/UserService.java#getProfile`,
+    `src/main/java/dto/ProfileResponse.java`
+  - AC-001: GET /api/v1/users/profile 返回个人信息
+  - AC-002: 需要 JWT 认证
+  - AC-003: PUT /api/v1/users/profile 更新昵称
+
+- [ ] `USER-AVATAR-API` 头像上传 API
+  - 依赖: `USER-PROFILE-API`
+  - Owner: alice-chen
+  - 并行写集: `src/main/java/controller/UserController.java#uploadAvatar`,
+    `src/main/java/service/FileService.java`
+  - AC-001: POST /api/v1/users/upload-avatar 上传头像
+  - AC-002: 限制 2MB，JPG/PNG
+  - AC-003: 返回头像 URL
+
+- [ ] `USER-PROFILE-PAGE` 个人信息页面
+  - 依赖: `USER-PROFILE-API`, `USER-AVATAR-API`
+  - Owner: alice-chen
+  - 并行写集: `src/pages/profile.vue`,
+    `src/api/user.ts`,
+    `src/components/AvatarUpload.vue`
+  - AC-001: 显示个人信息
+  - AC-002: 可编辑昵称
+  - AC-003: 可上传头像，预览后确认
+
+### 密码修改
+
+- [ ] `USER-CHANGE-PWD-API` 密码修改 API
+  - 依赖: `USER-LOGIN-API`
+  - Owner: alice-chen
+  - 并行写集: `src/main/java/controller/UserController.java#changePassword`,
+    `src/main/java/service/UserService.java#changePassword`,
+    `src/main/java/dto/ChangePasswordRequest.java`
+  - AC-001: POST /api/v1/users/change-password 修改密码
+  - AC-002: 验证旧密码
+  - AC-003: 新密码符合强度要求
+
+- [ ] `USER-CHANGE-PWD-PAGE` 密码修改页面
+  - 依赖: `USER-CHANGE-PWD-API`
+  - Owner: alice-chen
+  - 并行写集: `src/pages/change-password.vue`,
+    `src/api/user.ts#changePassword`
+  - AC-001: 表单验证旧密码、新密码
+  - AC-002: 修改成功后跳转登录页
+  - AC-003: 显示密码强度指示器
+
+## 验证档位
+
+档位: Standard
+自主模式: Build
+```
+
+✅ **检查点**：
+
+1. TODO 文件包含完整的 Feature 列表
+2. 每个 Feature 有明确的依赖和写集
+3. 流程状态机推进到 `business-development`
+
+```bash
+# 查看生成的 TODO
+cat docs/alice-chen/tasks/todo/user-management.md
+
+# 应该看到完整的 Feature 列表和依赖关系
+```
+
+### 第 10 步：初始化项目记忆
+
+Runtime Hook 会自动创建 `PROJECT-MEMORY.md`：
+
+```markdown
+# Project Memory
+
+## Quick facts
+
+### 技术栈
+- 前端: Vue 3.4 + TypeScript + Vite 5.2 + Element Plus
+- 后端: Spring Boot 3.1 + Java 17 + Spring Security
+- 数据库: PostgreSQL 15
+- 认证: JWT
+
+### 架构
+- 前后端分离
+- RESTful API
+- JWT 身份验证
+- 密码 BCrypt 加密
+
+### 开发约定
+- 前端使用 Composition API
+- API 路径统一 `/api/v1` 前缀
+- 密码强度: 至少 8 位，包含字母和数字
+
+## Reuse map
+
+（后续开发过程中会填充）
+
+## Boundaries
+
+### 不使用的技术
+- Options API（统一使用 Composition API）
+- Session 认证（使用 JWT）
+
+### 禁止的模式
+- 密码明文存储（使用 BCrypt）
+- 硬编码 API 地址（使用环境变量）
+```
+
+✅ **检查点**：
+
+```bash
+cat docs/PROJECT-MEMORY.md
+
+# 应该看到初始化的项目记忆
+```
+
+### 第 11 步：开始第一个任务
+
+现在可以开始实施了：
+
+```
+"开始实现数据库初始化"
+```
+
+系统会：
+
+1. 检查 `INFRA-DB` 的依赖（无依赖）
+2. 原子领取该任务（`[ ]` → `[~]`）
+3. 触发 `database-design` 或 `universal-development` Skill
+4. 实施数据库迁移脚本
+
+**预期输出**：
+
+```sql
+-- db/migrations/001_create_users_table.sql
+
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    nickname VARCHAR(100),
+    avatar_url VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_users_email ON users(email);
+
+COMMENT ON TABLE users IS '用户表';
+COMMENT ON COLUMN users.email IS '邮箱（唯一）';
+COMMENT ON COLUMN users.password_hash IS '密码哈希（BCrypt）';
+```
+
+完成后自动触发 `code-review`，然后提示提交代码。
+
+## 流程图总结
+
+```
+用户输入需求
+  ↓
+task-todo-workflow（建立状态机）
+  ↓
+product-manager（需求分析 + 确认）
+  ↓
+frontend-design（UI/UX 设计，如有前端）
+  ↓
+architecture-design（架构设计 + 确认）
+  ↓
+tech-decision（技术选型）
+  ↓
+project-manager（生成完整 TODO）
+  ↓
+开始第一个任务
+  ↓
+database-design / universal-development（实施）
+  ↓
+code-review（审查）
+  ↓
+git-commit（提交）
+  ↓
+自动续作下一任务
+```
+
+## 常见问题
+
+### Q1: 需求分析阶段被问了很多问题，能跳过吗？
+
+不能跳过，但可以提前准备答案：
+
+```
+我要做一个用户管理系统：
+- 注册: 邮箱密码，无需验证，密码至少8位
+- 登录: JWT认证，7天有效期
+- 信息: 昵称编辑，头像上传（2MB限制）
+- 改密: 旧密码验证，符合强度要求
+```
+
+### Q2: 技术方案不满意，如何修改？
+
+在确认前明确说明：
+
+```
+"技术方案需要调整：
+1. 数据库改用 MySQL（已有MySQL集群）
+2. UI 组件改用 Ant Design Vue（设计规范要求）"
+```
+
+系统会重新生成方案。
+
+### Q3: TODO 生成后发现功能遗漏，如何补充？
+
+使用 `add-todo` Skill：
+
+```
+"补充功能：用户可以注销账号"
+```
+
+系统会：
+1. 分析新功能
+2. 生成新的 Feature
+3. 追加到 TODO（保持依赖关系）
+
+### Q4: 能否跳过某些阶段直接开始开发？
+
+不能跳过流程状态机的强制阶段。但如果项目简单，可以：
+
+1. 需求分析快速确认
+2. 技术方案选择现有技术（reuse-existing）
+3. 使用 Lite 档位减少文书
+
+### Q5: 多人协作时如何分工？
+
+在 TODO 生成后，手动调整 Owner：
+
+```markdown
+- [ ] `INFRA-DB` 数据库初始化
+  - Owner: alice-chen  # Alice 负责
+
+- [ ] `USER-REG-API` 注册 API
+  - Owner: bob-wang  # Bob 负责
+```
+
+或者每人一份 TODO，通过写集互斥并行开发。
+
+## 下一步
+
+项目初始化完成后，继续学习：
+
+- [功能开发流程](/skills/usage/feature-development) - 实施具体功能
+- [TODO 管理](/skills/usage/todo-management) - 管理任务和依赖
+- [代码审查流程](/skills/usage/code-review) - Review 代码质量

@@ -1,0 +1,939 @@
+---
+title: Critical & High 优先级 Skill
+description: 20 个核心开发流程的关键 Skill
+order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+这 20 个 Skill 是核心开发流程的关键能力，路由优先级最高，触发词最丰富，准确率最高。
+
+**优先级**：
+- **Critical**（1 个）：任务管理核心
+- **High**（19 个）：核心开发流程
+
+## Critical 优先级
+
+### task-todo-workflow
+
+**描述**：直接维护功能+菜单、覆盖全部交付面的当前开发者唯一 TODO
+
+**触发词**：
+- 中文：任务管理、TODO、新项目、管理任务、任务清单
+- 英文：task management, TODO, new project
+
+**适用场景**：
+- 新项目启动（第一步必须调用）
+- 建立流程状态机
+- 维护 TODO 状态
+
+**前置条件（gates）**：
+- 项目已初始化 Git 仓库
+- Git user.name 已配置
+
+**使用示例**：
+
+```
+用户输入：
+"我要做一个用户管理系统"
+
+系统行为：
+1. 检查是否存在 TODO
+2. 创建 docs/<developer-id>/tasks/todo/user-management.md
+3. 建立流程状态机
+4. 自动路由到 product-manager
+
+预期输出：
+TODO 文件已创建，包含流程状态机
+```
+
+**与其他 Skill 的关系**：
+- **before**: 无（通常是第一个调用）
+- **after**: product-manager, project-manager
+- **complement**: add-todo, update-status, progress
+
+<Aside type="caution">
+task-todo-workflow 是新项目或新功能的强制第一入口，不能跳过。
+</Aside>
+
+---
+
+## High 优先级
+
+### product-manager
+
+**描述**：对新项目或新功能完成研究、brainstorm、产品定义与验收
+
+**触发词**：
+- 中文：产品定义、完整需求、产品规划、新项目、新功能、需求分析、PRD
+- 英文：product definition, requirements, PRD, product planning
+
+**适用场景**：
+- 新项目的产品定义
+- 新功能的需求分析
+- 需要完整的用户故事和验收条件
+
+**前置条件（gates）**：
+- 新项目或尚未规划的新功能（非已批准 TODO 的续作）
+- 需求需要完整定义（用户、能力、菜单、规则、权限、验收）
+- 存在唯一 TODO 文件且已执行 --plan-start
+
+**冲突解决**：
+- vs `universal-development`: universal-development 负责已有产品定义的实现；product-manager 负责新项目/新功能的产品定义
+- vs `change-impact-analysis`: change-impact-analysis 负责已有范围的变更分析；product-manager 负责新项目/新功能的完整定义
+
+**使用示例**：
+
+```
+用户输入：
+"用户管理系统需要包括注册、登录、个人信息管理"
+
+系统行为：
+1. 研究现有类似功能
+2. 通过 grilling 澄清关键问题
+3. 完成产品定义（用户、能力、菜单、规则、权限、验收）
+
+预期输出：
+完整的产品定义文档，包含：
+- 功能范围
+- 验收条件（AC-001, AC-002...）
+- 非功能需求
+- 边界说明
+```
+
+**与其他 Skill 的关系**：
+- **before**: task-todo-workflow
+- **after**: architecture-design, tech-decision, project-manager
+- **complement**: product-discovery, product-execution, brainstorm, grilling
+
+**不适用场景**：
+- 已有完整 PRD 的实现
+- 纯技术维护
+- Bug 修复
+
+---
+
+### change-impact-analysis
+
+**描述**：当已批准范围真实变化时，完整识别受影响功能、契约、数据、权限和交付面并原位更新 TODO
+
+**触发词**：
+- 中文：影响分析、变更影响、依赖分析、需求改了、需求变了、范围变了、加一个字段、加字段、改需求、功能变更
+- 英文：impact analysis, change impact, scope change, requirement change
+
+**适用场景**：
+- 已批准的需求发生变化
+- 数据模型需要调整
+- API 契约变更
+- 功能范围扩大或缩小
+
+**前置条件（gates）**：
+- 已有批准的范围、契约或交付面
+- 发生真实变化（用户结果、API、数据、权限或交付面）
+- 存在唯一 TODO 文件需要更新
+
+**冲突解决**：
+- vs `product-manager`: product-manager 负责新项目产品定义；change-impact-analysis 负责已有范围的变更分析
+- vs `project-manager`: project-manager 负责初始 TODO 生成；change-impact-analysis 负责变更后的 TODO 更新
+
+**使用示例**：
+
+```
+用户输入：
+"需求改了，用户表要加一个手机号字段"
+
+系统行为：
+1. 识别受影响的模块：
+   - 数据模型：User 表增加 phone 字段
+   - API：注册接口增加 phone 参数
+   - 前端：注册表单增加手机号输入
+2. 分析依赖关系
+3. 更新 TODO 中受影响的 Feature
+
+预期输出：
+TODO 已更新，包含：
+- 新增或修改的 Feature
+- 更新的写集
+- 调整的依赖关系
+```
+
+**与其他 Skill 的关系**：
+- **before**: product-manager, project-manager, task-todo-workflow
+- **after**: project-manager, task-todo-workflow
+- **complement**: universal-development, code-review
+
+---
+
+### project-manager
+
+**描述**：把完整产品、设计、架构和技术结论写入当前开发者唯一 TODO
+
+**触发词**：
+- 中文：项目规划、任务分解、制定计划、生成 TODO
+- 英文：project planning, task breakdown, create TODO
+
+**适用场景**：
+- 产品定义完成后生成 TODO
+- 架构和技术方案确定后拆分任务
+
+**前置条件（gates）**：
+- 已完成产品定义（product-manager）
+- 已完成架构设计（architecture-design）
+- 已完成技术选型（tech-decision）
+
+**使用示例**：
+
+```
+系统行为（自动）：
+1. 读取产品定义、架构、技术方案
+2. 拆分成可独立验收的 Feature
+3. 标注依赖关系
+4. 标注写集（并行冲突检测）
+5. 生成完整 TODO
+
+预期输出：
+完整的 TODO 文件，包含：
+- Epic 汇总
+- Feature 列表（带 ID、依赖、写集、AC）
+- 档位和自主模式
+```
+
+**与其他 Skill 的关系**：
+- **before**: product-manager, architecture-design, tech-decision
+- **after**: universal-development, crud-development（开始实施）
+- **complement**: add-todo, update-status
+
+---
+
+### architecture-design
+
+**描述**：设计系统、模块、数据所有权、部署和仓库边界
+
+**触发词**：
+- 中文：领域边界、架构、系统架构、服务拆分、模块设计
+- 英文：architecture, system design, module design
+
+**适用场景**：
+- 新项目的系统架构设计
+- 模块划分和边界定义
+- 数据所有权设计
+
+**前置条件（gates）**：
+- 已有产品定义
+- 需要设计系统架构
+
+**使用示例**：
+
+```
+系统行为：
+1. 设计系统架构（前后端分离、微服务等）
+2. 定义模块边界
+3. 设计数据模型
+4. 定义 API 契约
+
+预期输出：
+架构设计文档，包含：
+- 系统架构图
+- 模块划分
+- 数据模型
+- API 设计
+```
+
+**与其他 Skill 的关系**：
+- **before**: product-manager
+- **after**: tech-decision, database-design
+- **complement**: database-design, api-development
+
+---
+
+### tech-decision
+
+**描述**：在每个业务 Feature 实现前比较可行技术并选出可实施、可验证、可回退的方案
+
+**触发词**：
+- 中文：选择技术、技术方案、技术评估、技术选型
+- 英文：tech decision, technology choice, tech stack
+
+**适用场景**：
+- 技术栈选择
+- 框架选型
+- 工具库选择
+
+**前置条件（gates）**：
+- 已有批准需求或功能
+- 尚未开始生产代码编辑
+- 需要选择具体技术方案
+
+**使用示例**：
+
+```
+系统行为：
+1. 比较可行技术（如 Vue vs React）
+2. 分析优劣
+3. 考虑团队熟悉度、学习曲线、生态
+4. 记录决策理由
+
+预期输出：
+技术选型文档，包含：
+- 选择的技术栈
+- 决策理由
+- 对比分析
+- reuse-existing 或新技术
+```
+
+**与其他 Skill 的关系**：
+- **before**: architecture-design
+- **after**: project-manager
+- **complement**: project-navigator（查找现有技术）
+
+---
+
+### crud-development
+
+**描述**：按已批准需求完成 CRUD 纵向业务交付，覆盖数据模型、API、Service 与页面联动
+
+**触发词**：
+- 中文：开发功能、实现功能、纵向开发、CRUD 开发
+- 英文：implement feature, develop CRUD, full-stack development
+
+**适用场景**：
+- 标准的 CRUD 功能开发
+- 需要前后端 + 数据层完整实现
+
+**前置条件（gates）**：
+- 已有批准需求
+- 已进入 business-development 阶段
+- 功能属于标准 CRUD（增删改查）
+
+**冲突解决**：
+- vs `universal-development`: 明确 CRUD 业务时优先使用 crud-development
+
+**使用示例**：
+
+```
+用户输入：
+"开始实现用户注册功能"
+
+系统行为：
+1. 实现数据模型（User 表）
+2. 实现 API（POST /api/v1/auth/register）
+3. 实现 Service 业务逻辑
+4. 实现前端页面（register.vue）
+5. 完成联调
+
+预期输出：
+完整的纵向功能，包含：
+- 数据库迁移脚本
+- 后端 API 实现
+- 前端页面实现
+- 路由配置
+```
+
+**与其他 Skill 的关系**：
+- **before**: project-manager, tech-decision
+- **after**: code-review, test-development
+- **complement**: api-development, database-design, frontend-design
+
+---
+
+### api-development
+
+**描述**：设计实现 API 契约、校验、错误语义和文档
+
+**触发词**：
+- 中文：API 开发、接口设计、开发接口、REST API
+- 英文：API development, interface design, REST API
+
+**适用场景**：
+- RESTful API 开发
+- GraphQL API 开发
+- API 契约定义
+
+**前置条件（gates）**：
+- 已有功能需求或产品定义
+- 已有相邻生产接口参考或架构方案
+- 尚未实现该 API
+
+**使用示例**：
+
+```
+用户输入：
+"开发用户登录 API"
+
+系统行为：
+1. 设计 API 契约（POST /api/v1/auth/login）
+2. 定义请求参数和响应格式
+3. 实现参数校验
+4. 实现业务逻辑
+5. 实现错误处理
+6. 生成 API 文档（Swagger/OpenAPI）
+
+预期输出：
+完整的 API 实现，包含：
+- Controller 层
+- DTO 定义
+- 参数校验
+- 错误处理
+- API 文档
+```
+
+**与其他 Skill 的关系**：
+- **before**: architecture-design
+- **after**: code-review, test-development
+- **complement**: database-design, error-handler
+
+---
+
+### database-design
+
+**描述**：设计数据库结构、迁移、索引、幂等、兼容和回滚
+
+**触发词**：
+- 中文：建表、设计表、数据库、Schema 设计、数据模型
+- 英文：database design, schema design, table design
+
+**适用场景**：
+- 数据库表设计
+- 索引设计
+- 数据库迁移
+
+**前置条件（gates）**：
+- 已有功能需求或产品定义
+- 需要新增或修改数据表
+- 已确定数据库类型
+
+**使用示例**：
+
+```
+用户输入：
+"设计用户表"
+
+系统行为：
+1. 分析数据需求
+2. 设计表结构（字段、类型、约束）
+3. 设计索引（唯一索引、普通索引）
+4. 编写迁移脚本（幂等、可回滚）
+5. 添加注释
+
+预期输出：
+数据库迁移脚本，包含：
+- CREATE TABLE 语句
+- 索引创建
+- 约束定义
+- 回滚脚本
+```
+
+**与其他 Skill 的关系**：
+- **before**: architecture-design
+- **after**: api-development, database-ops
+- **complement**: data-permission（数据权限设计）
+
+---
+
+### frontend-design
+
+**描述**：为新增或重构界面建立 UI/UX 设计基线，定义页面结构、交互、状态与约束
+
+**触发词**：
+- 中文：UI 设计、页面设计、交互设计、前端设计、界面设计
+- 英文：UI design, page design, frontend design, interface design
+
+**适用场景**：
+- 新页面的 UI/UX 设计
+- 页面结构设计
+- 交互流程设计
+
+**前置条件（gates）**：
+- 已有功能需求或产品定义
+- 尚未有实现（新页面）
+- 需要设计页面结构和交互
+
+**冲突解决**：
+- vs `frontend-polish`: frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化
+- vs `universal-development`: frontend-design 负责 UI/UX 设计；universal-development 负责实现
+
+**使用示例**：
+
+```
+用户输入：
+"设计用户登录页面"
+
+系统行为：
+1. 通过 grilling 澄清关键交互
+2. 设计页面结构（表单、按钮、链接）
+3. 定义交互流程（输入 → 验证 → 提交 → 跳转）
+4. 定义状态（loading、error、success）
+5. 输出 DesignContract
+
+预期输出：
+设计契约文档，包含：
+- 页面结构
+- 交互流程
+- 状态管理
+- 验证规则
+```
+
+**与其他 Skill 的关系**：
+- **before**: product-manager
+- **after**: ui-pc, ui-app（实现）
+- **complement**: grilling, review-animations
+
+---
+
+### ui-pc
+
+**描述**：按已发现的组件库、路由、状态与设计令牌实现 PC/管理端界面
+
+**触发词**：
+- 中文：实现页面、开发页面、PC 界面、管理端页面
+- 英文：implement page, PC interface, admin page
+
+**适用场景**：
+- PC 端页面实现
+- 管理后台页面
+- Web 应用界面
+
+**前置条件（gates）**：
+- 已有设计基线（frontend-design）
+- 已发现项目的组件库和状态管理方案
+- 需要实现 PC 端界面
+
+**使用示例**：
+
+```
+用户输入：
+"实现用户登录页面"
+
+系统行为：
+1. 读取设计契约
+2. 使用项目的 Vue 3 + Element Plus
+3. 实现页面组件
+4. 实现表单验证
+5. 集成状态管理（Pinia）
+6. 配置路由
+
+预期输出：
+完整的页面实现，包含：
+- Vue 组件文件
+- 样式文件
+- 路由配置
+- API 调用
+```
+
+**与其他 Skill 的关系**：
+- **before**: frontend-design, tech-decision
+- **after**: code-review, frontend-polish
+- **complement**: store-pc（状态管理）
+
+---
+
+### ui-app
+
+**描述**：按已发现的平台、框架、导航与视觉令牌实现跨端应用界面
+
+**触发词**：
+- 中文：实现移动页面、App 界面、跨端页面
+- 英文：implement mobile page, app interface
+
+**适用场景**：
+- 移动端页面实现
+- 跨端应用（React Native、Flutter）
+- 小程序页面
+
+**前置条件（gates）**：
+- 已有设计基线
+- 已确定跨端框架
+- 需要实现移动端界面
+
+**使用示例**：
+
+```
+用户输入：
+"实现移动端用户登录页面"
+
+系统行为：
+1. 读取设计契约
+2. 使用项目的 React Native / Flutter
+3. 实现移动端适配（触摸、手势）
+4. 实现响应式布局
+5. 集成原生能力（如生物识别）
+
+预期输出：
+跨端页面实现，包含：
+- 移动端组件
+- 平台适配代码
+- 导航配置
+```
+
+**与其他 Skill 的关系**：
+- **before**: frontend-design, tech-decision
+- **after**: code-review
+- **complement**: animation-vocabulary
+
+---
+
+### code-review
+
+**描述**：对指定 diff 做缺陷优先的完整 Review，并核对验收与交付证据
+
+**触发词**：
+- 中文：审查代码、Review、代码检查、代码审查
+- 英文：code review, review code, check code
+
+**适用场景**：
+- 功能完成后的 Review
+- Pull Request 审查
+- 代码质量检查
+
+**前置条件（gates）**：
+- 已有代码改动（git diff）
+- 功能实现基本完成
+- 需要质量检查
+
+**使用示例**：
+
+```
+用户输入：
+"审查用户登录功能的代码"
+
+系统行为：
+1. 读取 git diff
+2. 检查代码质量：
+   - 正确性（逻辑错误、边界条件）
+   - 安全性（SQL 注入、XSS）
+   - 性能（N+1 查询、内存泄漏）
+   - 可维护性（命名、注释、复杂度）
+3. 检查验收条件覆盖
+4. 给出修复建议
+
+预期输出：
+Review 报告，包含：
+- 发现的问题（按严重程度排序）
+- 修复建议
+- AC 覆盖情况
+- Review 结果（pass / fail）
+```
+
+**与其他 Skill 的关系**：
+- **before**: crud-development, api-development, ui-pc
+- **after**: git-commit（修复后）
+- **complement**: bug-detective, check
+
+---
+
+### bug-detective
+
+**描述**：用证据排查调用链故障
+
+**触发词**：
+- 中文：定位问题、报错、不工作、出错了、故障排查、Bug 修复
+- 英文：debug, troubleshoot, fix bug, error
+
+**适用场景**：
+- Bug 排查
+- 错误定位
+- 故障诊断
+
+**前置条件（gates）**：
+- 已确认是故障而非需求变更
+- 有可观察的错误现象
+- 已有基本调查线索
+
+**使用示例**：
+
+```
+用户输入：
+"用户登录失败，报错 401"
+
+系统行为：
+1. 收集错误信息（日志、调用栈）
+2. 分析错误原因
+3. 定位问题代码
+4. 提供修复方案
+
+预期输出：
+故障分析报告，包含：
+- 错误现象
+- 根本原因
+- 修复方案
+- 预防措施
+```
+
+**与其他 Skill 的关系**：
+- **before**: 无（故障发生时调用）
+- **after**: universal-development（修复）, code-review
+- **complement**: error-handler
+
+---
+
+### git-commit
+
+**描述**：精确暂存、commit 与明确授权后的 push 入口
+
+**触发词**：
+- 中文：提交并推送、推送代码、git 提交、提交代码
+- 英文：commit and push, git commit, push code
+
+**适用场景**：
+- 功能完成后提交代码
+- Review 通过后推送
+- 每个 Feature 一次提交
+
+**前置条件（gates）**：
+- 已有待提交的改动
+- code-review 通过
+- 所有 AC 有证据
+
+**使用示例**：
+
+```
+用户输入：
+"提交用户登录功能"
+
+系统行为：
+1. 精确暂存写集内文件
+   git add src/api/user/login.ts src/pages/login.vue
+2. 生成规范的 commit message
+3. 提交
+   git commit -m "feat: implement user login"
+4. 推送
+   git push origin feature/user-login
+5. 验证远端
+
+预期输出：
+代码已提交并推送到远端
+TODO 状态自动更新为 [x]
+```
+
+**与其他 Skill 的关系**：
+- **before**: code-review
+- **after**: 无（功能完成）
+- **complement**: git-workflow
+
+---
+
+### git-workflow
+
+**描述**：处理 Git 分支、历史与冲突
+
+**触发词**：
+- 中文：合并分支、创建分支、解决冲突、rebase、Git 操作
+- 英文：merge branch, create branch, resolve conflict, rebase
+
+**适用场景**：
+- 分支管理
+- 合并代码
+- 解决冲突
+- 历史管理
+
+**使用示例**：
+
+```
+用户输入：
+"创建功能分支 feature/user-login"
+
+系统行为：
+git checkout -b feature/user-login
+
+用户输入：
+"合并主分支"
+
+系统行为：
+git fetch origin
+git merge origin/main
+# 如有冲突，提示解决
+```
+
+**与其他 Skill 的关系**：
+- **before**: 无
+- **after**: git-commit
+- **complement**: git-commit
+
+---
+
+### project-navigator
+
+**描述**：从规则、构建清单和源码发现真实项目结构与参考实现
+
+**触发词**：
+- 中文：项目导航、查找组件、项目结构、代码定位
+- 英文：project navigation, find component, code structure
+
+**适用场景**：
+- 了解项目结构
+- 查找可复用组件
+- 定位参考实现
+
+**使用示例**：
+
+```
+用户输入：
+"查找项目中的 API 请求工具"
+
+系统行为：
+1. 扫描项目结构
+2. 查找 API 相关代码
+3. 分析使用方式
+
+预期输出：
+找到 src/utils/request.ts
+用途：封装 axios，统一请求/响应处理
+使用示例：import { request } from '@/utils/request'
+```
+
+**与其他 Skill 的关系**：
+- **before**: 无
+- **after**: 无
+- **complement**: 所有实施类 Skill
+
+---
+
+### frontend-polish
+
+**描述**：审查并优化已有前端实现的布局、交互、视觉与可用性
+
+**触发词**：
+- 中文：优化这个页面、页面有点、交互有点、性能优化、前端优化
+- 英文：optimize page, improve performance, frontend optimization
+
+**适用场景**：
+- 已有页面的优化
+- 性能优化
+- 交互改善
+
+**前置条件（gates）**：
+- 已有页面实现
+- 需要优化而非重新设计
+
+**冲突解决**：
+- vs `frontend-design`: frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化
+
+**使用示例**：
+
+```
+用户输入：
+"优化用户登录页面的加载性能"
+
+系统行为：
+1. 分析性能瓶颈
+2. 提出优化方案（懒加载、代码分割、缓存）
+3. 实施优化
+4. 对比优化前后数据
+
+预期输出：
+优化报告，包含：
+- 性能基准数据
+- 优化措施
+- 优化后数据
+- 对比结果
+```
+
+**与其他 Skill 的关系**：
+- **before**: ui-pc, ui-app
+- **after**: code-review
+- **complement**: performance-doctor
+
+---
+
+### progress
+
+**描述**：只读统计当前开发者唯一 TODO 的功能进度
+
+**触发词**：
+- 中文：查看进度、统计进度、进度如何、完成情况
+- 英文：check progress, show progress, progress status
+
+**适用场景**：
+- 查看任务完成情况
+- 统计进度百分比
+- 识别阻塞任务
+
+**使用示例**：
+
+```
+用户输入：
+"查看当前进度"
+
+系统行为：
+1. 读取 TODO 文件
+2. 统计 Feature 状态
+3. 计算进度百分比
+4. 识别阻塞和依赖
+
+预期输出：
+Epic: USER-MGMT
+进度: 6/10 (60%)
+  ✓ INFRA-DB
+  ✓ INFRA-SECURITY
+  ✓ USER-REG-API
+  ✓ USER-REG-PAGE
+  ~ USER-LOGIN-API（进行中）
+  ☐ USER-LOGIN-PAGE
+  ☐ USER-PROFILE-API
+  ☐ USER-PROFILE-PAGE
+  ☐ USER-CHANGE-PWD-API
+  ☐ USER-CHANGE-PWD-PAGE
+```
+
+**与其他 Skill 的关系**：
+- **before**: 无
+- **after**: 无
+- **complement**: project-navigator, task-todo-workflow
+
+---
+
+### universal-development
+
+**描述**：在没有适用专业 Skill 时作为最低优先级兜底
+
+**触发词**：
+- 中文：开发、实现、写代码
+- 英文：develop, implement, write code
+
+**适用场景**：
+- 没有更具体的 Skill 时的兜底
+- 通用功能实现
+
+**前置条件（gates）**：
+- 已有批准需求
+- 已进入执行阶段
+- 没有更适合的专业 Skill
+
+**冲突解决**：
+- vs 所有专业 Skill: 专业 Skill 优先，universal-development 兜底
+
+**使用示例**：
+
+```
+用户输入：
+"实现 XXX 功能"（没有触发其他专业 Skill）
+
+系统行为：
+作为兜底 Skill 执行通用开发流程
+```
+
+**与其他 Skill 的关系**：
+- **before**: 所有专业 Skill
+- **after**: code-review
+- **complement**: 无
+
+<Aside type="caution">
+universal-development 是兜底 Skill，优先级最低。尽量使用更具体的专业 Skill。
+</Aside>
+
+---
+
+## 使用建议
+
+1. **优先使用专业 Skill**：这 20 个 Skill 覆盖了核心流程，优先使用它们而不是 universal-development
+2. **明确触发词**：使用 Skill 的精确触发词，避免歧义
+3. **遵循流程**：按 task-todo-workflow → product-manager → architecture-design → tech-decision → project-manager 的顺序推进
+4. **每个 Feature 完整实现**：crud-development 覆盖前后端+数据层，不要只实现一部分
+
+## 下一步
+
+- [Medium 优先级](/skills/catalog/medium) - 查看专业领域 Skill
+- [使用指南](/skills/usage) - 学习如何使用这些 Skill
+- [最佳实践](/skills/best-practices) - 掌握使用技巧

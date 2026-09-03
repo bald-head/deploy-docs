@@ -1,0 +1,127 @@
+---
+title: Skills Framework
+description: 为 Claude Code 和 Codex 打造的智能 Skill 插件框架
+order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 什么是 Skills Framework？
+
+Skills Framework 是一套为 Claude Code、Codex 等 Coding Agent 设计的研发 SOP（标准操作流程）+ Skill 插件系统。它通过 95 个专业 Skill、智能路由系统和 Runtime Hook，帮助 AI 智能体准确理解开发者意图，并按最佳实践完成软件工程任务。
+
+<Aside type="tip">
+**核心优势**：96%+ 路由准确率 | 74 个典型场景覆盖 | 587 个自然语言触发词
+</Aside>
+
+## 核心特性
+
+### 🎯 智能路由系统
+- **三层路由机制**：Frontmatter 元数据 + 路由决策树 + Runtime Hook 动态提示
+- **高准确率**：96%+ 的路由准确率，74/74 场景 100% 覆盖
+- **冲突解决**：自动识别歧义场景，通过 conflicts 规则选择最佳 Skill
+- **自然语言触发**：支持 587 个中英文触发词，包括口语化表达
+
+### 📦 95 个专业 Skill
+- **Critical & High 优先级**：20 个核心 Skill 覆盖产品、架构、开发、测试全流程
+- **Medium 优先级**：30 个专业 Skill 覆盖数据库、安全、前端、Git 等领域
+- **Low & Fallback**：45 个扩展 Skill 覆盖特殊场景和工具集成
+
+### 🔗 Runtime Hook
+- **自动上下文注入**：每次请求自动加载行为内核、项目记忆和 TODO 状态
+- **命令防护**：检测高风险 Bash 命令和强制推送，防止误操作
+- **TODO 管理**：自动管理当前开发者唯一 TODO，支持并行任务和依赖管理
+- **中文提示音**：任务完成、需要确认时自动语音提醒
+
+### 💾 项目记忆系统
+- **单一真相源**：每个项目唯一的 `PROJECT-MEMORY.md`，记录稳定事实和复用地图
+- **按需加载**：只注入与当前问题相关的记忆摘要，控制上下文预算
+- **自动维护**：`project-details` Skill 自动归并稳定事实，避免重复采集
+
+## 快速导航
+
+### 新手入门
+- [快速开始](/skills/getting-started) - 安装、配置和第一个 Skill
+- [核心概念](/skills/core-concepts) - 理解 Skill 系统、路由机制、Runtime Hook
+
+### 使用指南
+- [新项目开始](/skills/usage/new-project) - 从零到一的完整流程
+- [功能开发流程](/skills/usage/feature-development) - 详细的开发步骤
+- [TODO 管理](/skills/usage/todo-management) - 任务管理和并行开发
+
+### Skill 目录
+- [Critical & High 优先级](/skills/catalog/critical-high) - 20 个核心 Skill
+- [Medium 优先级](/skills/catalog/medium) - 30 个专业 Skill
+- [Low & Fallback](/skills/catalog/low-fallback) - 45 个扩展 Skill
+
+### 进阶内容
+- [最佳实践](/skills/best-practices) - 常见场景和避坑指南
+- [故障排查](/skills/troubleshooting) - 常见问题解决方案
+
+## 典型使用场景
+
+### 场景 1：新项目启动
+```bash
+# 只需要自然语言描述
+"我要做一个用户管理系统"
+```
+系统自动触发：`product-manager` → `architecture-design` → `tech-decision` → `project-manager`
+
+### 场景 2：需求变更
+```bash
+# 口语化表达
+"需求改了，用户表要加一个手机号字段"
+```
+系统自动触发：`change-impact-analysis` → 分析受影响的 API、数据库、前端页面
+
+### 场景 3：代码优化
+```bash
+# 明确指向
+"优化这个页面的加载性能"
+```
+系统自动触发：`frontend-polish` → 审查现有实现 → 提供优化方案
+
+### 场景 4：Git 操作
+```bash
+# 简单命令
+"提交代码并推送"
+```
+系统自动触发：`git-commit` → 精确暂存 → commit → push → 远端校验
+
+## 系统架构
+
+```
+用户输入（自然语言）
+  ↓
+Runtime Hook 预处理
+  ↓
+触发词匹配（triggers.zh / triggers.en）
+  ↓
+前置条件检查（gates）
+  ↓
+冲突解决（conflicts）
+  ↓
+选择最佳 Skill
+  ↓
+加载 SKILL.md 完整规则
+  ↓
+执行 Skill 逻辑
+  ↓
+自动路由到后续 Skill（related_skills.after）
+```
+
+<Aside type="caution">
+**重要**：Skills Framework 不是 Workflow Engine、Agent Orchestrator 或项目管理平台，而是给 Coding Agent 使用的研发 SOP + Skill 插件框架。
+</Aside>
+
+## 兼容性
+
+- ✅ **Claude Code**：通过 `~/.claude/skills` 发现
+- ✅ **Codex**：通过 `~/.agents/skills` 发现
+- ✅ **跨客户端一致性**：共享行为内核和路由规则
+
+## 下一步
+
+<Aside type="tip">
+从[快速开始](/skills/getting-started)页面开始，手把手教你安装和使用第一个 Skill。
+</Aside>

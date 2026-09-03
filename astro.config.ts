@@ -46,6 +46,19 @@ export default defineConfig({
                             {label:"日志", autogenerate: {directory: 'java/logging'}},
                         ]
                     },
+                    {
+                        label: 'Skills Framework',
+                        link: '/skills/',
+                        icon: 'rocket',
+                        items: [
+                            {label: '快速开始', link: '/skills/getting-started'},
+                            {label: '核心概念', autogenerate: {directory: 'skills/core-concepts'}},
+                            {label: '使用指南', autogenerate: {directory: 'skills/usage'}},
+                            {label: 'Skill 目录', autogenerate: {directory: 'skills/catalog'}},
+                            {label: '最佳实践', link: '/skills/best-practices'},
+                            {label: '故障排查', link: '/skills/troubleshooting'},
+                        ]
+                    },
                 ])
             ],
             social: {

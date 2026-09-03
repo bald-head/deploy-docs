@@ -1,0 +1,301 @@
+---
+title: 核心概念总览
+description: 理解 Skills Framework 的核心概念和设计理念
+order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 设计理念
+
+Skills Framework 遵循以下核心设计理念：
+
+### 事实先行
+
+- **先读取适用规则**：从项目记忆和已批准边界出发
+- **信息不足时明确缺口**：不猜测，不假设
+- **区分事实和假设**：输出明确标注已确认事实、待确认假设、通用建议
+
+### 简单优先
+
+- **最简单方案**：选择满足目标的最简单方案
+- **不为假设需求增加抽象**：没有明确需求，不增加兼容层或流程
+- **避免过度设计**：只做当前需要的，不为未来可能性预留
+
+### 最小写集
+
+- **只修改目标直接需要的文件**：不改无关代码
+- **保留无关现状**：不顺手重构
+- **写集互斥检查**：并行任务通过写集检测冲突
+
+### 目标驱动
+
+- **以可观察用户结果判断完成**：不是代码量或文档
+- **验收和新鲜证据**：每个 AC（验收条件）都要有证据
+- **不以自报状态替代**：必须有真实的 diff、测试、Review
+
+### 按需加载
+
+- **Harness 原生提供 Skill 元数据**：不重复注入清单
+- **命中后再读取 SKILL.md**：降低上下文负担
+- **只加载相关项目记忆**：不是整个记忆文件
+
+### 有界推进
+
+- **已授权且边界明确时直接执行**
+- **真实决策、越界或高风险不可逆动作才停门**：不过度确认
+- **委派必须有唯一 Owner**：避免多人改同一文件
+- **写集互斥**：并行任务的写集必须不重叠
+
+## 核心组件
+
+Skills Framework 由四个核心组件构成：
+
+### 1. Skill 系统
+
+95 个自包含的能力单元，每个 Skill 包含：
+
+- **SKILL.md**：完整的规则和逻辑
+- **frontmatter 元数据**：触发词、前置条件、冲突规则、依赖关系
+- **references/**：可选的参考文档
+
+详见：[Skill 系统详解](/skills/core-concepts/skill-system)
+
+### 2. 路由机制
+
+三层智能路由系统：
+
+- **Frontmatter 元数据**：结构化的触发词、gates、conflicts
+- **路由决策树**：74 个场景、587 个触发词、优先级排序
+- **Runtime Hook 动态提示**：上下文感知、状态机检查
+
+详见：[路由机制](/skills/core-concepts/routing)
+
+### 3. Runtime Hook
+
+每次请求自动运行的钩子：
+
+- **SessionStart**：启动时检查配置一致性
+- **UserPromptSubmit**：注入行为内核、项目记忆、TODO 提醒
+- **PreToolUse**：命令防护、流程门禁
+- **Stop**：自动完成检查、续作下一任务
+- **SubagentStart / SubagentStop**：子智能体上下文和交接
+
+详见：[Runtime Hook](/skills/core-concepts/runtime-hooks)
+
+### 4. 项目记忆
+
+每个项目唯一的 `PROJECT-MEMORY.md`：
+
+- **Quick facts**：技术栈、架构、约定
+- **Reuse map**：组件、工具类、API 复用地图
+- **Boundaries**：不使用的技术、禁止的模式
+
+详见：[项目记忆](/skills/core-concepts/project-memory)
+
+## 工作流程
+
+### 典型请求生命周期
+
+```
+1. 用户输入
+   "需求改了，用户表要加手机号字段"
+   
+2. Runtime Hook 预处理
+   - 读取 PROJECT-MEMORY.md
+   - 检查当前 TODO 状态
+   - 注入行为内核
+   
+3. 触发词匹配
+   "需求改了" → 匹配 change-impact-analysis.triggers.zh
+   
+4. 前置条件检查（gates）
+   ✓ 已有批准的范围
+   ✓ 发生真实变化
+   ✓ 存在唯一 TODO 文件
+   
+5. 冲突解决（conflicts）
+   change-impact-analysis 负责已有范围的变更
+   product-manager 负责新项目产品定义
+   → 选择 change-impact-analysis
+   
+6. 加载 SKILL.md
+   读取完整规则和逻辑
+   
+7. 执行 Skill
+   - 分析受影响的 API、数据库、前端
+   - 更新 TODO 中的受影响任务
+   
+8. 自动路由后续 Skill
+   related_skills.after: [project-manager, task-todo-workflow]
+```
+
+### 新功能完整流程
+
+```
+1. task-todo-workflow
+   建立流程状态机：
+   intake → requirements-analysis → requirements-confirmation
+   → technical-plan → technical-confirmation → task-breakdown
+   → code-generation → business-development → code-review
+   → test-generation → test-run → user-acceptance
+   → git-delivery → complete
+
+2. product-manager
+   - 研究现有类似功能
+   - brainstorm 方案
+   - 定义产品契约（用户、能力、菜单、规则、权限、验收）
+
+3. frontend-design（如有 UI）
+   - grilling 澄清关键交互
+   - 输出 DesignContract
+   - 定义页面结构、状态、约束
+
+4. architecture-design
+   - 设计模块边界
+   - 定义数据所有权
+   - 确定部署边界
+
+5. tech-decision（每个 Feature 独立选型）
+   - 比较可行技术
+   - 选出可实施、可验证、可回退的方案
+   - 记录 reuse-existing 或新技术
+
+6. project-manager
+   - 生成功能+菜单形式的 TODO
+   - 标注依赖关系和写集
+   - 分配 Owner
+
+7. 业务实施（按 TODO 顺序）
+   - universal-development / crud-development
+   - 每功能完成前后端/数据生产层
+   - 开发者自验
+
+8. code-review
+   - 缺陷优先 Review
+   - 检查验收条件覆盖
+
+9. git-commit（每功能一次）
+   - 精确暂存写集内文件
+   - commit + push
+   - 远端校验
+
+10. 续作下一任务
+    - 检查依赖是否满足
+    - 原子领取下一个 Ready Feature
+```
+
+<Aside type="tip">
+**Lite / Standard / High-risk 档位**：
+- **Lite**：只裁剪重复文书，不裁剪交付面
+- **Standard**：完整规划和证据
+- **High-risk**：额外的风险边界、回滚、方案复核、发布检查
+</Aside>
+
+## 关键术语
+
+### Feature
+
+可独立验收的功能单元，包含：
+
+- **唯一 ID**：如 `USER-REG`（大写字母、数字、连字符）
+- **状态**：`[ ]` 未开始、`[~]` 进行中、`[x]` 完成、`[!]` 阻塞
+- **依赖**：`无` 或反引号 ID 列表
+- **Owner**：当前开发者 ID
+- **执行实例**：Runtime Instance ID（仅 `[~]` 时）
+- **写集**：该 Feature 修改的文件列表
+
+### Epic
+
+同一 TODO 内的完成汇总，不可领取：
+
+```markdown
+## Epic: USER-MGMT - 用户管理系统
+- [x] `USER-REG` 用户注册
+- [~] `USER-LOGIN` 用户登录
+- [ ] `USER-PROFILE` 个人信息
+```
+
+最后一个子 Feature 完成时，Epic 自动变为 `[x]`。
+
+### AC (Acceptance Criteria)
+
+验收条件，必须有证据：
+
+```markdown
+- AC-001: 用户可以通过表单注册
+  证据: src/pages/register.vue + 手工测试截图
+  
+- AC-002: 密码强度校验
+  证据: src/utils/password.test.ts + 单元测试 PASS
+```
+
+### 写集 (Write Set)
+
+Feature 修改的文件列表，用于检测并行冲突：
+
+```markdown
+- [ ] `USER-REG` 用户注册
+  写集: `src/api/user/register.ts`, `src/pages/register.vue`, `src/router/index.ts`
+  
+- [ ] `USER-LOGIN` 用户登录
+  写集: `src/api/user/login.ts`, `src/pages/login.vue`
+```
+
+如果两个 Feature 写集不重叠，可以并行开发。
+
+### 流程状态机
+
+新项目或新功能的强制推进流程：
+
+```
+intake（需求录入）
+→ requirements-analysis（需求分析）
+→ requirements-confirmation（需求确认，需 --confirmed）
+→ technical-plan（技术方案）
+→ technical-confirmation（方案确认，需 --confirmed）
+→ task-breakdown（任务拆分）
+→ code-generation（代码生成阶段）
+→ business-development（业务开发）
+→ code-review（代码审查）
+→ test-generation（测试生成阶段）
+→ test-run（测试运行）
+→ user-acceptance（用户验收）
+→ git-delivery（Git 交付）
+→ complete（完成）
+```
+
+<Aside type="caution">
+**PreToolUse 防护**：在 `business-development` 前，禁止直接修改生产文件，只允许只读调查、状态机命令和规划文档写入。
+</Aside>
+
+## 设计约束
+
+### 不是什么
+
+Skills Framework **不是**：
+
+- ❌ Workflow Engine（工作流引擎）
+- ❌ Agent Orchestrator（智能体编排器）
+- ❌ 项目管理平台
+- ❌ CI/CD 系统
+- ❌ 通用自动化框架
+
+### 是什么
+
+Skills Framework **是**：
+
+- ✅ 给 Coding Agent 使用的研发 SOP
+- ✅ Skill 插件框架
+- ✅ 智能路由系统
+- ✅ 项目记忆管理
+- ✅ TODO 状态机
+
+## 下一步
+
+探索各个核心概念的详细内容：
+
+- [Skill 系统详解](/skills/core-concepts/skill-system) - Skill 的结构、元数据、协作方式
+- [路由机制](/skills/core-concepts/routing) - 三层路由、冲突解决、优先级
+- [Runtime Hook](/skills/core-concepts/runtime-hooks) - Hook 生命周期、命令防护、TODO 管理
+- [项目记忆](/skills/core-concepts/project-memory) - 记忆结构、按需加载、自动维护
