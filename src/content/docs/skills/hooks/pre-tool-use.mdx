@@ -1,0 +1,653 @@
+---
+title: PreToolUse Hook
+description: 命令防护和流程门禁详解
+order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+PreToolUse Hook 在每个工具调用前执行，负责拦截高风险命令、检测敏感信息泄露、执行流程门禁检查，是 Skills Framework 的安全防护核心。
+
+**关键职责**：
+- **命令防护**：拦截破坏性 Bash 命令
+- **敏感信息检测**：防止 API Key、私钥泄露
+- **流程门禁**：规划阶段禁止生产文件写入
+- **写集冲突检测**：防止并行任务文件冲突
+
+## 触发时机
+
+在以下工具调用前触发：
+
+| 工具类型 | 工具名称 | 检查内容 |
+|---------|---------|---------|
+| **命令执行** | Bash, exec_command | 破坏性命令、敏感信息 |
+| **文件写入** | Write, Edit, MultiEdit | 流程门禁、写集冲突 |
+| **Notebook 编辑** | NotebookEdit | 流程门禁 |
+| **补丁应用** | apply_patch | 敏感信息、流程门禁 |
+
+## 命令防护
+
+### 破坏性命令检测
+
+PreToolUse Hook 会拦截以下高风险命令：
+
+#### 1. 递归删除
+
+```bash
+# ❌ 拒绝
+rm -rf /
+rm -rf /*
+rm -rf ~
+rm -rf ~/important-dir
+find . -name "*.log" -delete
+
+# ✅ 允许（明确目标）
+rm -rf ./temp/specific-dir
+rm specific-file.txt
+```
+
+**拒绝原因**：
+- 影响范围不可控
+- 难以回滚
+- 可能删除系统文件
+
+#### 2. 强制推送
+
+```bash
+# ❌ 拒绝
+git push --force
+git push -f
+git push --force-with-lease
+
+# ✅ 允许
+git push
+git push origin feature-branch
+```
+
+**拒绝原因**：
+- 覆盖远端历史
+- 影响团队成员
+- 难以恢复
+
+#### 3. 数据库删除
+
+```bash
+# ❌ 拒绝
+DROP TABLE users
+DROP DATABASE production
+TRUNCATE TABLE orders
+
+# ✅ 允许
+DELETE FROM users WHERE id = 123
+SELECT * FROM users
+```
+
+**拒绝原因**：
+- 数据不可恢复
+- 影响生产环境
+- 需要备份和回滚计划
+
+#### 4. 权限修改
+
+```bash
+# ❌ 拒绝
+chmod -R 777 /
+chown -R root:root /home
+
+# ✅ 允许
+chmod +x script.sh
+chown $USER:$USER file.txt
+```
+
+**拒绝原因**：
+- 安全风险
+- 可能破坏系统权限
+- 难以回滚
+
+### 破坏性命令完整列表
+
+```javascript
+// 高风险模式
+const DESTRUCTIVE_PATTERNS = [
+  // 递归删除
+  /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|--recursive\s+--force)/,
+  /\bfind\b.*-delete/,
+  
+  // 强制推送
+  /\bgit\s+push\s+(--force|-f|--force-with-lease)/,
+  
+  // 数据库删除
+  /\b(DROP\s+(TABLE|DATABASE|SCHEMA)|TRUNCATE\s+TABLE)\b/i,
+  
+  // 批量文件操作
+  /\bmv\s+.*\s+\/dev\/null/,
+  /\bdd\s+if=/,
+  
+  // 权限修改
+  /\bchmod\s+-R\s+777/,
+  /\bchown\s+-R\s+root/,
+];
+```
+
+### 绕过命令防护
+
+如果确认命令安全，可以临时禁用：
+
+```bash
+# 临时禁用（单次命令）
+AGENT_COMMAND_GUARD=0 claude
+
+# 或在会话中
+export AGENT_COMMAND_GUARD=0
+```
+
+<Aside type="caution">
+只在完全理解命令影响且有完整备份时禁用防护。
+</Aside>
+
+## 敏感信息检测
+
+PreToolUse Hook 会扫描命令和文件内容，检测以下敏感信息：
+
+### 1. 私钥
+
+```bash
+# ❌ 拒绝
+echo "-----BEGIN PRIVATE KEY-----" > key.pem
+cat private-key.pem | pbcopy
+
+# ✅ 允许（引用路径）
+chmod 600 ~/.ssh/id_rsa
+ssh-keygen -t rsa
+```
+
+**检测模式**：
+```regex
+/-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/
+```
+
+### 2. GitHub Token
+
+```bash
+# ❌ 拒绝
+export GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyz
+git clone https://ghp_xxx@github.com/user/repo.git
+
+# ✅ 允许
+gh auth login
+git clone https://github.com/user/repo.git
+```
+
+**检测模式**：
+```regex
+/\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})\b/
+```
+
+### 3. OpenAI API Key
+
+```bash
+# ❌ 拒绝
+export OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz
+curl -H "Authorization: Bearer sk-..."
+
+# ✅ 允许
+export OPENAI_API_KEY=$(cat .env | grep OPENAI_API_KEY)
+```
+
+**检测模式**：
+```regex
+/\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/
+```
+
+### 4. AWS Access Key
+
+```bash
+# ❌ 拒绝
+export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+
+# ✅ 允许
+aws configure
+```
+
+**检测模式**：
+```regex
+/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/
+```
+
+### 5. JWT Token
+
+```bash
+# ❌ 拒绝
+curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# ✅ 允许（从文件读取）
+TOKEN=$(cat token.txt)
+curl -H "Authorization: Bearer $TOKEN"
+```
+
+**检测模式**：
+```regex
+/\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b/
+```
+
+### 完整敏感信息列表
+
+```javascript
+const SECRET_PATTERNS = [
+  { name: '私钥', pattern: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/ },
+  { name: 'GitHub Token', pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})\b/ },
+  { name: 'GitLab Token', pattern: /\bglpat-[A-Za-z0-9_-]{20,}\b/ },
+  { name: 'OpenAI API Key', pattern: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/ },
+  { name: 'AWS Access Key', pattern: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/ },
+  { name: 'Slack Token', pattern: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/ },
+  { name: 'JWT', pattern: /\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b/ },
+];
+```
+
+### 跳过敏感信息检查
+
+```bash
+# 启动时传入参数
+node runtime-hooks/scripts/pre-tool-use.cjs --skip-credential-checks
+```
+
+<Aside type="caution">
+只在测试环境或确认无风险时跳过检查。生产环境必须启用。
+</Aside>
+
+## 流程门禁
+
+PreToolUse Hook 会检查当前任务的流程状态，在规划阶段禁止生产文件写入。
+
+### 流程状态机
+
+```
+intake
+  ↓
+requirements-analysis
+  ↓
+requirements-confirmation
+  ↓
+technical-plan
+  ↓
+technical-confirmation
+  ↓
+task-breakdown
+  ↓
+code-generation
+  ↓
+business-development  ← 允许生产文件写入
+  ↓
+code-review
+  ↓
+test-generation
+  ↓
+test-run
+  ↓
+user-acceptance
+  ↓
+git-delivery
+  ↓
+complete
+```
+
+### 规划阶段限制
+
+在 `business-development` 阶段前，PreToolUse Hook 会拦截以下操作：
+
+#### 1. 生产文件写入
+
+```bash
+# 当前阶段: requirements-analysis
+
+# ❌ 拒绝
+Write src/api/user.ts
+Edit src/components/Header.vue
+
+# ✅ 允许（规划文档）
+Write docs/design.md
+Write docs/architecture.md
+Edit docs/requirements.md
+```
+
+**拒绝原因**：
+- 需求尚未确认
+- 技术方案未定
+- 任务未拆分
+
+#### 2. 允许的文件类型
+
+规划阶段允许写入以下文件：
+
+```javascript
+const PLANNING_DOCUMENT_EXTENSIONS = [
+  '.adoc',     // AsciiDoc
+  '.drawio',   // 流程图
+  '.md',       // Markdown
+  '.mmd',      // Mermaid
+  '.puml',     // PlantUML
+  '.rst',      // reStructuredText
+  '.txt',      // 纯文本
+];
+```
+
+### 检查逻辑
+
+```javascript
+function workflowWriteGate(toolName, toolInput) {
+  // 1. 检查是否是文件写入工具
+  if (!FILE_WRITE_TOOLS.has(toolName)) {
+    return { allowed: true };
+  }
+  
+  // 2. 读取 TODO 中的流程状态
+  const workflow = readWorkflowState();
+  
+  // 3. 如果没有流程状态机，允许写入
+  if (!workflow) {
+    return { allowed: true };
+  }
+  
+  // 4. 检查当前阶段
+  const currentStage = workflow.currentStage;
+  
+  // 5. business-development 及之后允许写入
+  if (isBusinessDevelopmentOrLater(currentStage)) {
+    return { allowed: true };
+  }
+  
+  // 6. 检查文件类型
+  const filePath = extractFilePath(toolInput);
+  const ext = path.extname(filePath);
+  
+  if (PLANNING_DOCUMENT_EXTENSIONS.includes(ext)) {
+    return { allowed: true };
+  }
+  
+  // 7. 拒绝生产文件写入
+  return {
+    allowed: false,
+    reason: `当前阶段 ${currentStage} 禁止修改生产文件。请先完成需求确认和技术方案。`,
+  };
+}
+```
+
+### 推进状态机
+
+使用状态机命令推进流程：
+
+```bash
+# 启动规划
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-start
+
+# 推进到下一阶段
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-advance
+
+# 确认阶段（requirements-confirmation 或 technical-confirmation）
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-advance --confirmed
+
+# 记录阻塞
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-block --reason "等待用户确认"
+
+# 恢复
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-resume
+```
+
+## 写集冲突检测
+
+PreToolUse Hook 会检查写入的文件是否在当前 Feature 的写集内。
+
+### 写集定义
+
+每个 Feature 在 TODO 中声明写集：
+
+```markdown
+- [~] `USER-LOGIN` 用户登录
+  - 依赖: USER-REG
+  - 写集: src/api/user/login.ts, src/pages/login.vue, src/router/index.ts
+  - 执行实例: agent-123
+```
+
+### 冲突场景
+
+#### 场景 1：并行任务写集冲突
+
+```markdown
+# Alice 的任务
+- [~] `USER-LOGIN` 用户登录
+  - 写集: src/api/user/login.ts, src/router/index.ts
+  - 执行实例: alice-agent
+
+# Bob 的任务
+- [ ] `USER-REG` 用户注册
+  - 写集: src/api/user/register.ts, src/router/index.ts
+  - 依赖: 无
+```
+
+**冲突文件**：`src/router/index.ts`
+
+**PreToolUse 行为**：
+- Alice 已领取 USER-LOGIN，可以写入 `src/router/index.ts`
+- Bob 尝试领取 USER-REG 时被拒绝（写集冲突）
+
+#### 场景 2：写集外文件
+
+```markdown
+- [~] `USER-LOGIN` 用户登录
+  - 写集: src/api/user/login.ts, src/pages/login.vue
+  - 执行实例: agent-123
+```
+
+**尝试写入**：`src/components/Header.vue`
+
+**PreToolUse 行为**：
+
+```
+❌ 运行时安全提醒：文件 src/components/Header.vue 不在当前 Feature 写集内。
+请先更新 TODO 写集或创建独立任务。
+```
+
+### 更新写集
+
+如果确实需要修改写集外文件：
+
+```bash
+# 方案 1：更新当前 Feature 写集
+vim docs/alice-chen/tasks/todo/project.md
+
+# 修改写集
+- [~] `USER-LOGIN` 用户登录
+  - 写集: src/api/user/login.ts, src/pages/login.vue, src/components/Header.vue
+
+# 方案 2：创建独立任务
+"添加优化 Header 组件的任务"
+```
+
+## 警告模式
+
+对于中风险操作，PreToolUse Hook 会发出警告但不拒绝：
+
+```bash
+# 启用警告模式
+export AGENT_RUNTIME_WARNINGS=1
+```
+
+**警告示例**：
+
+```bash
+# 执行
+chmod 755 script.sh
+
+# 输出
+⚠️  运行时安全提醒：修改文件权限。请核对目标与回滚方式。
+```
+
+## 工作原理
+
+### 执行流程
+
+```mermaid
+graph TD
+    A[工具调用] --> B{PreToolUse Hook}
+    B --> C{禁用检查?}
+    C -->|是| D[允许]
+    C -->|否| E{工具类型}
+    E -->|Bash| F[命令防护检查]
+    E -->|Write/Edit| G[流程门禁检查]
+    E -->|其他| D
+    F --> H{破坏性命令?}
+    H -->|是| I[拒绝]
+    H -->|否| J{敏感信息?}
+    J -->|是| I
+    J -->|否| D
+    G --> K{规划阶段?}
+    K -->|是| L{规划文档?}
+    L -->|是| D
+    L -->|否| I
+    K -->|否| M{写集内?}
+    M -->|是| D
+    M -->|否| I
+```
+
+### 输入格式
+
+PreToolUse Hook 通过 stdin 接收 JSON 输入：
+
+```json
+{
+  "toolName": "Bash",
+  "toolInput": {
+    "command": "rm -rf /tmp/test"
+  },
+  "sessionContext": {
+    "workingDirectory": "/project",
+    "gitRoot": "/project",
+    "developerName": "alice-chen"
+  }
+}
+```
+
+### 输出格式
+
+Hook 通过 stdout 返回 JSON 输出：
+
+**允许**：
+
+```json
+{}
+```
+
+**拒绝**：
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "检测到高风险命令 rm -rf"
+  }
+}
+```
+
+**警告**：
+
+```json
+{
+  "systemMessage": "运行时安全提醒：修改文件权限。请核对目标与回滚方式。"
+}
+```
+
+## 配置选项
+
+### 环境变量
+
+```bash
+# 完全禁用 Hook
+export AGENT_RUNTIME_HOOKS_DISABLED=1
+
+# 只禁用命令防护
+export AGENT_COMMAND_GUARD=0
+
+# 启用运行时警告
+export AGENT_RUNTIME_WARNINGS=1
+
+# 跳过敏感信息检查（脚本参数）
+node runtime-hooks/scripts/pre-tool-use.cjs --skip-credential-checks
+```
+
+### 临时禁用
+
+```bash
+# 单次会话禁用
+AGENT_COMMAND_GUARD=0 claude
+
+# 会话内禁用
+export AGENT_COMMAND_GUARD=0
+```
+
+## 故障排查
+
+### 合法命令被拦截
+
+**症状**：安全的命令被错误拒绝。
+
+**解决方案**：
+
+```bash
+# 1. 检查命令模式
+echo "rm specific-file.txt" | node runtime-hooks/scripts/pre-tool-use.cjs
+
+# 2. 如果确认安全，临时禁用
+AGENT_COMMAND_GUARD=0 claude
+
+# 3. 报告误报（如果是 Bug）
+```
+
+### 流程门禁阻止写入
+
+**症状**：
+
+```
+当前阶段 requirements-analysis 禁止修改生产文件
+```
+
+**解决方案**：
+
+```bash
+# 1. 检查当前阶段
+cat docs/alice-chen/tasks/todo/project.md | grep "当前阶段"
+
+# 2. 推进状态机
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-advance
+
+# 3. 确认阶段后推进
+node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-advance --confirmed
+```
+
+### 写集冲突
+
+**症状**：
+
+```
+文件 src/router/index.ts 不在当前 Feature 写集内
+```
+
+**解决方案**：
+
+```bash
+# 方案 1：更新写集
+vim docs/alice-chen/tasks/todo/project.md
+# 在当前 Feature 的写集中添加该文件
+
+# 方案 2：创建独立任务
+"添加修改 router 的任务"
+```
+
+## 下一步
+
+- [UserPromptSubmit Hook](/skills/hooks/user-prompt-submit) - 上下文注入详解
+- [Stop Hook](/skills/hooks/stop) - TODO 续作详解
+- [故障排查](/skills/hooks/troubleshooting) - 更多常见问题
+- [最佳实践](/skills/best-practices) - 避免触发防护
