@@ -1,0 +1,580 @@
+---
+title: frontend-design
+description: 前端设计 - 建立可实施的 UI/UX 设计基线
+order: 16
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`frontend-design` 是 **High 优先级** Skill，负责为新增或重构界面建立 UI/UX 设计基线，定义页面结构、交互、状态与约束。
+
+**适用场景**：
+- 新页面或重构页面设计
+- 复杂交互存在歧义
+- 客户要求先审设计
+- 用户明确要求页面设计
+
+**不适用场景**：
+- 已有页面的纯视觉精修 → 使用 `frontend-polish`
+- 代码实现 → 使用 `ui-pc` 或 `ui-app`
+- 产品定义 → 使用 `product-manager`
+- 后端 API 设计 → 使用 `api-development`
+
+## 快速开始
+
+### 设计新页面的完整流程
+
+```bash
+# 1. 确认产品定义已完成
+# 查看 TODO 中的功能描述、用户结果、验收条件
+
+# 2. 消费 brainstorm 结论（如有）
+# 不在设计阶段重复发散
+
+# 3. 开始设计
+"设计用户列表页面"
+"设计订单管理界面"
+
+# 4. 确认关键交互决策
+# 只在无法取证且会实质改变设计时询问
+
+# 5. 输出设计基线
+# 更新项目设计文档或 TODO
+
+# 6. 交给实现 Skill
+/ui-pc    # PC/管理端
+/ui-app   # 跨端应用
+```
+
+## 使用示例
+
+### 场景 1：设计用户管理页面
+
+**输入**：
+```
+需要设计一个用户管理页面，包括用户列表、搜索、编辑和删除功能
+```
+
+**设计流程**：
+
+1. **明确产品意图**：
+```yaml
+productIntent:
+  users: ["管理员"]
+  tasks: ["查看用户列表", "搜索用户", "编辑用户信息", "删除用户"]
+  success: ["快速找到目标用户", "准确修改信息", "安全删除"]
+  nonGoals: ["用户注册", "批量导入", "权限分配"]
+```
+
+2. **定义页面结构**：
+```yaml
+surfaces:
+  - surfaceId: "user-list"
+    routeOrEntry: "/user/list"
+    purpose: "帮助管理员查看、搜索和管理用户"
+    informationHierarchy:
+      - "搜索筛选区（邮箱、手机、状态）"
+      - "用户表格（ID、姓名、邮箱、手机、状态、创建时间）"
+      - "操作列（编辑、删除）"
+    realContentAndDataShape:
+      - "用户 ID: Long 雪花 ID"
+      - "姓名: String, 最长 50 字符"
+      - "邮箱: String, 符合邮箱格式"
+      - "手机: String, 11 位数字"
+      - "状态: Enum (ACTIVE, INACTIVE, BANNED)"
+      - "创建时间: DateTime, yyyy-MM-dd HH:mm:ss"
+    layoutAndResponsiveRules:
+      - "1920×1080: 3 列筛选 + 完整表格"
+      - "1366×768: 2 列筛选 + 表格收缩非关键列"
+      - "移动端: 单列筛选 + 卡片列表"
+```
+
+3. **定义组件和动作**：
+```yaml
+componentsAndActions:
+  - actionId: "search-user"
+    label: "搜索"
+    behavior: "输入条件 → 点击搜索 → Loading → 显示结果"
+    permission: "user:query"
+    backendContract: "GET /api/v1/users?email=&phone=&status="
+  
+  - actionId: "edit-user"
+    label: "编辑"
+    behavior: "点击编辑 → 打开 Dialog → 修改信息 → 保存 → 刷新列表"
+    permission: "user:update"
+    backendContract: "PUT /api/v1/users/{id}"
+  
+  - actionId: "delete-user"
+    label: "删除"
+    behavior: "点击删除 → 二次确认 → 提交 → 成功提示 → 刷新列表"
+    permission: "user:delete"
+    backendContract: "DELETE /api/v1/users/{id}"
+```
+
+4. **定义状态**：
+```yaml
+states:
+  - default: "默认显示，表格和筛选正常"
+  - loading: "搜索中，表格显示 Loading"
+  - empty: "无数据，显示空状态提示"
+  - error: "请求失败，显示错误信息和重试按钮"
+  - success: "操作成功，显示成功提示"
+  - hover: "鼠标悬停时，行高亮"
+  - focus-visible: "键盘焦点时，显示焦点框"
+  - disabled: "无权限时，按钮禁用"
+```
+
+5. **无障碍和动效**：
+```yaml
+accessibility:
+  - "支持键盘导航（Tab、Enter、Escape）"
+  - "焦点状态清晰可见"
+  - "表格使用语义化标签（table、thead、tbody）"
+  - "操作按钮有明确的 aria-label"
+  - "颜色对比度符合 WCAG AA 标准"
+
+motion:
+  - "表格加载：骨架屏渐显"
+  - "删除确认：Dialog 淡入淡出"
+  - "操作成功：Toast 提示从顶部滑入"
+  - "支持 prefers-reduced-motion"
+```
+
+### 场景 2：设计订单详情页
+
+**输入**：
+```
+设计订单详情页，显示订单信息、商品列表、物流信息和操作
+```
+
+**设计输出**：
+
+```yaml
+designBaseline:
+  productIntent:
+    users: ["客服人员", "订单管理员"]
+    tasks: ["查看订单完整信息", "修改订单状态", "联系客户", "处理退款"]
+    success: ["快速了解订单情况", "准确处理订单问题"]
+    nonGoals: ["创建订单", "批量导出", "统计分析"]
+
+  surfaces:
+    - surfaceId: "order-detail"
+      routeOrEntry: "/order/detail/:id"
+      purpose: "帮助客服和管理员查看和处理订单"
+      informationHierarchy:
+        - "订单基本信息（订单号、状态、金额、下单时间）"
+        - "商品列表（商品名、数量、单价、小计）"
+        - "收货信息（收货人、手机、地址）"
+        - "物流信息（物流公司、运单号、物流状态）"
+        - "操作区（修改状态、联系客户、退款）"
+      realContentAndDataShape:
+        - "订单号: String, 20 位"
+        - "状态: Enum (PENDING, PAID, SHIPPED, COMPLETED, CANCELLED)"
+        - "金额: Decimal(10,2), 单位元"
+        - "商品: Array<{name, quantity, price, subtotal}>"
+        - "物流: {company, trackingNumber, status, updateTime}"
+      layoutAndResponsiveRules:
+        - "1920×1080: 两栏布局，左侧主信息，右侧操作和时间线"
+        - "1366×768: 单栏布局，操作区固定在顶部"
+        - "移动端: 单栏布局，操作区底部悬浮"
+      componentsAndActions:
+        - actionId: "update-status"
+          label: "修改状态"
+          behavior: "选择新状态 → 确认 → 提交 → 刷新详情"
+          permission: "order:update"
+          backendContract: "PUT /api/v1/orders/{id}/status"
+        - actionId: "refund"
+          label: "退款"
+          behavior: "输入退款金额和原因 → 二次确认 → 提交 → 等待审核"
+          permission: "order:refund"
+          backendContract: "POST /api/v1/orders/{id}/refund"
+      states:
+        - default: "正常显示订单信息"
+        - loading: "加载中，显示骨架屏"
+        - empty: "订单不存在，显示 404 提示"
+        - error: "加载失败，显示错误信息和返回按钮"
+        - pending: "操作进行中，按钮禁用"
+        - success: "操作成功，显示成功提示"
+      accessibility:
+        - "面包屑导航，返回列表页"
+        - "状态徽章有语义化颜色和文本"
+        - "金额格式化，千分位分隔"
+        - "手机号脱敏，仅显示前 3 后 4 位"
+        - "操作需要二次确认，防止误操作"
+
+  designSystem:
+    reuse:
+      - "El-Card / Card 组件"
+      - "El-Table / Table 组件"
+      - "El-Button / Button 组件"
+      - "El-Dialog / Modal 组件"
+      - "项目主题 tokens"
+    additions:
+      - "订单状态徽章颜色: PENDING=orange, PAID=blue, SHIPPED=cyan, COMPLETED=green, CANCELLED=gray"
+      - "时间线组件（如项目中不存在）"
+  
+  verification:
+    targetViewportsOrDevices:
+      - "1920×1080 (管理员常用)"
+      - "1366×768 (客服常用)"
+      - "iPad (移动办公)"
+    requiredStates:
+      - "订单各状态正常显示"
+      - "修改状态 Dialog 正常打开"
+      - "退款 Dialog 正常打开和提交"
+      - "加载和错误状态正常"
+    unresolvedBoundaries:
+      - "物流信息实时更新机制待后端确认"
+      - "退款审核流程待产品确认"
+```
+
+### 场景 3：设计数据看板
+
+**输入**：
+```
+设计销售数据看板，展示销售趋势、top 商品和地区分布
+```
+
+**设计输出**：
+
+```yaml
+designBaseline:
+  productIntent:
+    users: ["销售总监", "运营人员"]
+    tasks: ["查看销售趋势", "分析 top 商品", "对比地区销售"]
+    success: ["快速发现异常", "辅助决策", "定位问题区域"]
+    nonGoals: ["数据导出", "明细查询", "实时刷新"]
+
+  surfaces:
+    - surfaceId: "sales-dashboard"
+      routeOrEntry: "/dashboard/sales"
+      purpose: "帮助管理层快速了解销售情况"
+      informationHierarchy:
+        - "关键指标卡片（今日销售额、订单数、客单价、环比增长）"
+        - "销售趋势图（最近 30 天销售额和订单量）"
+        - "Top 10 商品（商品名、销售额、销量、占比）"
+        - "地区分布地图（各省销售额热力图）"
+      realContentAndDataShape:
+        - "销售额: Decimal(12,2), 单位元"
+        - "订单数: Integer"
+        - "客单价: Decimal(8,2), 计算值"
+        - "环比增长: Decimal(5,2), 百分比"
+        - "趋势数据: Array<{date, sales, orders}>"
+        - "商品数据: Array<{name, sales, quantity, percentage}>"
+        - "地区数据: Map<provinceCode, sales>"
+      layoutAndResponsiveRules:
+        - "1920×1080: 2×2 网格 + 趋势图全宽 + 2 列图表"
+        - "1366×768: 单列布局，图表堆叠"
+      componentsAndActions:
+        - actionId: "change-date-range"
+          label: "切换时间范围"
+          behavior: "选择日期范围 → 重新加载数据 → 更新图表"
+          permission: "dashboard:view"
+          backendContract: "GET /api/v1/dashboard/sales?startDate=&endDate="
+        - actionId: "drill-down"
+          label: "下钻"
+          behavior: "点击地区 → 跳转地区详情页"
+          permission: "dashboard:view"
+          backendContract: "路由跳转 /region/detail/{code}"
+      states:
+        - default: "正常显示数据和图表"
+        - loading: "首屏加载，显示骨架屏"
+        - empty: "无数据，显示空状态提示"
+        - error: "加载失败，显示错误信息和重试"
+        - refreshing: "刷新中，显示局部 Loading"
+      accessibility:
+        - "关键指标使用大字号和高对比度"
+        - "图表提供数据表格备用视图"
+        - "颜色不作为唯一区分手段"
+        - "支持键盘导航和焦点管理"
+      motion:
+        - "指标卡片：数字滚动动画"
+        - "趋势图：线条绘制动画"
+        - "地图：热力渐变动画"
+        - "支持 prefers-reduced-motion（直接显示最终状态）"
+
+  designSystem:
+    reuse:
+      - "项目图表库（ECharts / VChart）"
+      - "栅格布局系统"
+      - "主题 tokens"
+    additions:
+      - "指标卡片组件（如不存在）"
+      - "地图组件配置"
+  
+  feasibilityProbe:
+    status: "pending-g2"
+    question: "地图组件是否支持省级热力图和点击下钻？"
+    ownerSkill: "tech-decision"
+    evidence: "待验证图表库的地图插件和交互能力"
+    fallbackDesign: "如地图不可用，改用表格 + 柱状图展示地区销售"
+  
+  verification:
+    targetViewportsOrDevices:
+      - "1920×1080 (管理层常用大屏)"
+      - "1366×768 (运营人员常用屏幕)"
+    requiredStates:
+      - "指标卡片正常显示和更新"
+      - "趋势图正常渲染和交互"
+      - "Top 商品表格正常显示"
+      - "地图（或降级方案）正常显示"
+      - "日期范围切换正常工作"
+    unresolvedBoundaries:
+      - "数据更新频率待产品确认"
+      - "地图技术可行性待 tech-decision 验证"
+```
+
+## 关键规则
+
+### 1. 消费产品定义，不重复发散
+
+```markdown
+<!-- 正确: 消费 brainstorm 结论 -->
+brainstorm 已选中: 列表页 + 筛选 + 批量操作
+→ frontend-design 直接设计列表页交互和状态
+
+<!-- 错误: 重复发散 -->
+frontend-design 又开始比较: 列表 vs 卡片 vs 看板
+→ 浪费时间，产生冲突
+```
+
+### 2. 真实产品而非模板
+
+```markdown
+<!-- 正确: 基于真实任务 -->
+- 用户角色: 客服人员
+- 核心任务: 快速查找订单并处理问题
+- 信息密度: 高（需要扫描大量订单）
+- 主要输入: 键盘为主，鼠标辅助
+→ 设计: 强大的筛选 + 快捷键 + 批量操作
+
+<!-- 错误: 套用模板 -->
+- 用户角色: 不明确
+- 设计: Hero + 三列卡片 + 紫蓝渐变
+→ 不符合实际需求
+```
+
+### 3. 状态、权限与恢复
+
+```markdown
+必须覆盖的状态:
+- default: 正常状态
+- loading: 加载中
+- empty: 无数据
+- error: 错误
+- success: 成功
+- 适用的交互状态: hover, focus-visible, disabled, pending
+
+权限处理:
+- 前端权限只负责界面体验
+- 不能因为按钮不可见就请求未授权数据
+- 必须有后端强校验
+
+恢复路径:
+- 错误时提供重试按钮
+- 操作失败时提供撤销或回滚
+- 网络断开时提供离线提示
+```
+
+### 4. 响应式、无障碍与动效
+
+```markdown
+响应式:
+- 不固定 1920×1080
+- 根据真实用户设备定义断点
+- 窄窗口下保持主任务可用
+
+无障碍:
+- 键盘/触控路径等价
+- 焦点状态清晰可见
+- 语义化标签
+- 颜色对比度符合 WCAG AA
+
+动效:
+- 必须有反馈、状态或连续性目的
+- 可中断
+- 支持 prefers-reduced-motion
+- 不使用无目的装饰动画
+```
+
+## 设计基线字段说明
+
+### productIntent（产品意图）
+
+```yaml
+users: ["<目标用户角色>"]
+tasks: ["<用户核心任务>"]
+success: ["<可观察的成功结果>"]
+nonGoals: ["<明确不做的事情>"]
+```
+
+### surfaces（页面/表面）
+
+```yaml
+surfaceId: "<页面唯一标识>"
+routeOrEntry: "<路由或入口>"
+purpose: "<该页面帮助谁完成什么>"
+informationHierarchy: ["<内容顺序和优先级>"]
+realContentAndDataShape: ["<真实数据形状和类型>"]
+layoutAndResponsiveRules: ["<布局和断点规则>"]
+componentsAndActions: [<组件和动作定义>]
+states: [<状态列表>]
+accessibility: [<无障碍要求>]
+motion: [<动效定义>]
+```
+
+### componentsAndActions（组件和动作）
+
+```yaml
+actionId: "<动作唯一标识>"
+label: "<用户可见文案>"
+behavior: "<交互流程>"
+permission: "<权限语义>"
+backendContract: "<API 契约>"
+```
+
+### designSystem（设计系统）
+
+```yaml
+reuse: ["<已有组件/tokens/字体/图表>"]
+additions: ["<新增项及原因>"]
+themes: ["<实际需要的主题>"]
+```
+
+### feasibilityProbe（可行性探针）
+
+```yaml
+status: not-required | pending-g2 | passed | fallback-selected | failed
+question: "<技术问题>"
+ownerSkill: "<验证 Skill>"
+evidence: "<证据>"
+fallbackDesign: "<降级方案>"
+```
+
+### verification（验证）
+
+```yaml
+targetViewportsOrDevices: ["<目标设备/尺寸>"]
+requiredStates: ["<必须渲染的状态>"]
+unresolvedBoundaries: ["<待确认内容>"]
+```
+
+## Skill 协调
+
+`frontend-design` 与以下 Skill 配合：
+
+| 阶段 | Skill |
+|------|-------|
+| 产品定义 | product-manager |
+| 构思发散 | brainstorm |
+| 设计基线 | frontend-design |
+| PC 实现 | ui-pc |
+| App 实现 | ui-app |
+| 页面精修 | frontend-polish |
+| 动效审查 | review-animations |
+
+<Aside type="note">
+frontend-design 只负责输出设计基线，不负责代码实现或操作 Git。
+</Aside>
+
+## 与其他 Skill 的关系
+
+### 选择决策
+
+```text
+新页面设计 → frontend-design
+已有页面精修 → frontend-polish
+PC 页面实现 → ui-pc
+App 页面实现 → ui-app
+产品定义 → product-manager
+```
+
+### Related Skills
+
+**前置依赖**:
+- `product-manager` - 产品定义
+- `brainstorm` - 构思发散
+
+**后续推荐**:
+- `ui-pc` - PC 实现
+- `ui-app` - App 实现
+- `frontend-polish` - 页面精修
+
+**协作 Skill**:
+- `review-animations` - 动效审查
+- `animation-vocabulary` - 动效术语
+- `tech-decision` - 技术验证
+
+## 最佳实践
+
+### 1. 先事实后设计
+
+```markdown
+<!-- 正确: 基于事实 -->
+1. 读取产品定义、用户角色、核心任务
+2. 查看项目设计系统、组件库、相邻页面
+3. 基于事实设计页面结构和交互
+
+<!-- 错误: 直接套模板 -->
+1. 不看产品定义
+2. 不看项目设计系统
+3. 直接套用 Hero + 卡片模板
+```
+
+### 2. 真实内容和数据形状
+
+```markdown
+<!-- 正确: 真实数据 -->
+- 用户 ID: Long 雪花 ID, 19 位数字
+- 姓名: String, 最长 50 字符
+- 邮箱: String, 符合邮箱格式
+- 状态: Enum (ACTIVE, INACTIVE, BANNED)
+
+<!-- 错误: 模糊类型 -->
+- 用户信息: Object
+- 状态: String
+```
+
+### 3. 完整状态覆盖
+
+```markdown
+<!-- 正确: 覆盖全部状态 -->
+- default: 正常显示
+- loading: 加载中
+- empty: 无数据
+- error: 错误
+- success: 成功
+- hover: 悬停
+- focus-visible: 焦点
+- disabled: 禁用
+- pending: 进行中
+
+<!-- 错误: 只设计正常态 -->
+- default: 正常显示
+- （其他状态缺失）
+```
+
+### 4. 明确未确认边界
+
+```markdown
+<!-- 正确: 明确标注 -->
+unresolvedBoundaries:
+  - "物流信息更新机制待后端确认"
+  - "退款审核流程待产品确认"
+  - "地图技术可行性待 tech-decision 验证"
+
+<!-- 错误: 假装已确认 -->
+- 物流信息实时更新（未确认）
+- 退款自动审核（未确认）
+- 使用 ECharts 地图（未验证）
+```
+
+## 下一步
+
+- [ui-pc](/skills/skills-reference/high/ui-pc) - PC 页面实现
+- [ui-app](/skills/skills-reference/high/ui-app) - App 页面实现
+- [frontend-polish](/skills/skills-reference/high/frontend-polish) - 页面精修
+- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义
+- [brainstorm](/skills/skills-reference/high/brainstorm) - 构思发散
