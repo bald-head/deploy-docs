@@ -11,7 +11,7 @@ import { Aside } from '@astrojs/starlight/components'
 每个 Skill 的 `SKILL.md` 文件开头包含 YAML frontmatter，定义了路由所需的结构化元数据。这些元数据是三层路由机制的第一层，直接影响 Skill 的触发准确率。
 
 <Aside type="tip">
-**当前覆盖率**：95 个 Skill 中的 87 个已完成结构化增强（91.5%），剩余 8 个将在后续批次完成。
+**当前覆盖率**：95 个 Skill 全部完成结构化增强（100%），触发词总数 1064 个（中文 626 + 英文 438）。
 </Aside>
 
 ## 完整结构
@@ -120,11 +120,30 @@ tags: [database, schema, migration]
 
 #### 结构
 
+触发词支持两种合法的 YAML 格式：
+
+**嵌套格式**（推荐用于长列表）：
 ```yaml
 triggers:
-  zh: [中文触发词列表]
-  en: [English trigger list]
+  zh:
+    - 中文触发词1
+    - 口语化表达
+    - 技术名词
+  en:
+    - English trigger 1
+    - technical term
 ```
+
+**数组格式**（适合短列表）：
+```yaml
+triggers:
+  zh: [中文触发词1, 口语化表达, 技术名词]
+  en: [English trigger 1, technical term]
+```
+
+<Aside type="note">
+**格式分布**：95 个 Skill 中，72 个使用嵌套格式，23 个使用数组格式。两种格式在路由系统中完全等价。
+</Aside>
 
 #### 数量指导
 
