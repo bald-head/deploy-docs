@@ -1,94 +1,149 @@
 ---
-title: 使用指南总览
+title: 实践指南
 description: 场景化的使用指南，涵盖常见开发流程
-order: 1
+order: 20
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-## 使用指南概述
+## 实践指南概述
 
 本节提供场景化的操作指南，帮助你在实际开发中使用 Skills Framework。每个指南都包含详细的步骤、预期输出和检查点。
 
-## 核心流程指南
+<Aside type="tip">
+**推荐学习路径**：  
+新手 → [5分钟快速体验](/skills/quickstart/) → [第一个功能开发实战](/skills/first-feature/) → 本节实践指南
+</Aside>
 
-### 新项目开发
+## 按场景选择指南
 
-从零开始一个新项目的完整流程。
+### 🆕 新项目开发
 
 **适合场景**：
 - 启动全新项目
 - 搭建项目基础架构
 - 建立开发规范
 
-👉 [新项目开始](/skills/usage/new-project/)
+**关键 Skill**：task-todo-workflow → product-manager → architecture-design
 
-### 功能开发
+👉 [新项目开发指南](/skills/usage/new-project/)
 
-在已有项目中开发新功能的详细步骤。
+---
+
+### 🔧 功能开发
 
 **适合场景**：
-- 实现新的业务功能
-- 添加新的 API 接口
-- 开发新的页面
+- 在已有项目中开发新功能
+- 实现业务需求
+- 添加 API 或页面
+
+**关键 Skill**：product-manager → frontend-design → tech-decision → project-manager
 
 👉 [功能开发流程](/skills/usage/feature-development/)
 
-### 代码审查
+---
 
-使用 code-review Skill 进行代码审查的完整流程。
+### 🔄 需求变更
+
+**适合场景**：
+- 已批准的需求发生变化
+- 添加/删除字段
+- 修改业务逻辑
+
+**关键 Skill**：change-impact-analysis → project-manager
+
+👉 [需求变更处理](/skills/usage/requirement-change/)
+
+---
+
+### 🐛 Bug 修复
+
+**适合场景**：
+- 发现并修复 Bug
+- 故障排查
+- 紧急问题处理
+
+**关键 Skill**：bug-detective → universal-development → code-review
+
+👉 [Bug 修复流程](/skills/usage/bug-fix/)
+
+---
+
+### 🔍 代码审查
 
 **适合场景**：
 - 功能完成后的 Review
 - Pull Request 审查
 - 代码质量检查
 
+**关键 Skill**：code-review
+
 👉 [代码审查流程](/skills/usage/code-review/)
 
-### Git 工作流
+---
 
-使用 Git 相关 Skill 管理代码版本。
+### 📝 Git 工作流
 
 **适合场景**：
 - 分支管理
 - 提交和推送代码
 - 解决合并冲突
 
+**关键 Skill**：git-commit, git-workflow
+
 👉 [Git 操作指南](/skills/usage/git-workflow/)
 
-### TODO 管理
+---
 
-管理任务清单和并行开发。
+### ✅ TODO 管理
 
 **适合场景**：
 - 多任务并行开发
 - 任务依赖管理
 - 进度追踪
 
+**关键 Skill**：task-todo-workflow, add-todo, update-status, progress
+
 👉 [TODO 管理](/skills/usage/todo-management/)
 
-## 快速参考
+---
 
-### 常见命令
+### 👥 团队协作
 
-```bash
-# 查看 Skill 列表
-/skills
+**适合场景**：
+- 多人并行开发
+- 任务交接
+- 冲突解决
 
-# 查看当前 TODO
-cat docs/<your-name>/tasks/todo/<project>.md
+**关键 Skill**：task-todo-workflow, git-workflow
 
-# 查看项目记忆
-cat docs/PROJECT-MEMORY.md
+👉 [团队协作指南](/skills/usage/team-collaboration/)
 
-# 查看进度
-"查看进度"  # 触发 progress Skill
+---
 
-# 提交代码
-"提交代码"  # 触发 git-commit Skill
-```
+## 快速决策树
 
-### 常见自然语言触发
+不确定该看哪个指南？回答几个问题：
+
+### 问题 1：是新项目还是已有项目？
+
+- **新项目** → [新项目开发](/skills/usage/new-project/)
+- **已有项目** → 继续问题 2
+
+### 问题 2：是新功能、变更还是 Bug？
+
+- **新功能** → [功能开发](/skills/usage/feature-development/)
+- **需求变更** → [需求变更](/skills/usage/requirement-change/)
+- **Bug 修复** → [Bug 修复](/skills/usage/bug-fix/)
+
+### 问题 3：需要协作吗？
+
+- **单人开发** → 按上述场景选择
+- **多人协作** → 先看 [团队协作](/skills/usage/team-collaboration/)
+
+## 常用自然语言触发
+
+不需要记住 Skill 名称，直接用自然语言描述你要做什么：
 
 | 你想做什么 | 说什么 | 触发的 Skill |
 |-----------|--------|-------------|
@@ -102,236 +157,67 @@ cat docs/PROJECT-MEMORY.md
 | 提交代码 | "提交并推送代码" | git-commit |
 | 查看进度 | "查看当前进度" | progress |
 
-### 流程状态机阶段
-
-新功能开发会经过以下阶段：
-
-```
-需求录入 → 需求分析 → 需求确认 ⚠️
-→ 技术方案 → 方案确认 ⚠️
-→ 任务拆分 → 代码生成
-→ 业务开发 ✅ → 代码审查
-→ 测试生成 → 测试运行
-→ 用户验收 → Git 交付 → 完成
-```
-
-<Aside type="caution">
-业务开发阶段前，不允许修改生产代码，只能进行只读调查和规划文档编写。
+<Aside type="tip">
+系统会根据触发词、前置条件（gates）和冲突规则（conflicts）自动选择最合适的 Skill，准确率 96%+。
 </Aside>
 
-## 工作流选择指南
+## 常用命令
 
-### 场景 1：全新项目
+```bash
+# 查看 Skill 列表
+/skills
 
-```
-你的情况: 从零开始一个项目
-推荐流程: 新项目开发
-关键 Skill: task-todo-workflow → product-manager → architecture-design
-预计时间: 2-4 小时（取决于项目复杂度）
-```
+# 查看当前 TODO
+cat docs/<your-name>/tasks/todo/<project>.md
 
-### 场景 2：已有项目，新功能开发
+# 查看项目记忆
+cat PROJECT-MEMORY.md
 
-```
-你的情况: 在现有项目中添加新功能
-推荐流程: 功能开发流程
-关键 Skill: product-manager → frontend-design → tech-decision → project-manager
-预计时间: 1-2 小时（规划） + 实际开发时间
-```
+# 查看进度
+"查看进度"  # 触发 progress Skill
 
-### 场景 3：需求变更
+# 提交代码
+"提交代码"  # 触发 git-commit Skill
 
-```
-你的情况: 已批准的需求发生变化
-推荐流程: 直接触发 change-impact-analysis
-关键 Skill: change-impact-analysis → project-manager
-预计时间: 30 分钟 - 1 小时
-```
-
-### 场景 4：Bug 修复
-
-```
-你的情况: 发现并修复 Bug
-推荐流程: 故障排查 → 直接修复 → code-review
-关键 Skill: bug-detective → universal-development → code-review
-预计时间: 30 分钟 - 2 小时（取决于 Bug 复杂度）
-```
-
-### 场景 5：代码优化
-
-```
-你的情况: 优化已有代码的性能或质量
-推荐流程: 直接触发对应 Skill
-关键 Skill: frontend-polish / performance-doctor / simplify
-预计时间: 30 分钟 - 2 小时
+# 启用路由调试
+AGENT_DEBUG_ROUTING=1 claude
 ```
 
 ## 开发模式选择
 
-Skills Framework 支持三种开发模式（档位）：
+不同场景选择不同的档位和自主模式：
 
-### Lite（轻量模式）
+| 场景 | 档位 | 自主模式 | 预计时间 |
+|------|------|---------|---------|
+| 快速原型验证 | Lite | Build | 30 分钟 - 1 小时 |
+| 日常功能开发 | Standard | Build | 1-4 小时 |
+| 复杂新功能 | Standard | Plan | 2-8 小时 |
+| 技术调研 | Lite | Goal | 30 分钟 - 1 小时 |
+| 数据库迁移 | High-risk | Plan | 2-4 小时 |
+| Bug 修复 | Lite | Build | 30 分钟 - 2 小时 |
+| 支付功能 | High-risk | Plan | 4-8 小时 |
 
-**特点**：
-- 只裁剪重复文书
-- 不裁剪交付面
-- 适合简单功能
+详细了解：[工作流与档位](/skills/core-concepts/workflow-modes/)
 
-**使用场景**：
-- 简单的 CRUD 功能
-- Bug 修复
-- 小型优化
+## 学习路径
 
-**在 TODO 中标注**：
-```markdown
-## Feature: USER-LOGIN
-档位: Lite
-```
+### 🚀 入门级（0-1 小时）
 
-### Standard（标准模式）
+1. [5分钟快速体验](/skills/quickstart/) - 立即看到效果
+2. [第一个功能开发实战](/skills/first-feature/) - 端到端完整流程
+3. [核心概念](/skills/core-concepts/) - 理解基本原理
 
-**特点**：
-- 完整规划和证据
-- 标准验收流程
-- 适合大多数功能
+### 📚 进阶级（1-3 小时）
 
-**使用场景**：
-- 常规业务功能
-- API 开发
-- 页面开发
+1. [功能开发流程](/skills/usage/feature-development/) - 掌握完整开发流程
+2. [需求变更处理](/skills/usage/requirement-change/) - 应对需求变化
+3. [团队协作指南](/skills/usage/team-collaboration/) - 多人并行开发
 
-**在 TODO 中标注**：
-```markdown
-## Feature: USER-MGMT
-档位: Standard
-```
+### 🚀 高级（3+ 小时）
 
-### High-risk（高风险模式）
-
-**特点**：
-- 额外的风险边界分析
-- 回滚方案
-- 方案复核
-- 发布检查
-
-**使用场景**：
-- 数据库迁移
-- 认证系统变更
-- 生产环境部署
-- 涉及安全的功能
-
-**在 TODO 中标注**：
-```markdown
-## Feature: AUTH-MIGRATION
-档位: High-risk
-```
-
-<Aside type="danger">
-**High-risk 模式要求**：
-- 必须有回滚方案
-- 必须有风险边界分析
-- 必须有方案复核
-- 完成摘要必须包含发布检查
-</Aside>
-
-## 自主模式选择
-
-与档位正交的自主模式决定当前授权内可连续执行到哪里：
-
-### Goal（目标模式）
-
-**特点**：
-- 只规划，不实施
-- 输出完整 TODO
-
-**使用场景**：
-- 需要人工审批
-- 需要外部资源
-- 不确定技术方案
-
-**在 TODO 中标注**：
-```markdown
-自主模式: Goal
-```
-
-### Plan（计划模式）
-
-**特点**：
-- 规划 + 部分实施
-- 关键步骤需确认
-
-**使用场景**：
-- 需要阶段性确认
-- 涉及多个系统
-- 需要协调资源
-
-### Build（构建模式）
-
-**特点**：
-- 完整实施
-- 自动推进
-
-**使用场景**：
-- 明确需求
-- 技术方案确定
-- 可独立完成
-
-**在 TODO 中标注**：
-```markdown
-自主模式: Build
-```
-
-<Aside type="tip">
-**推荐组合**：
-- Lite + Build：快速迭代
-- Standard + Build：常规开发
-- High-risk + Plan：关键变更，阶段确认
-</Aside>
-
-## 团队协作
-
-### 多人并行开发
-
-```markdown
-团队成员 Alice:
-  docs/alice-chen/tasks/todo/user-mgmt.md
-  [~] USER-LOGIN（写集: src/api/user/login.ts）
-
-团队成员 Bob:
-  docs/bob-wang/tasks/todo/user-mgmt.md
-  [~] USER-PROFILE（写集: src/api/user/profile.ts）
-
-写集无交集 → 可以并行 ✓
-```
-
-### 任务交接
-
-```markdown
-Alice 完成 USER-LOGIN:
-  [~] USER-LOGIN → [x] USER-LOGIN
-  commit + push
-
-Bob 开始 USER-SETTINGS:
-  依赖: USER-LOGIN (✓ 已完成)
-  领取: [ ] USER-SETTINGS → [~] USER-SETTINGS
-```
-
-### 冲突解决
-
-```markdown
-Alice 和 Bob 同时修改 src/router/index.ts:
-  
-检测冲突:
-  Alice: [~] USER-LOGIN（写集包含 src/router/index.ts）
-  Bob: 尝试领取 USER-REG（写集包含 src/router/index.ts）
-  
-结果: ✗ 写集冲突，Bob 不能领取
-
-解决方案:
-  1. 等待 Alice 完成
-  2. 或 Alice 先提交路由部分
-  3. 或调整写集边界
-```
+1. [Frontmatter 规范](/skills/advanced/frontmatter-spec/) - 深入路由机制
+2. [创建新 Skill](/skills/advanced/creating-skills/) - 扩展框架
+3. [路由调试](/skills/advanced/routing-debug/) - 解决复杂问题
 
 ## 常见问题
 
@@ -370,19 +256,7 @@ cat docs/<your-name>/tasks/todo/<project>.md
 "当前在哪个阶段？"
 ```
 
-### Q4: 如何回到之前的版本？
-
-```bash
-# 使用 Git
-git log  # 查看提交历史
-git checkout <commit-hash>  # 回到指定版本
-git revert <commit-hash>  # 撤销指定提交
-
-# 或使用 git-workflow Skill
-"回退到上一个版本"
-```
-
-### Q5: 如何处理紧急 Bug？
+### Q4: 如何处理紧急 Bug？
 
 ```bash
 # Bug 修复不需要经过完整流程状态机
@@ -390,15 +264,45 @@ git revert <commit-hash>  # 撤销指定提交
 "用户登录失败，报错 401"
 
 # 系统自动触发
-bug-detective → 排查 → universal-development → 修复 → code-review → git-commit
+bug-detective → 排查 → universal-development → 修复 
+→ code-review → git-commit
 ```
 
-## 下一步
+### Q5: 多人如何避免冲突？
 
-选择适合你当前场景的指南开始：
+每个任务都有写集（要修改的文件列表），系统自动检查：
+- ✅ 写集不冲突的任务可以并行
+- ❌ 写集冲突的任务必须串行
 
-- 🆕 [新项目开始](/skills/usage/new-project/) - 从零开始
-- 🔧 [功能开发流程](/skills/usage/feature-development/) - 开发新功能
-- 🔍 [代码审查流程](/skills/usage/code-review/) - Review 代码
-- 📝 [Git 操作指南](/skills/usage/git-workflow/) - Git 工作流
-- ✅ [TODO 管理](/skills/usage/todo-management/) - 任务管理
+详见：[团队协作指南](/skills/usage/team-collaboration/)
+
+## 获取帮助
+
+### 文档资源
+
+- 📖 [Skill 目录](/skills/catalog/) - 查看所有可用 Skill
+- 📖 [故障排查](/skills/troubleshooting/) - 常见问题解决
+- 📖 [最佳实践](/skills/best-practices/) - 经验总结
+
+### 调试工具
+
+```bash
+# 启用路由调试
+AGENT_DEBUG_ROUTING=1 claude
+
+# 查看路由统计
+node runtime-hooks/scripts/routing-stats.cjs
+
+# 检查 Runtime Hook 状态
+node runtime-hooks/scripts/skill-catalog-context.cjs --check
+```
+
+### 社区支持
+
+- GitHub Issues - 报告问题
+- Discussions - 讨论最佳实践
+- Pull Requests - 贡献代码
+
+---
+
+**准备好开始了吗？** 选择一个最符合你当前需求的指南，开始实践吧！

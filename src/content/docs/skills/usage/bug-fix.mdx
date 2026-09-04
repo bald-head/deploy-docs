@@ -1,0 +1,418 @@
+---
+title: Bug 修复流程
+description: 快速定位和修复生产问题
+order: 24
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+Bug 修复流程比完整功能开发更快速，跳过规划阶段，直接定位和修复。
+
+<Aside type="tip">
+**关键特点**：
+- 跳过完整流程状态机
+- 使用 Lite 档位（快速迭代）
+- 直接进入业务开发阶段
+</Aside>
+
+## 快速修复（5-30分钟）
+
+### 第 1 步：描述问题
+
+明确说明现象和错误信息：
+
+```
+用户登录失败，控制台报错 401 Unauthorized
+```
+
+**自动触发**：bug-detective
+
+### 第 2 步：自动定位
+
+系统会：
+
+1. **读取错误日志**
+   ```bash
+   # 自动执行
+   tail -n 100 logs/error.log
+   grep "401" logs/access.log
+   ```
+
+2. **定位相关代码**
+   ```
+   检查 src/api/auth/login.ts
+   检查 src/middleware/auth.ts
+   检查 JWT token 验证逻辑
+   ```
+
+3. **分析根因**
+   ```markdown
+   ## 根因分析
+   
+   **问题**：JWT token 过期时间设置错误
+   
+   **位置**：src/api/auth/login.ts:25
+   
+   **代码**：
+   ```typescript
+   const token = jwt.sign(payload, secret, { expiresIn: '1h' }); // 错误
+   ```
+   
+   **原因**：应该是 '7d'（7天）而不是 '1h'（1小时）
+   ```
+
+### 第 3 步：修复代码
+
+```
+修复登录 token 过期时间问题
+```
+
+**自动修复**：
+
+```typescript
+// src/api/auth/login.ts
+const token = jwt.sign(
+  payload,
+  process.env.JWT_SECRET,
+  { expiresIn: '7d' }  // ✓ 修复
+);
+```
+
+### 第 4 步：验证修复
+
+```bash
+# 自动执行测试
+npm test -- auth.test.ts
+
+# 手工验证
+curl -X POST http://localhost:3000/api/auth/login \
+  -d '{"email":"test@example.com","password":"123456"}'
+```
+
+✅ **检查点**：登录成功，token 有效期正确。
+
+### 第 5 步：Review 和提交
+
+```
+审查并提交修复
+```
+
+**自动流程**：
+```
+code-review → git-commit
+```
+
+**Commit message**：
+```
+fix: 修复登录 token 过期时间设置错误
+
+问题：用户登录后 1 小时 token 过期
+根因：src/api/auth/login.ts 中 expiresIn 设置为 '1h'
+修复：改为 '7d'
+
+验证：✓ 单元测试通过
+      ✓ 手工登录验证通过
+```
+
+## 常见 Bug 类型
+
+### 类型 1：逻辑错误
+
+**现象**：
+```
+用户无法删除自己创建的文章
+```
+
+**定位**：
+```typescript
+// 错误的权限判断
+if (article.authorId !== userId) {  // 逻辑反了
+  return res.status(403).json({ error: '无权限' });
+}
+```
+
+**修复**：
+```typescript
+if (article.authorId !== userId) {
+  return res.status(403).json({ error: '无权限' });
+}
+// ✓ 逻辑正确
+```
+
+### 类型 2：数据问题
+
+**现象**：
+```
+用户列表显示不全，只有 10 条
+```
+
+**定位**：
+```typescript
+// 忘记传 limit 参数
+const users = await User.findAll(); // 默认 limit=10
+```
+
+**修复**：
+```typescript
+const users = await User.findAll({ limit: 100 });
+```
+
+### 类型 3：配置错误
+
+**现象**：
+```
+生产环境 API 调用失败
+```
+
+**定位**：
+```bash
+# .env.production
+API_URL=http://localhost:3000  # ❌ 本地地址
+```
+
+**修复**：
+```bash
+API_URL=https://api.example.com  # ✓ 生产地址
+```
+
+### 类型 4：依赖问题
+
+**现象**：
+```
+npm install 报错
+```
+
+**定位**：
+```json
+// package.json
+{
+  "dependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^17.0.0"  // ❌ 版本不匹配
+  }
+}
+```
+
+**修复**：
+```json
+{
+  "dependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"  // ✓ 版本一致
+  }
+}
+```
+
+## 复杂 Bug（30分钟-2小时）
+
+### 多步骤定位
+
+```
+用户反馈：支付成功但订单状态未更新
+```
+
+**定位流程**：
+
+1. **检查支付回调日志**
+   ```bash
+   grep "payment_callback" logs/app.log
+   ```
+
+2. **检查数据库事务**
+   ```sql
+   SELECT * FROM orders WHERE id = 123;
+   SELECT * FROM payments WHERE order_id = 123;
+   ```
+
+3. **分析代码逻辑**
+   ```typescript
+   // 发现问题：事务未正确提交
+   await order.update({ status: 'paid' });
+   // ❌ 缺少 transaction.commit()
+   ```
+
+4. **修复**
+   ```typescript
+   const transaction = await sequelize.transaction();
+   try {
+     await order.update({ status: 'paid' }, { transaction });
+     await payment.update({ status: 'success' }, { transaction });
+     await transaction.commit();  // ✓ 正确提交
+   } catch (error) {
+     await transaction.rollback();
+     throw error;
+   }
+   ```
+
+## Bug 修复最佳实践
+
+### 1. 明确复现步骤
+
+❌ 模糊：
+```
+登录有问题
+```
+
+✅ 明确：
+```
+用户登录失败，步骤：
+1. 打开 /login 页面
+2. 输入邮箱 test@example.com
+3. 输入密码 123456
+4. 点击登录按钮
+5. 控制台报错 401 Unauthorized
+```
+
+### 2. 保留错误现场
+
+```bash
+# 保存错误日志
+cp logs/error.log logs/error-2026-09-04.log
+
+# 记录环境信息
+node --version
+npm list
+```
+
+### 3. 最小化修改
+
+只修复 Bug 本身，不顺便重构：
+
+❌ 过度修改：
+```typescript
+// 修复 Bug 的同时重构了整个文件
+// 增加了 Review 难度和风险
+```
+
+✅ 最小修改：
+```typescript
+// 只修改导致 Bug 的那一行
+const token = jwt.sign(payload, secret, { expiresIn: '7d' });
+```
+
+### 4. 添加防护
+
+修复后增加防护措施：
+
+```typescript
+// 修复前
+const user = await User.findById(userId);
+user.update({ ... });  // ❌ 如果 user 是 null 会报错
+
+// 修复后
+const user = await User.findById(userId);
+if (!user) {
+  return res.status(404).json({ error: '用户不存在' });
+}
+user.update({ ... });  // ✓ 增加了空值检查
+```
+
+### 5. 验证修复
+
+```bash
+# 执行相关测试
+npm test -- login.test.ts
+
+# 手工验证复现步骤
+# 按照 Bug 报告的步骤再走一遍
+
+# 检查日志
+tail -f logs/app.log
+```
+
+## 紧急 Bug 处理
+
+### 线上故障（立即处理）
+
+```
+档位: Lite
+自主模式: Build
+流程: 定位 → 修复 → 验证 → 热修复发布
+```
+
+**示例**：
+```
+生产环境支付失败，用户无法下单
+```
+
+**紧急流程**：
+```
+1. 定位问题（5分钟）
+2. 修复代码（10分钟）
+3. 本地验证（5分钟）
+4. 发布热修复（10分钟）
+5. 监控验证（持续）
+```
+
+### 回滚方案
+
+如果修复失败或引入新问题：
+
+```
+回滚支付修复
+```
+
+**系统会**：
+```bash
+# 回退到上一个稳定版本
+git revert <commit-hash>
+
+# 或
+git reset --hard <last-stable-commit>
+git push --force
+```
+
+## 常见陷阱
+
+### 陷阱 1：只看表面
+
+❌ 只修复症状：
+```typescript
+// Bug: 用户列表为空
+if (users.length === 0) {
+  users = [{ id: 1, name: 'Default' }];  // ❌ 硬编码假数据
+}
+```
+
+✅ 找到根因：
+```typescript
+// 根因: 查询条件错误
+const users = await User.findAll({
+  where: { deleted: false }  // ✓ 修复查询条件
+});
+```
+
+### 陷阱 2：修复引入新 Bug
+
+修复后一定要 Review：
+
+```
+审查修复代码
+```
+
+系统会检查：
+- 是否引入新的问题
+- 是否影响其他功能
+- 边界条件是否处理
+
+### 陷阱 3：忘记更新文档
+
+Bug 修复如果改变了行为，更新文档：
+
+```markdown
+# API 文档更新
+
+## POST /api/auth/login
+
+**变更**：Token 有效期从 1 小时延长到 7 天
+
+**原因**：修复 Bug #123
+```
+
+## 下一步
+
+- 🛠️ [代码审查流程](/skills/usage/code-review/) - 确保修复质量
+- 🛠️ [Git 操作指南](/skills/usage/git-workflow/) - 提交和发布
+- 📚 [工作流与档位](/skills/core-concepts/workflow-modes/) - 了解 Lite 档位

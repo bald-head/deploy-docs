@@ -1,0 +1,241 @@
+---
+title: 5分钟快速体验
+description: 无需深入理解原理，立即体验 Skills Framework 的核心能力
+order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 前提条件
+
+✅ 已完成 [快速安装](/skills/getting-started/)  
+✅ Claude Code 或 Codex 已启动
+
+<Aside type="tip">
+本教程只需 **5 分钟**，让你快速了解 Skills Framework 如何工作。
+</Aside>
+
+## 第 1 步：验证安装（30秒）
+
+打开 Claude Code 或 Codex，输入：
+
+```
+/skills
+```
+
+**预期结果**：看到 95 个可用 Skill 的列表。
+
+✅ **检查点**：如果看到 Skill 列表，说明安装成功。
+
+## 第 2 步：体验智能路由（1分钟）
+
+### 测试 1：自然语言触发
+
+直接输入自然语言，看系统如何自动路由到正确的 Skill：
+
+```
+需求改了，用户表要加手机号字段
+```
+
+**预期行为**：
+1. 系统自动识别触发词 "需求改了"
+2. 路由到 `change-impact-analysis` Skill
+3. 分析受影响的 API、数据库、前端
+
+<Aside type="note">
+**路由过程**（自动完成）：
+- 触发词匹配：✓ "需求改了"
+- Gates 检查：✓ 已有批准的范围
+- Conflicts 解决：✓ 这是变更而非新需求
+- 选择 Skill：→ change-impact-analysis
+</Aside>
+
+### 测试 2：查看路由准确性
+
+输入不同的表达，观察系统如何区分：
+
+```
+# 测试 A：优化已有页面
+优化这个页面的性能
+```
+
+**预期**：路由到 `frontend-polish`
+
+```
+# 测试 B：设计新页面
+设计用户登录页面
+```
+
+**预期**：路由到 `frontend-design`
+
+<Aside type="tip">
+虽然都包含"页面"，但系统通过 gates（是否已有实现）和 conflicts（职责边界）准确区分。
+</Aside>
+
+## 第 3 步：体验 Runtime Hook（1分钟）
+
+Runtime Hook 会在每次输入时自动注入上下文。
+
+### 查看自动注入的提示
+
+输入任意问题，观察系统响应开头：
+
+```
+我要做一个用户管理系统
+```
+
+**自动注入内容**（在后台）：
+1. ✅ 行为内核（事实先行、简单优先、最小写集）
+2. ✅ 项目记忆摘要（如果存在 PROJECT-MEMORY.md）
+3. ✅ 当前 TODO 状态（如果有活动任务）
+4. ✅ 推荐适用 Skill
+
+<Aside type="note">
+你看不到注入过程，但系统响应会体现出这些上下文。例如，它会基于已有项目事实给出建议，而不是从零假设。
+</Aside>
+
+## 第 4 步：体验命令防护（1分钟）
+
+Runtime Hook 的 PreToolUse 会拦截高风险命令。
+
+### 测试防护机制
+
+**安全命令**（会正常执行）：
+```
+ls -la
+git status
+cat package.json
+```
+
+**危险命令**（会被拦截）：
+```bash
+# 不要真的运行！只是演示
+rm -rf /
+git push --force
+```
+
+如果你尝试危险命令，系统会：
+1. 🛑 拦截命令
+2. ⚠️ 显示风险说明
+3. 🤔 询问是否确认
+
+<Aside type="danger">
+**防护示例**：  
+命令：`git push --force`  
+拦截原因：强制推送会覆盖远程历史  
+建议：使用 `git push` 或先 `git pull --rebase`
+</Aside>
+
+## 第 5 步：体验完整流程（2分钟）
+
+快速体验一个简单的功能开发流程。
+
+### 场景：添加一个新字段
+
+```
+1. 输入需求
+"用户表需要加一个手机号字段"
+
+2. 观察自动路由
+→ change-impact-analysis（分析影响）
+→ database-design（设计表结构）
+→ project-manager（更新 TODO）
+
+3. 查看生成的 TODO
+cat docs/<你的名字>/tasks/todo/*.md
+
+4. 查看影响分析
+- 受影响的 API：/api/user/register, /api/user/profile
+- 受影响的数据库：users 表
+- 受影响的前端：注册表单、个人资料页
+```
+
+<Aside type="tip">
+**流程特点**：
+- ✅ 自动识别影响范围
+- ✅ 更新 TODO 包含完整写集
+- ✅ 保证并行任务写集互斥
+- ✅ 一次完整 Review
+</Aside>
+
+## 体验总结
+
+在这 5 分钟里，你体验了：
+
+✅ **智能路由**  
+自然语言触发，96%+ 准确率，自动选择正确 Skill
+
+✅ **自动上下文**  
+Runtime Hook 自动注入项目记忆、TODO 状态
+
+✅ **命令防护**  
+PreToolUse 拦截高风险命令，保护代码安全
+
+✅ **完整流程**  
+从需求变更到影响分析，全自动推进
+
+## 下一步
+
+### 继续学习
+
+- 📖 [第一个功能开发实战](/skills/first-feature/) - 完整的端到端教程
+- 📚 [核心概念](/skills/core-concepts/) - 深入理解路由、Hook、记忆系统
+- 🛠️ [实践指南](/skills/usage/) - 各种实际场景的操作指南
+
+### 常见问题
+
+**Q: 如何看到更详细的路由过程？**
+
+```bash
+# 启动调试模式
+AGENT_DEBUG_ROUTING=1 claude
+```
+
+**Q: 如何查看所有触发词？**
+
+查看文档：[路由机制](/skills/core-concepts/routing/) 或 [Frontmatter 规范](/skills/advanced/frontmatter-spec/)
+
+**Q: 如何关闭 Runtime Hook？**
+
+不推荐关闭。如果确实需要：
+```bash
+# 备份配置
+cp ~/.claude/hooks.json ~/.claude/hooks.backup.json
+
+# 移除特定 Hook
+# 编辑 ~/.claude/hooks.json，删除对应条目
+```
+
+**Q: 体验过程遇到问题？**
+
+查看 [故障排查](/skills/troubleshooting/) 或在项目仓库提 Issue。
+
+## 实战演练
+
+想立即开始实战？试试这些场景：
+
+1. **新项目启动**
+   ```
+   我要做一个博客系统，支持文章发布和评论
+   ```
+
+2. **Bug 修复**
+   ```
+   用户登录失败，控制台报错 401 Unauthorized
+   ```
+
+3. **性能优化**
+   ```
+   首页加载太慢，需要优化
+   ```
+
+4. **代码审查**
+   ```
+   审查 src/api/user.ts 的代码
+   ```
+
+每个场景都会触发不同的 Skill 组合，观察系统如何自动推进流程！
+
+---
+
+🎉 **恭喜完成快速体验！** 现在你已经了解 Skills Framework 的核心能力，可以开始 [第一个功能开发实战](/skills/first-feature/) 了。

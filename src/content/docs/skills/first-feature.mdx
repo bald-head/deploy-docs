@@ -1,0 +1,642 @@
+---
+title: 第一个功能开发实战
+description: 从需求到上线，完整体验一次功能开发的全流程
+order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 实战目标
+
+通过开发一个真实的"用户注册"功能，完整体验：
+
+- ✅ 需求分析和产品定义
+- ✅ 技术方案设计
+- ✅ 任务拆解和 TODO 生成
+- ✅ 功能实现（API + 前端）
+- ✅ 代码审查
+- ✅ Git 提交和推送
+
+<Aside type="tip">
+**预计时间**：20-30 分钟  
+**前置要求**：已完成 [5分钟快速体验](/skills/quickstart/)
+</Aside>
+
+## 场景设定
+
+假设你正在开发一个新的 SaaS 产品，现在需要实现用户注册功能。
+
+**需求**：
+- 用户可以通过邮箱和密码注册
+- 注册后自动登录
+- 密码需要加密存储
+
+## 第 1 步：启动项目（3分钟）
+
+### 1.1 描述需求
+
+在 Claude Code 或 Codex 中输入：
+
+```
+我要做一个 SaaS 产品，需要实现用户注册功能。
+用户可以通过邮箱和密码注册，注册后自动登录，密码需要加密存储。
+```
+
+### 1.2 观察自动路由
+
+系统会自动触发以下 Skill 链：
+
+```
+用户输入
+  ↓
+[task-todo-workflow] 确保有唯一 TODO 文件
+  ↓
+[product-manager] 产品定义和需求分析
+  ↓
+[architecture-design] 系统架构设计
+  ↓
+[tech-decision] 技术选型
+  ↓
+[project-manager] 生成完整 TODO
+```
+
+<Aside type="note">
+**预期输出**：系统会问你一些问题来明确需求，例如：
+- 使用什么技术栈？（Node.js + Vue? Java + React?）
+- 数据库选型？（MySQL? PostgreSQL?）
+- 是否需要邮箱验证？
+</Aside>
+
+### 1.3 回答问题明确需求
+
+假设我们选择：
+
+```
+- 后端：Node.js + Express
+- 前端：Vue 3 + Element Plus
+- 数据库：MySQL
+- 认证：JWT token
+- 暂不需要邮箱验证
+```
+
+### 1.4 查看生成的 TODO
+
+```bash
+cat docs/<你的名字>/tasks/todo/saas-product.md
+```
+
+**预期内容**：
+
+```markdown
+# SaaS Product - 用户注册功能
+
+## Feature: USER-REG - 用户注册
+
+Owner: <你的名字>
+Status: [ ] Ready
+
+### 功能点
+- 用户可以通过邮箱和密码注册
+- 密码使用 bcrypt 加密存储
+- 注册成功后返回 JWT token 并自动登录
+
+### 菜单/入口
+- 注册页面：/register
+
+### 用户结果
+AC-001: 用户输入邮箱和密码，点击注册按钮，注册成功后跳转到首页
+AC-002: 重复邮箱注册时，显示"邮箱已存在"错误提示
+
+### 技术方案
+- API: POST /api/auth/register
+- 表: users (id, email, password_hash, created_at)
+- 前端: src/pages/register.vue
+- 路由: src/router/index.ts
+
+### 依赖
+- 无前置依赖
+
+### 写集
+- src/api/auth/register.ts
+- src/models/user.ts
+- src/pages/register.vue
+- src/router/index.ts
+- migrations/001_create_users_table.sql
+
+### 档位
+Standard
+
+### 交付面
+- API 实现 ✓
+- 数据库表 ✓
+- 前端页面 ✓
+- 单元测试 ⚠️（按需）
+```
+
+## 第 2 步：实现后端 API（5分钟）
+
+### 2.1 领取任务
+
+```
+开始实现用户注册
+```
+
+**系统响应**：
+- 原子领取任务：`[ ] USER-REG` → `[~] USER-REG`
+- 触发 `api-development` Skill
+
+### 2.2 实现 API 接口
+
+系统会自动：
+
+1. **创建数据库迁移**
+   ```sql
+   -- migrations/001_create_users_table.sql
+   CREATE TABLE users (
+     id BIGINT PRIMARY KEY AUTO_INCREMENT,
+     email VARCHAR(255) UNIQUE NOT NULL,
+     password_hash VARCHAR(255) NOT NULL,
+     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+   );
+   ```
+
+2. **创建 User 模型**
+   ```typescript
+   // src/models/user.ts
+   import bcrypt from 'bcrypt';
+   
+   export class User {
+     id?: number;
+     email: string;
+     password_hash: string;
+     created_at?: Date;
+   
+     async hashPassword(password: string) {
+       this.password_hash = await bcrypt.hash(password, 10);
+     }
+   
+     async comparePassword(password: string): Promise<boolean> {
+       return bcrypt.compare(password, this.password_hash);
+     }
+   }
+   ```
+
+3. **实现注册 API**
+   ```typescript
+   // src/api/auth/register.ts
+   import { Router } from 'express';
+   import jwt from 'jsonwebtoken';
+   import { User } from '../../models/user';
+   
+   const router = Router();
+   
+   router.post('/api/auth/register', async (req, res) => {
+     try {
+       const { email, password } = req.body;
+       
+       // 验证输入
+       if (!email || !password) {
+         return res.status(400).json({ error: '邮箱和密码不能为空' });
+       }
+       
+       // 检查邮箱是否已存在
+       const existing = await User.findByEmail(email);
+       if (existing) {
+         return res.status(400).json({ error: '邮箱已存在' });
+       }
+       
+       // 创建用户
+       const user = new User();
+       user.email = email;
+       await user.hashPassword(password);
+       await user.save();
+       
+       // 生成 JWT token
+       const token = jwt.sign(
+         { id: user.id, email: user.email },
+         process.env.JWT_SECRET,
+         { expiresIn: '7d' }
+       );
+       
+       res.json({ token, user: { id: user.id, email: user.email } });
+     } catch (error) {
+       res.status(500).json({ error: '注册失败' });
+     }
+   });
+   
+   export default router;
+   ```
+
+<Aside type="tip">
+系统会基于已有项目的代码风格、错误处理模式、日志规范自动生成一致的代码。
+</Aside>
+
+### 2.3 运行后端验证
+
+```bash
+# 运行数据库迁移
+npm run migrate
+
+# 启动后端服务
+npm run dev
+
+# 测试 API
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"123456"}'
+```
+
+**预期响应**：
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": 1,
+    "email": "test@example.com"
+  }
+}
+```
+
+✅ **检查点**：API 调用成功，返回 token 和用户信息。
+
+## 第 3 步：实现前端页面（5分钟）
+
+### 3.1 触发前端开发
+
+```
+实现注册页面
+```
+
+**系统响应**：
+- 触发 `ui-pc` 或 `frontend-design` Skill
+- 基于 TODO 中的设计规范实现页面
+
+### 3.2 实现注册表单
+
+系统会自动创建：
+
+```vue
+<!-- src/pages/register.vue -->
+<template>
+  <div class="register-page">
+    <el-card class="register-card">
+      <h2>用户注册</h2>
+      <el-form :model="form" :rules="rules" ref="formRef">
+        <el-form-item label="邮箱" prop="email">
+          <el-input 
+            v-model="form.email" 
+            type="email"
+            placeholder="请输入邮箱"
+          />
+        </el-form-item>
+        
+        <el-form-item label="密码" prop="password">
+          <el-input 
+            v-model="form.password" 
+            type="password"
+            placeholder="请输入密码"
+            show-password
+          />
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button 
+            type="primary" 
+            @click="handleRegister"
+            :loading="loading"
+            style="width: 100%"
+          >
+            注册
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
+import { registerApi } from '@/api/auth';
+
+const router = useRouter();
+const formRef = ref();
+const loading = ref(false);
+
+const form = reactive({
+  email: '',
+  password: ''
+});
+
+const rules = {
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码至少6位', trigger: 'blur' }
+  ]
+};
+
+const handleRegister = async () => {
+  try {
+    await formRef.value.validate();
+    loading.value = true;
+    
+    const { token, user } = await registerApi(form.email, form.password);
+    
+    // 保存 token
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    
+    ElMessage.success('注册成功！');
+    router.push('/');
+  } catch (error: any) {
+    ElMessage.error(error.message || '注册失败');
+  } finally {
+    loading.value = false;
+  }
+};
+</script>
+
+<style scoped>
+.register-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.register-card {
+  width: 400px;
+}
+
+h2 {
+  text-align: center;
+  margin-bottom: 24px;
+}
+</style>
+```
+
+### 3.3 添加路由
+
+```typescript
+// src/router/index.ts 新增路由
+{
+  path: '/register',
+  name: 'Register',
+  component: () => import('@/pages/register.vue'),
+  meta: { guest: true }
+}
+```
+
+### 3.4 前端验证
+
+```bash
+# 启动前端开发服务器
+npm run dev
+
+# 浏览器打开 http://localhost:5173/register
+# 填写表单并提交
+```
+
+✅ **检查点**：注册成功后跳转到首页，localStorage 中保存了 token。
+
+## 第 4 步：代码审查（3分钟）
+
+### 4.1 触发 Review
+
+```
+审查代码
+```
+
+**系统响应**：
+- 触发 `code-review` Skill
+- 缺陷优先的回归 Review
+
+### 4.2 Review 结果示例
+
+```markdown
+## Code Review Report
+
+### ✅ 通过检查
+- API 输入验证完整
+- 密码使用 bcrypt 加密
+- JWT token 正确签名
+- 前端表单验证完整
+- 错误处理得当
+
+### ⚠️ 建议优化
+1. **安全性**：建议添加密码强度检查（至少包含数字和字母）
+2. **用户体验**：建议添加"已有账号？去登录"链接
+3. **性能**：考虑对 users.email 添加索引
+
+### 📝 Review 结论
+代码质量良好，建议优化项为可选，可以继续推进。
+```
+
+<Aside type="note">
+如果 Review 发现严重问题（如 SQL 注入风险），系统会自动修复后重新 Review。
+</Aside>
+
+## 第 5 步：Git 提交（2分钟）
+
+### 5.1 查看改动
+
+```
+查看当前改动
+```
+
+**输出**：
+```
+Modified files:
+  M src/api/auth/register.ts
+  M src/models/user.ts
+  M src/pages/register.vue
+  M src/router/index.ts
+  A migrations/001_create_users_table.sql
+```
+
+### 5.2 提交代码
+
+```
+提交并推送代码
+```
+
+**系统响应**：
+- 触发 `git-commit` Skill
+- 精确暂存写集内的文件
+- 生成规范的 commit message
+- 推送到远程仓库
+
+**自动生成的 commit message**：
+```
+feat: 实现用户注册功能
+
+- 添加用户注册 API (POST /api/auth/register)
+- 实现 User 模型和密码加密
+- 创建注册页面和表单验证
+- 添加 /register 路由
+- 数据库迁移：创建 users 表
+
+功能点：
+- 用户可通过邮箱密码注册
+- 密码 bcrypt 加密存储
+- 注册成功返回 JWT token 并自动登录
+
+验收：
+- ✓ API 正常响应
+- ✓ 前端表单验证正确
+- ✓ 密码加密存储
+- ✓ Review 通过
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+```
+
+### 5.3 验证推送
+
+```bash
+git log -1
+git show HEAD
+```
+
+✅ **检查点**：Commit 已推送到远程，所有文件正确暂存。
+
+## 第 6 步：更新 TODO 状态（1分钟）
+
+### 6.1 标记完成
+
+```
+完成用户注册功能
+```
+
+**系统响应**：
+- 触发 `update-status` Skill
+- 验证所有验收条件
+- 更新 TODO 状态：`[~] USER-REG` → `[x] USER-REG`
+
+### 6.2 查看最终 TODO
+
+```bash
+cat docs/<你的名字>/tasks/todo/saas-product.md
+```
+
+**更新后的状态**：
+```markdown
+## Feature: USER-REG - 用户注册
+
+Owner: <你的名字>
+Status: [x] Done ✅
+
+### 完成时间
+2026-09-04 15:30
+
+### Git Commit
+feat: 实现用户注册功能 (a1b2c3d)
+
+### Review 结果
+✅ Pass - 代码质量良好
+
+### 验收确认
+- ✓ AC-001: 注册流程正常
+- ✓ AC-002: 重复邮箱提示正确
+- ✓ 所有交付面完成
+- ✓ Review 通过
+- ✓ 已提交推送
+```
+
+## 🎉 完成！
+
+恭喜你完成了第一个功能开发实战！在这 20-30 分钟里，你：
+
+✅ **体验了完整的开发流程**  
+从需求 → 设计 → 实现 → Review → 提交
+
+✅ **理解了 Skill 自动路由**  
+系统自动选择正确的 Skill，无需手动指定
+
+✅ **看到了 TODO 驱动开发**  
+写集管理、并行安全、验收追踪
+
+✅ **体验了自动化 Review**  
+缺陷优先、自动修复、质量保证
+
+## 关键收获
+
+### 1. 智能路由的威力
+
+你没有手动调用任何 Skill，只是用自然语言描述需求，系统就：
+- ✅ 自动选择正确的 Skill 链
+- ✅ 自动推进流程状态机
+- ✅ 自动验证前置条件
+
+### 2. TODO 驱动的好处
+
+TODO 不只是任务清单，它包含：
+- 写集边界（防止并行冲突）
+- 验收条件（自动验证完成度）
+- 依赖关系（自动检查可领取性）
+- 交付面（确保不遗漏）
+
+### 3. 一次 Review 原则
+
+每个功能只做一次完整 Review，后续 Skill 复用结果：
+- 发现问题 → 自动修复 → 重新 Review
+- Review 通过 → 后续 Skill 消费 findings
+- 不重复审查同一 diff
+
+## 下一步学习
+
+### 理解核心概念
+
+- 📚 [路由机制](/skills/core-concepts/routing/) - 深入理解三层路由
+- 📚 [工作流与档位](/skills/core-concepts/workflow-modes/) - 流程状态机详解
+- 📚 [项目记忆](/skills/core-concepts/project-memory/) - 如何复用项目事实
+
+### 实践更多场景
+
+- 🛠️ [需求变更](/skills/usage/requirement-change/) - 如何处理需求变化
+- 🛠️ [Bug 修复](/skills/usage/bug-fix/) - 快速定位和修复问题
+- 🛠️ [团队协作](/skills/usage/team-collaboration/) - 多人并行开发
+
+### 深入高级主题
+
+- 🚀 [创建新 Skill](/skills/advanced/creating-skills/) - 扩展 Skills Framework
+- 🚀 [路由调试](/skills/advanced/routing-debug/) - 调试路由问题
+- 🚀 [性能优化](/skills/advanced/performance-metrics/) - 了解性能指标
+
+## 常见问题
+
+**Q: 实际开发中是否总是这么顺利？**
+
+不一定。可能遇到：
+- 需求不明确 → 系统会通过 `grilling` 追问
+- 技术方案有争议 → `tech-decision` 会列出权衡
+- Review 发现严重问题 → 自动修复或停止推进
+
+**Q: 如何处理复杂的多人协作？**
+
+查看 [团队协作指南](/skills/usage/team-collaboration/)：
+- 写集互斥保证并行安全
+- 依赖关系自动检查
+- 冲突检测和解决
+
+**Q: 如何定制工作流？**
+
+可以在 TODO 中指定：
+- 档位（Lite/Standard/High-risk）
+- 自主模式（Goal/Plan/Build）
+- 验收档位（快速验证/标准/严格）
+
+**Q: 遇到问题怎么办？**
+
+- 查看 [故障排查](/skills/troubleshooting/)
+- 启用调试模式：`AGENT_DEBUG_ROUTING=1`
+- 在项目仓库提 Issue
+
+---
+
+🚀 **准备好了吗？** 现在你可以在真实项目中使用 Skills Framework，开始高效开发了！
