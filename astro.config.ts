@@ -76,6 +76,7 @@ export default defineConfig({
                             {label: '第一个功能开发', link: '/skills/first-feature'},
                             {label: '核心概念', autogenerate: {directory: 'skills/core-concepts'}},
                             {label: '使用指南', autogenerate: {directory: 'skills/usage'}},
+                            {label: '高级主题', autogenerate: {directory: 'skills/advanced'}},
                             {label: 'Runtime Hooks', autogenerate: {directory: 'skills/hooks'}},
                             {label: 'Skill 目录', autogenerate: {directory: 'skills/catalog'}},
                             {
