@@ -72,6 +72,8 @@ export default defineConfig({
                         badge: {text: '95 Skill', variant: 'tip'},
                         items: [
                             {label: '快速开始', link: '/skills/getting-started'},
+                            {label: '快速体验', link: '/skills/quickstart'},
+                            {label: '第一个功能开发', link: '/skills/first-feature'},
                             {label: '核心概念', autogenerate: {directory: 'skills/core-concepts'}},
                             {label: '使用指南', autogenerate: {directory: 'skills/usage'}},
                             {label: 'Runtime Hooks', autogenerate: {directory: 'skills/hooks'}},
