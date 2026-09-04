@@ -2,7 +2,7 @@ import {defineConfig} from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightImageZoom from 'starlight-image-zoom'
 import starlightSidebarTopicsDropdown from 'starlight-sidebar-topics-dropdown'
-import catppuccin from "starlight-theme-catppuccin";
+import catppuccin from "@catppuccin/starlight";
 
 
 
@@ -43,9 +43,15 @@ export default defineConfig({
                         badge: {text: '11 组件', variant: 'default'},
                         items: [
                             {label: '安装 Docker', link: '/docker/'},
-                            {label: 'docker-compose', autogenerate: {directory: 'docker/use'}},
-							{label:"FQA", autogenerate: {directory: 'docker/FQA'}}
-						]
+                            {
+                                label: 'docker-compose',
+                                items: [{autogenerate: {directory: 'docker/use'}}]
+                            },
+                            {
+                                label: 'FQA',
+                                items: [{autogenerate: {directory: 'docker/FQA'}}]
+                            }
+                        ]
                     },
                     {
                         label: 'Linux 运维',
@@ -62,7 +68,10 @@ export default defineConfig({
                         icon: 'seti:java',
                         items: [
                             {label: '概览', link: '/java/'},
-                            {label:"日志", autogenerate: {directory: 'java/logging'}},
+                            {
+                                label: '日志',
+                                items: [{autogenerate: {directory: 'java/logging'}}]
+                            },
                         ]
                     },
                     {
@@ -74,20 +83,51 @@ export default defineConfig({
                             {label: '快速开始', link: '/skills/getting-started'},
                             {label: '快速体验', link: '/skills/quickstart'},
                             {label: '第一个功能开发', link: '/skills/first-feature'},
-                            {label: '核心概念', autogenerate: {directory: 'skills/core-concepts'}},
-                            {label: '使用指南', autogenerate: {directory: 'skills/usage'}},
-                            {label: '高级主题', autogenerate: {directory: 'skills/advanced'}},
-                            {label: 'Runtime Hooks', autogenerate: {directory: 'skills/hooks'}},
-                            {label: 'Skill 目录', autogenerate: {directory: 'skills/catalog'}},
+                            {
+                                label: '核心概念',
+                                items: [{autogenerate: {directory: 'skills/core-concepts'}}]
+                            },
+                            {
+                                label: '使用指南',
+                                items: [{autogenerate: {directory: 'skills/usage'}}]
+                            },
+                            {
+                                label: '高级主题',
+                                items: [{autogenerate: {directory: 'skills/advanced'}}]
+                            },
+                            {
+                                label: 'Runtime Hooks',
+                                items: [{autogenerate: {directory: 'skills/hooks'}}]
+                            },
+                            {
+                                label: 'Skill 目录',
+                                items: [{autogenerate: {directory: 'skills/catalog'}}]
+                            },
                             {
                                 label: 'Skill 参考手册',
                                 collapsed: true,
                                 items: [
                                     {label: '如何查阅', link: '/skills/skills-reference/'},
-                                    {label: '核心流程 - Critical', collapsed: true, autogenerate: {directory: 'skills/skills-reference/critical'}},
-                                    {label: '高优先级 - High', collapsed: true, autogenerate: {directory: 'skills/skills-reference/high'}},
-                                    {label: '中优先级 - Medium', collapsed: true, autogenerate: {directory: 'skills/skills-reference/medium'}},
-                                    {label: '低优先级 - Low', collapsed: true, autogenerate: {directory: 'skills/skills-reference/low'}},
+                                    {
+                                        label: '核心流程 - Critical',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/critical'}}]
+                                    },
+                                    {
+                                        label: '高优先级 - High',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/high'}}]
+                                    },
+                                    {
+                                        label: '中优先级 - Medium',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/medium'}}]
+                                    },
+                                    {
+                                        label: '低优先级 - Low',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/low'}}]
+                                    },
                                 ]
                             },
                             {label: '最佳实践', link: '/skills/best-practices'},
@@ -96,9 +136,13 @@ export default defineConfig({
                     },
                 ])
             ],
-            social: {
-                github: 'https://starlight.astro.build/zh-cn/manual-setup/',
-            },
+            social: [
+                {
+                    icon: 'github',
+                    label: 'GitHub',
+                    href: 'https://github.com/withastro/starlight',
+                }
+            ],
             defaultLocale: 'root',
             locales: {
                 root: {
