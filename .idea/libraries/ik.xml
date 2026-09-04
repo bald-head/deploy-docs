@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="ik">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/src/static/elasticsearch/ik.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

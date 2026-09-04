@@ -1,0 +1,146 @@
+---
+title: 纠正路由（auto-optimizer）
+description: 用户刚做出一次纠正时，判断这是不是 Skill 规则的问题，定位最早出错的规则并路由给对应的优化器执行
+order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+你刚说了一句"这不应该这样做"，问题往下有两种走法：要么当场把这次输出改对，要么去改**导致这次输出的那条规则**。`auto-optimizer` 负责第二种走法的第一步——判断这次纠正是否属于 Skill 规则问题，找出最早做出错误决定的那条规则，然后交给合适的执行者。
+
+它是**识别与路由**角色，本身不落地普通的单次修改。`not_for` 明确排除"规则修改实施"和"普通单次修改"：实施单个 Skill 的修改是 [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) 的事，把重复根因沉淀成长期公共规则是 [skill-evolution](/skills/skills-reference/low/skill-evolution/) 的事，确需新建 Skill 才走 [skill-creator](/skills/skills-reference/medium/skill-creator/)。
+
+## 四个 Skill 的分工
+
+这套框架里有四个 Skill 都在处理"改 Skill"，边界必须一次说清：
+
+| Skill | 职责 | 触发形态 |
+| --- | --- | --- |
+| `auto-optimizer`（本页） | 从一次用户纠正定位根因，判断范围，路由到执行者 | 用户刚做出纠正，还没点名要改哪个 Skill |
+| [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) | 直接审查或修改用户点名的**单个**现有 Skill | 用户说"优化 X Skill""把 X 精简一下" |
+| [skill-evolution](/skills/skills-reference/low/skill-evolution/) | 把重复出现或跨 Skill 的根因沉淀为一致的长期公共规则 | 同一根因已影响多个 Skill 或多次执行 |
+| [skill-creator](/skills/skills-reference/medium/skill-creator/) | 创建新 Skill，或实施已确认的 Skill 结构与公共能力改动 | 本地确实没有可承接职责的 Owner |
+
+流程是：**识别（auto-optimizer）到 路由 到 执行（skill-optimizer）或 沉淀（skill-evolution）**。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这不应该改吧" | 输出越界，怀疑是规则允许了不该允许的动作 |
+| "删除这些无用功" | 流程里有无产出的中间步骤或重复回读 |
+| "为什么每次都要问我一遍" | 重复确认门槛过多，规则本身有问题 |
+| "刚才漏了一步" | 规则遗漏了必要交付面或验证步骤 |
+| "自优化一下" | 明确要求把这次纠正落成规则修改 |
+| "改 Skill" | 明确的修改授权，直接进入路由与实施 |
+| "分析下这是哪条规则导致的" | 只要分析，保持只读 |
+
+`triggers` 登记了两个词：`自动优化`、`纠正路由`。正文的授权条款还把"改 Skill、自优化、这不应该改吗、删除这些无用功"或等价表达明确列为直接修改授权语，上面这些说法都能在 SKILL.md 中对上。
+
+<Aside type="tip">
+分辨"只要分析"和"要改"很简单：用户只要求分析时本 Skill 保持只读，给出问题和建议；用户说出上面那类授权表达时，就**不停在候选阶段**，直接进入实施路由。不要为了保险再问一次"要不要我改"。
+</Aside>
+
+## 什么时候不要用
+
+- **用户已经点名要改某个具体 Skill** → 直接用 [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)，不需要先走一遍识别。
+- **本次纠正只是这一次输出的问题，跟规则无关** → 当场改这次输出就行。`not_for` 排除"普通单次修改"。
+- **同一根因已经明显影响多个 Skill 或多次执行** → 直接进 [skill-evolution](/skills/skills-reference/low/skill-evolution/)。
+- **需要新建 Skill 或重构 Skill 目录** → [skill-creator](/skills/skills-reference/medium/skill-creator/)。
+- **要审查整套 Agent 协作架构而不是某条规则** → [agent-optimizer](/skills/skills-reference/low/agent-optimizer/)。
+- **写业务代码或定产品** → [universal-development](/skills/skills-reference/low/universal-development/) / [product-manager](/skills/skills-reference/critical/product-manager/)。`not_for` 排除"代码实现"和"产品定义"。
+
+## 前置条件
+
+`gates` 字段为空，没有形式化门槛。真实的输入要求只有一条，但很硬：
+
+**必须有一次真实发生的用户纠正。** 本 Skill 的全部证据链都从"当前会话里可观察到的失败行为 + 用户表达的期望行为"开始。没有这个输入，它无从判断哪条规则错了，也无从判断范围是个人偏好、项目专属还是通用问题。
+
+不满足会发生什么：在没有纠正的情况下"预防性优化规则"，等于把假设当根因改，最典型的后果是把一次项目偏好扩散成所有项目的共享默认。
+
+<Aside type="caution">
+不把单次项目偏好自动扩散为共享规则。定位根因前先区分三种范围：**个人偏好**、**项目规则**、**通用问题**。只有通用根因才允许进共享 Skill。
+</Aside>
+
+## 怎么用
+
+### 1. 提取可观察失败与期望行为
+
+从当前会话里抽出两件事：实际发生了什么（可观察，不是推测的动机），用户希望发生什么。这两条是后面所有判断的证据基线。
+
+### 2. 找最早做出错误决定的位置
+
+不是最后暴露问题的那个文件。要检查的候选位置有四类：
+
+```text
+共享规则（跨 Skill 的公共约束）
+编排 Skill（决定路由与顺序的那一层）
+专业 Skill（实际执行的那一个）
+执行行为（规则正确但执行偏离）
+```
+
+### 3. 搜索同一根因的直接冲突位置
+
+同一条错误规则通常有多个副本或多处呼应。只修最后暴露问题的文件，下一次仍会从另一个入口犯同样的错。
+
+### 4. 判断是否需要落进项目记忆
+
+如果这次纠正暴露的是**会被多个 Feature、系统层、设备或后续维护重复消费的项目细节**（真实框架、Owner、复用边界、字段、权限、部署、领域规则），则路由 [project-details](/skills/skills-reference/high/project-details/)：检查目标仓库是否已有 `PROJECT-MEMORY.md`，没有时把这些事实写进去，并加入当前 Feature 的来源锚点。
+
+<Aside type="danger">
+共享 Skill 只沉淀"发现、检查、记录、回读"的**方法**，绝不把项目专用值硬编码成跨项目默认。把某个仓库的包名、字段名、Owner 或部署拓扑写进共享 Skill，会让所有其他项目继承一份错误默认。
+</Aside>
+
+### 5. 按范围路由
+
+| 判定 | 路由到 |
+| --- | --- |
+| 单个局部规则问题 | [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) 直接修改 |
+| 重复、跨 Skill 或长期行为问题 | [skill-evolution](/skills/skills-reference/low/skill-evolution/) 沉淀长期规则 |
+| 确需新 Skill 或公共目录结构 | [skill-creator](/skills/skills-reference/medium/skill-creator/) |
+| 项目专属可复用事实 | [project-details](/skills/skills-reference/high/project-details/) 写入 `PROJECT-MEMORY.md` |
+
+### 6. 修改后只验证一次
+
+用户已授权时，直接改最早造成问题的规则，并**物理删除**没有消费者的脚本、产物和失效引用。之后只做一次确定性校验和一次 [code-review](/skills/skills-reference/high/code-review/)，不启动额外的评测流程。
+
+Skill 名称和实际路径从 Harness 原生清单、当前功能和源码自动发现，不维护手工列表。
+
+<Aside type="caution">
+删除旧评测流水线不得连带削弱自优化能力本身。自优化由用户纠正触发并直接改规则，不依赖任何持久评价档案——所以"没有评测文件"不等于"不能自优化"。
+</Aside>
+
+## 完整性边界
+
+轻量化只允许删除**重复回读、重复验证、重复状态和文书**。以下能力不得因为"精简流程"被削弱：
+
+- 产品研究、brainstorm、产品定义、UI/UX、架构、技术选型
+- 生产实现、安全、数据、迁移与回滚
+- 完整的纵向交付（后端有页面入口时同步交付前端与真实接口）
+
+## 与其他 Skill 的关系
+
+`related_skills` 是一个扁平列表：[skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)、[skill-evolution](/skills/skills-reference/low/skill-evolution/)。正文另外明确路由 [skill-creator](/skills/skills-reference/medium/skill-creator/) 和 [project-details](/skills/skills-reference/high/project-details/)。
+
+典型链路：
+
+```text
+用户纠正
+  → auto-optimizer（提取失败 → 定位最早出错规则 → 判断范围）
+      ├→ skill-optimizer   （单个局部规则，直接改）
+      ├→ skill-evolution   （重复/跨 Skill 根因，沉淀长期规则）
+      ├→ skill-creator     （确需新 Skill 或公共结构）
+      └→ project-details   （项目专属事实写入 PROJECT-MEMORY.md）
+  → 一次确定性校验 + 一次 code-review
+```
+
+## 产出与验收
+
+完成时应当能回答四个问题：
+
+- **根因是什么，谁拥有它**：具体到那条规则和拥有它的 Skill 文件。
+- **改了什么**：已授权时的实际修改路径与内容；未授权时只有分析结论。
+- **验证结果**：一次确定性校验加一次 Review 的结果。
+- **哪里需要人来定**：未授权或需要高风险扩大范围时，给出**最短确认点**——一句话说清要确认什么，而不是把整个方案重述一遍。
+
+判断真的完成了：同类纠正不会从另一个入口再犯一次（说明冲突位置都修到了），并且没有留下任何无消费者的脚本、产物或引用。

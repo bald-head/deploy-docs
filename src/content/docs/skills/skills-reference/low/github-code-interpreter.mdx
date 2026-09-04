@@ -1,0 +1,213 @@
+---
+title: GitHub 源码解读（github-code-interpreter）
+description: 把一个远端 GitHub 仓库读成两份中文文档——源码解读和快速上手，并且如实说明本次只聚焦了哪些模块
+order: 17
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+丢一个 GitHub 链接过来说"帮我看看这个项目"，你要的不是一段夸奖，而是两份能带人上手的中文文档：它在解决什么问题、代码怎么分层、关键数据流走哪一条、照着说明能不能真跑起来。
+
+`github-code-interpreter` 就干这件事，并且带一条自我约束：**它不假装读完了**。面对大仓库它会明说这一轮只看了哪几块；写进快速上手的命令来自仓库里真实存在的脚本和文档，不靠推测；后续复查也不会替你悄悄排上，得先问过你。
+
+它读的是远端仓库。你手上这个工作仓库的结构发现是别人的活，下一节有指路。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "帮我解读一下这个 GitHub 项目" | 给了链接，要一份读得懂的解读 |
+| "这个开源库的架构是怎样的" | 想知道分层、模块与边界 |
+| "这个项目的原理是什么" | 关键机制与数据流梳理 |
+| "整理成中文文档给我" | 要落成文件，不要在对话里刷屏 |
+| "写个快速上手" | 环境、安装、配置、最小能跑的例子 |
+| "生成一份学习报告" | 打算拿这份文档带新人入门 |
+| "这个库值不值得引进来" | 想先看清能力边界和局限再决定 |
+
+## 什么时候不要用
+
+- **你想看的其实是当前这个工作仓库** → 找结构与参考实现用 [project-navigator](/skills/skills-reference/medium/project-navigator/)，给陌生的本地仓库建立可核对的概览用 [start](/skills/skills-reference/high/start/)。搞错对象的代价不是白干一趟，而是外部项目的结论被后面的人当成本项目事实继续用下去。
+- **只是想把仓库拉到本地** → 直接 clone。这是最常见的误判：一句"帮我拉一下这个仓库"被听成解读请求，最后交付两份没人要的文档。
+- **要把别人的写法搬进自己代码** → [code-patterns](/skills/skills-reference/low/code-patterns/)。这里只产出理解，不产出可直接落地的模式清单。
+- **要动分支、历史或冲突** → [git-workflow](/skills/skills-reference/high/git-workflow/)。本 Skill 全程只读，不改仓库状态。
+- **要写代码** → [dev](/skills/skills-reference/high/dev/) 或对应专业 Skill。
+- **要解读的是论文或一篇技术文章** → 不在范围内，它读的是源码树。
+- **只想要一句简介或推荐语** → 一句话不必走这条流水线。
+
+## 前置条件
+
+**目标是远端仓库，不是你当前打开的这个。** 这一条搞错，产出会和 `project-navigator` 撞车，而且结论的来源会被混淆。
+
+**输出位置要先定下来。** 你指定了目录就用你的，仓库自己有文档目录约定就沿用；两样都没有时它会在写第一个文件之前问你要一个文档前缀，而不是挑一个个人目录当默认值——也不会把这个前缀顺手写进共享配置。同一个任务里问过一次就不再重复问。
+
+**这一轮不碰生产代码。** 解读和改代码分开走；混在一起，"这份结论基于哪个版本"就说不清了。
+
+<Aside type="danger">
+源码仓库不是交付物。克隆下来的代码待在临时位置，报告、结构清单和元数据落在你确认过的输出目录里。把整棵源码树塞进报告目录，交付出去的就是一坨没人愿意打开的东西。
+</Aside>
+
+## 使用示例
+
+### 场景 1：整体导读 + 快速上手
+
+**你的输入**：
+
+```text
+https://github.com/some-org/some-lib 帮我解读一下，顺便写个快速上手。
+文档放 docs/research/ 下面。
+```
+
+**它会跑的命令**：
+
+```bash
+# 一步完成仓库定位、目录结构导出和基础元数据
+python3 scripts/bootstrap_github_analysis.py <github_url> /tmp/github-analysis
+```
+
+**你会拿到的产出**：
+
+```text
+## 交付
+docs/research/github-analysis/some-lib/some-lib_源码解读.md
+docs/research/github-analysis/some-lib/some-lib_快速上手.md
+docs/research/github-analysis/some-lib/structure.txt
+docs/research/github-analysis/some-lib/metadata.json
+
+## 仓库
+本地路径  /tmp/github-analysis/some-lib（临时位置，不在交付目录里）
+分支      main   最后提交 2026-08-21
+
+## 本轮范围
+整体导读 + 快速上手；core/ 与 transport/ 读透，plugins/ 只看了接口
+
+## 未验证
+快速上手里的 docker compose 流程没有实跑，命令抄自仓库 CONTRIBUTING.md
+```
+
+两份文档大致长这样：
+
+```text
+some-lib_源码解读.md
+  它解决什么问题 · 一句话说清
+  什么场景适合用 / 什么场景别用
+  能力边界：做得好的地方，以及已知的局限
+  分层与关键模块：每层负责什么，模块之间怎么说话
+  一条请求走完全程：从入口到落库经过哪几个关键对象
+  设计上值得抄的地方
+  读之前得先认识的几个词
+
+some-lib_快速上手.md
+  跑起来需要什么（语言版本、外部依赖、系统要求）
+  装：一条条真实命令
+  配：哪些配置项非填不可，默认值是什么
+  一个最小能跑通的例子
+  常见报错和对应原因
+  想继续往下读，从哪几个文件开始
+```
+
+细化到每一节该写什么，Skill 目录里的 `references/report-outline.md` 有完整骨架。
+
+<Aside type="tip">
+架构结论需要图时它会拉 [mermaid](/skills/skills-reference/low/mermaid/) 配合；那个 Skill 不可用就退回纯文本结构，报告不会因为画不出图而卡住。
+</Aside>
+
+### 场景 2：大仓库，只看一个子系统
+
+**你的输入**：
+
+```text
+这个仓库太大了，我只关心它的调度是怎么做的。
+```
+
+**你会拿到的产出**：
+
+```text
+## 本轮范围（已收窄）
+只读 scheduler/ 及其直接依赖：scheduler/、internal/queue/、api/job*.go
+未读：web/、cli/、docs/，以及 6 个存储后端实现里的 5 个
+
+## 结论指向的位置
+任务入队      internal/queue/redis_queue.go:88
+时间轮        scheduler/wheel.go:41
+重试与退避    scheduler/retry.go:23
+分布式抢占    scheduler/lease.go:57（Redis SETNX + TTL 续租）
+
+## 明确没有回答的问题
+- 多副本部署下 lease 续租失败会怎样：只看到代码路径，没有测试或文档佐证
+- 存储后端换成 Postgres 时的语义差异未核对
+```
+
+<Aside type="caution">
+"我全都读完了"这句话在大仓库上基本不成立。写出来不会让报告更可信，只会让读者不知道哪一部分能信。收窄范围、并写清没读什么，比铺一层薄薄的全景有用得多。
+</Aside>
+
+### 场景 3：要不要安排复查
+
+```text
+你：这个项目还在快速迭代，过一阵子再看看？
+
+它：可以，但复查我不会默认排。要现在给你排一次大约 1 小时后的复查吗？
+    排上之后走增量：先读现有两份文档，再看仓库有没有新提交，
+    补上遗漏的模块和设计意图，必要时把快速上手重跑一遍，
+    结果追加在文档末尾，不覆盖你已经读过的内容。
+```
+
+环境不支持定时的时候它会直说，不会假装排好了。已有分析目录要复查，用目录里的辅助脚本：
+
+```bash
+bash scripts/review.sh <analysis_dir>
+```
+
+## 与其他 Skill 的关系
+
+**上游**：[grilling](/skills/skills-reference/medium/grilling/) —— 范围和聚焦点说不清时，先一次问清楚再动手。
+
+**下游**：[project-details](/skills/skills-reference/high/project-details/) —— 值得长期复用的结论归并进项目记忆，别让它只活在一份一次性报告里。
+
+**协作**：[mermaid](/skills/skills-reference/low/mermaid/)（画结构图）、[code-patterns](/skills/skills-reference/low/code-patterns/)（和自家仓库的写法对照）。
+
+**换成它**：[start](/skills/skills-reference/high/start/)（目标其实是本地陌生仓库）、[project-navigator](/skills/skills-reference/medium/project-navigator/)（只是想定位当前仓库的结构）。
+
+```text
+grilling（先问清范围）
+      ↓
+github-code-interpreter ──→ 两份中文文档 ──→ 交付路径 ──→（问过你才复查）
+      ↓                          ↘
+project-details（沉淀）      mermaid / code-patterns（配合）
+```
+
+## 常见坑
+
+**把克隆听成解读。** "拉一下这个仓库"和"读一下这个仓库"是两件事，误判的成本是两份没人要的长文档。
+
+**报告目录里躺着一整棵源码树。** 交付目录只放你要读的东西，代码留在临时位置。
+
+**快速上手里的命令是猜的。** 顺手写一条 `npm run dev` 很容易，但仓库里可能压根没有这个 script。每条命令都要能在仓库文档、`package.json` 或脚本里找到出处，否则读者第一步就卡住，整份文档的信任度一起归零。
+
+**先钻源码再看文档。** 顺序反了很容易把实现细节当成设计意图，然后在报告里替作者编一套他没有的理由。
+
+**只丢一个路径就算交付。** 当前渠道能发文件就发文件；发不了也至少给出可点击路径，并把这轮范围和未验证部分一起说清。
+
+**默认排了复查。** 没问就排，等于替用户安排了他没要的后续；更糟的是环境根本没排上，却回报"已安排"。
+
+## 最佳实践
+
+- **一开始就把范围钉死。** 只做架构解读还是连快速上手一起、整体导读还是聚焦某一块、文档放哪——这三件事定了，后面基本不返工。
+- **文档先行，源码后读。** 先从 README 和核心文档拿到作者的意图，再进源码验证，比反过来省一半时间。
+- **结论要能指回文件。** 每个架构判断都落到具体目录或行号，读者才有办法自己去核。
+- **把"没验证"写在显眼处。** 未跑通的命令、没核对的分支行为，列出来比藏起来专业得多。
+- **交付时一次说清四件事**：文档在哪、仓库在哪、这轮看了什么、什么还没验证。
+
+## 下一步
+
+- [project-details](/skills/skills-reference/high/project-details/) - 把值得留下的结论并进项目记忆
+- [mermaid](/skills/skills-reference/low/mermaid/) - 给外部仓库的结构补图
+- [code-patterns](/skills/skills-reference/low/code-patterns/) - 和自家仓库的现有模式对照
+- [start](/skills/skills-reference/high/start/) - 目标其实是本地陌生仓库
+- [project-navigator](/skills/skills-reference/medium/project-navigator/) - 只需定位当前仓库结构
+
+
+
+

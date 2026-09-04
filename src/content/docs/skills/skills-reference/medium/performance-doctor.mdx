@@ -1,0 +1,95 @@
+---
+title: 性能诊断与优化（performance-doctor）
+description: 以可复现的基线指标为前提定位单一瓶颈，做最小改动，再用同条件对照数据证明性能真的变好了
+order: 33
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"感觉有点慢"不是一个可以动手优化的输入。`performance-doctor` 的全部价值就在于把它变成可动手的输入：先建立可复现的基线——请求样本、数据规模、p50/p95/p99、吞吐、错误率、资源与数据库指标、环境版本，然后才允许提出修改；改完再用同数据、同流量、同环境跑一次对照，用前后两组数字说话。
+
+它只做证据诊断、最小优化和回归。功能性 bug 交给 [bug-detective](/skills/skills-reference/high/bug-detective/)，表结构设计交给 [database-design](/skills/skills-reference/high/database-design/)，代码质量与缺陷审查交给 [code-review](/skills/skills-reference/high/code-review/)。要不要引入新的中间件由 [tech-decision](/skills/skills-reference/high/tech-decision/) 决定。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这个接口太慢了" | 有具体接口和可感知延迟，需要分层定位耗时 |
+| "怎么这么卡" | 用户可感知卡顿，需要先把感受转成指标 |
+| "帮我查下慢查询" | SQL 执行计划、索引、N+1、大结果集 |
+| "性能优化" / "优化性能" | 已有明确 SLO 或目标，做最小改动 |
+| "瓶颈排查" | 需要在客户端、网关、应用、线程池、数据库、缓存、外部依赖之间定位主因 |
+| "性能分析" | 需要 trace、profiling、执行计划或计数器证据 |
+
+触发面覆盖性能优化、性能分析、瓶颈排查、慢查询、接口慢这一类说法，具体触发词在 Skill 自己的 frontmatter 里维护。
+
+## 什么时候不要用
+
+- **功能不对、结果错、偶发报错** → [bug-detective](/skills/skills-reference/high/bug-detective/)。两者证据类型不同：一个看逻辑分支，一个看指标分布。
+- **审查代码质量与缺陷** → [code-review](/skills/skills-reference/high/code-review/)。本 Skill 只看指标。
+- **设计表结构、字段、主键策略** → [database-design](/skills/skills-reference/high/database-design/)。本 Skill 只优化查询和索引，不重新设计表。
+- **改架构、拆服务、换部署形态** → [architecture-design](/skills/skills-reference/high/architecture-design/)。
+- **写新功能代码、做功能测试** → [universal-development](/skills/skills-reference/low/universal-development/)、[test-strategy](/skills/skills-reference/medium/test-strategy/)。
+- **要引入缓存、中间件、新依赖** → [tech-decision](/skills/skills-reference/high/tech-decision/)。局部查询和代码优化不需要重复选型，但新增依赖必须走选型。
+
+## 前置条件
+
+三条门槛合起来就是一句话：**没有指标，不进入优化**。
+
+1. **已有可复现的性能问题或基线指标**。不可复现的慢无法验证修复；没有基线就没有对照组，改完也说不出到底好了多少。
+2. **存在实际代码或系统可供分析**。执行计划、trace、profiling 都需要真实运行对象，纸面推测不构成瓶颈证据。
+3. **明确性能目标或 SLO**。没有目标就没有停止条件，而且阈值、批次、TTL、超时只能靠拍脑袋。
+
+<Aside type="danger">
+缺少基线时，它只会给出假设和测量计划，**不会写"优化后提升 X%"**。没有前后对照数据时，结论只能是"提出优化假设/完成静态检查"，不能声称性能已改善。
+</Aside>
+
+## 怎么调用
+
+给它一个具体对象——哪个接口、哪个页面、哪条查询——外加你能接受的目标。诊断流水线是固定六步，顺序不能跳：
+
+1. **定义目标**。明确用户可感知指标、SLO、流量与数据规模，同时写出**不在范围内**的指标，否则讨论会不断扩散。
+2. **复现与分层**。把总耗时拆到客户端、网关、应用、线程池、数据库、缓存、外部依赖和网络，分层之前不猜主因。基线会记下请求样本、数据规模、分位延迟、吞吐、错误率、资源与连接池指标和环境版本。
+3. **定位瓶颈**。用真实 trace、日志、执行计划、profiling 或计数器验证**单一主因**，一次只改一个变量——同时改多处会让对照数据失去归因能力。
+4. **选择最小改动**。优先减少无效工作、修正查询与索引、批量或流式处理、合理缓存和背压，每一项都要写回滚条件。
+5. **对照验证**。同数据、同流量、同环境比较分位延迟、吞吐、资源和错误率，并检查冷热缓存差异与长尾。
+6. **回归与观测**。复用现有功能、并发、一致性、权限与故障降级检查，或执行一次真实主路径。
+
+分域诊断各有各的前置确认：SQL/ORM 侧要先确认真实 ORM、分页实现、拦截器和 SQL 日志来源，再看执行计划、选择性、索引顺序、N+1 与大结果集；缓存与外部依赖侧看 key、TTL、失效、命中率、热 key 与降级；接口与批处理侧看响应字段必要性、游标与批次；资源侧看线程池、连接池、锁等待、GC 与对象分配。
+
+<Aside type="danger">
+索引、慢查询开关、采样配置和数据库参数调整都必须先确认环境、授权、影响范围、回滚方式和观测窗口，不会直接改未知生产库的全局配置。生产压测同样需要授权、数据脱敏、流量上限、回滚和监控。
+</Aside>
+
+<Aside type="caution">
+任何修复都不会靠关闭认证、租户隔离、数据权限、审计、参数校验或 TLS 来换取好看的基准数字。多租户与权限过滤必须计入查询成本。同时，阈值、批次、TTL、超时和限流要来自 SLO、配置或具名常量，不散落成魔法数字。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游（before）**：[project-navigator](/skills/skills-reference/medium/project-navigator/)、[bug-detective](/skills/skills-reference/high/bug-detective/)
+
+**下游（after）**：[code-review](/skills/skills-reference/high/code-review/)、[test-development](/skills/skills-reference/medium/test-development/)
+
+**协作（complement）**：[redis-cache](/skills/skills-reference/medium/redis-cache/)、[database-design](/skills/skills-reference/high/database-design/)、[utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)
+
+```text
+project-navigator（先找到真实代码与配置）
+  → performance-doctor（基线 → 分层 → 单一主因 → 最小改动 → 对照）
+      ├─ redis-cache（确实需要缓存时）
+      ├─ database-design（需要改表而非改查询时）
+      └─ tech-decision（需要新增依赖或中间件时）
+            → code-review（一次回归 Review）
+```
+
+`bug-detective` 在上游的意义是：先排除"这不是慢，是错"。指标异常有时来自逻辑缺陷，不是容量问题。
+
+## 期望产出与验证
+
+至少六项，缺一项就说明诊断没闭环：改前改后的分位延迟、吞吐、错误率和资源指标；复现命令、数据规模、环境和采样窗口；根因证据（trace、执行计划、profiling 或计数器）；修改文件与实际修改路径；回滚方式与功能一致性回归结果；未验证的冷启动、峰值、集群、第三方或生产边界，包括因为未获授权而没执行的压测和数据库配置调整。
+
+判断真的完成了：能把"改前 p95 是多少、改后 p95 是多少、在什么数据规模和环境下测的、根因证据是什么、怎么退回去"这五件事连起来讲完。讲不完就还停在假设阶段。
+
+<Aside type="note">
+本 Skill 不创建或更新 TODO、不改功能状态、不操作 Git，只把基线、修改、对照验证、执行证据、回退路径和未覆盖边界返回给 feature owner。只有不改变已批准行为和业务契约的性能缺陷或纯技术优化才能跳过产品流程；执行中出现业务变化会立即停止。
+</Aside>

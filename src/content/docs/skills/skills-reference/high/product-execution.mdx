@@ -1,0 +1,244 @@
+---
+title: 产品执行（product-execution）
+description: 把已确认的产品方向整理成 PRD、OKR、路线图、Backlog 或发布计划，并保留真实的文档状态与批准来源
+order: 26
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`product-execution` 是产品文档的写手：产品方向已经定下来之后，把它变成下一个角色能直接拿去用的 PRD、OKR、Outcome Roadmap、Backlog、迭代计划、复盘或发布说明。它的价值不在于模板好看，而在于每一份产物都带着真实的文档标识、版本、状态、决策人和批准来源——所以它写出来的东西可以被追问"这是谁批的"。
+
+它明确不做前置的机会验证，也不做完整的业务定义。写出一份 PRD 不等于产品被批准了：`Draft` 和 `Review` 只是文档状态，`Approved` 和 `Ready-for-Project` 必须指向一个真实的人和一次真实的批准。它同样不是新需求的入口——想绕过联合计划和唯一 TODO 直接开工，要回到 [product-manager](/skills/skills-reference/critical/product-manager/) 和 [project-manager](/skills/skills-reference/high/project-manager/)。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "帮我写个 PRD" | 一份能直接进评审的需求文档，问题、验收、指标、边界、开放问题都有落点 |
+| "这个季度的 OKR 怎么定" | 一组能被数据回答的目标，而不是把待办事项换个名字 |
+| "做一版路线图" | 按结果组织的时间视图，每一格挂着还没验证的假设 |
+| "把这些需求拆成 Backlog" | 一串可以单独评审、单独验收的条目 |
+| "这个迭代能装下多少" | 一份候选范围，外加被挤出去的清单和原因 |
+| "复盘一下上个版本" | 事实、根因、实验和带负责人的行动分开列 |
+| "写一下发布说明" | 面向用户价值的变更清单，每条状态可追溯 |
+| "帮我改一下那份 PRD" | 在既有文档上原位修订，不另起一份平行版本 |
+
+<Aside type="caution">
+一份文档写完了，产品并没有因此被批准。让状态停在 `Draft` 或 `Review` 是正常且诚实的做法；升到 `Approved` 需要一个真实的人点头，而且这个人和这次批准要能在文档里被找到。想法本身还没收敛就别急着写 PRD，先走 [product-manager](/skills/skills-reference/critical/product-manager/)。
+</Aside>
+
+## 什么时候不要用
+
+- **要定战略、市场、竞争、商业模式、定价** → [product-strategy](/skills/skills-reference/high/product-strategy/)。
+- **要做机会验证、用户研究、假设实验** → [product-discovery](/skills/skills-reference/high/product-discovery/)。这里消费它的结论，不重跑研究。
+- **要完整的需求定义（能力、菜单、权限、数据、跨端验收）** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **要指标契约、SQL、样本量或统计分析** → [product-analytics](/skills/skills-reference/medium/product-analytics/)。
+- **要 ICP、定位、渠道、市场发布与增长计划** → [go-to-market](/skills/skills-reference/low/go-to-market/)。这里写的"发布计划"只回答"哪个版本装了什么、卡在谁那里"，不回答"怎么把它卖出去"。
+- **要页面结构、视觉与交互设计证据** → [frontend-design](/skills/skills-reference/high/frontend-design/)。PRD 只把交互逻辑固定下来，真实设计稿不在这里产生。
+- **要技术栈、接口、数据模型或实现方案** → [architecture-design](/skills/skills-reference/high/architecture-design/)、[tech-decision](/skills/skills-reference/high/tech-decision/)，实现交给 [universal-development](/skills/skills-reference/low/universal-development/) 或 [dev](/skills/skills-reference/high/dev/)。
+- **要会议纪要、状态更新、正式发布沟通** → [internal-comms](/skills/skills-reference/low/internal-comms/)。
+- **要隐私政策、用户协议、NDA 等法律草案** → [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)，并保留人工法务复核。
+- **要测试方案或测试代码** → 只在你本轮明确要求时，分别路由 [test-strategy](/skills/skills-reference/medium/test-strategy/) 和 [test-development](/skills/skills-reference/medium/test-development/)。
+
+## 前置条件
+
+没有"必须先跑完某个 Skill"的硬门槛，任何时候都能叫它。真正决定这次能不能写出有用东西的，是下面这几样输入齐不齐——缺一样，就会在一个具体的地方塌掉：
+
+| 缺什么 | 塌在哪里 |
+| --- | --- |
+| 目标结果、用户问题、成功指标 | 产物退化成功能清单，KR 变成任务列表 |
+| 非目标 | 范围无边界，评审时反复被追加需求 |
+| 研究证据 | 结论没有来源，无法回答"依据是什么" |
+| 依赖、约束、风险 | 路线图承诺无法兑现的日期 |
+| 文档标识、版本、状态 | 多份同名文档并行，没人知道哪份有效 |
+| 决策人、批准来源 | 无法从 `Review` 升到 `Approved` |
+| 下一 Owner、交付证据 | 文档写完就断了，没有交接 |
+
+缺的东西不会被模板占位糊过去，会明确进到文档末尾的开放问题里。落盘位置是你指定的路径，或者仓库里已有的产品文档目录；提交和推送仍然要你单独授权。
+
+## 怎么用
+
+### 场景一："帮我写个 PRD——批量导出订单"
+
+你只给了一句话。它会先把这句话拆开问：谁在什么情况下要导出、导出完拿去干什么、现在是怎么绕过去的。你答不上来的部分不会被猜，会留成开放问题。最后落成一份带编号验收的文档：
+
+```markdown
+# PRD-2026-014 订单批量导出
+- 版本 v0.3 / 状态 Review / 决策人 待定（见开放问题 Q2）
+- 事实来源：客服工单 #3312-#3390，近 90 天 78 起手工导出请求
+
+## 目标 / 非目标
+- 目标：运营在订单列表按当前筛选条件导出 CSV，5 万行内 60 秒可下载
+- 非目标：自定义字段模板、定时导出、导出到对象存储直链
+
+## 验收
+- AC-1 按当前筛选条件导出，行数与列表统计一致
+- AC-2 超过 5 万行时给出明确拒绝提示，不产生半截文件
+- AC-3 无导出权限的角色看不到入口，直接调接口返回 403
+- AC-4 任务失败后可重试，重试不产生重复文件
+
+## 开放问题
+- Q1 5 万行上限是产品约束还是当前实现限制？待架构侧确认
+- Q2 这一版谁批？
+```
+
+留意 AC-3 和 AC-4：权限和失败路径是被主动补上的，不是等评审时被人问出来的。这也是"一个用户故事"和"一条完整需求"的差别所在。
+
+### 场景二："这个季度的 OKR 怎么定"
+
+你给的候选会被逐条过一遍，凡是"做完某件事"的都会被退回重写。同一件事的两种写法：
+
+| 你可能会写 | 会被改成 |
+| --- | --- |
+| 上线导出功能 | 运营完成一次批量导出的中位耗时从 25 分钟降到 3 分钟内 |
+| 完成 3 次用户访谈 | 导出场景的手工工单占比从 12% 降到 4% 以下 |
+| 提升系统稳定性 | 导出任务成功率从 91% 升到 99%，P95 时长不超过 60 秒 |
+
+左边是行动，右边是结果。行动可以进 Backlog，但不能占着 KR 的位置。
+
+### 场景三："做一版路线图"
+
+不会给你一张按月排满的甘特图。每一格是一个想要的结果，配上支撑它的假设和当前证据强度；没有依据的日期不会被写上去：
+
+```text
+Now    订单导出（PRD-2026-014）     假设：手工导出是客服工单主要来源   证据：工单抽样 78/312
+Next   导出模板复用                 假设：同一批筛选条件会被反复使用   证据：待验证，埋点未上
+Later  定时导出 + 对象存储直链       假设：存在跨天大批量需求           证据：仅 2 起访谈提及
+```
+
+`Later` 那一行只有两条访谈线索，所以它就该停在 `Later`，而不是因为"技术上顺手"被提前。
+
+### 场景四："这个迭代能装下多少"
+
+输出永远是两份清单：装进去的，和被挤出去的。被挤出去的那份必须写原因，否则下个迭代同样的争论会重来一次。
+
+```text
+候选范围（基于 2 名后端 + 1 名前端的真实可用工时）
+  ✓ 导出主流程（AC-1 / AC-2）
+  ✓ 权限拦截（AC-3）
+  ✗ 失败重试（AC-4）— 依赖任务框架结论，等 tech-decision
+  ✗ 导出模板复用 — 假设未验证，见路线图 Next
+```
+
+容量来自真实可用工时，不是从"上个迭代做了多少点"反推出来的速度。
+
+### 场景五：排序时先分清在排什么
+
+同一份 Backlog，排"还没定要不要做的用户问题"和排"已经对外承诺过的范围"，不该用同一把尺。判断路线：
+
+```text
+这批东西现在处在什么状态？
+├─ 还没定要不要做的用户问题 → 看问题多重要、现在多不满意、证据有多硬
+├─ 已定要做、在比几种做法   → 看对目标的影响、覆盖多少人、信心、成本、风险
+├─ 已经对外承诺过的范围     → 用 MoSCoW 这类协商型分级，且必须真的分出层次
+└─ 想知道用户觉得是惊喜还是底线 → 用 Kano 理解期望，别拿它当排序公式
+```
+
+每个分数都要说清量表是什么、数据取的哪个窗口、来自哪里。只给一个数字不给来源，等于没排。排完之后，被延后和被拒绝的项会连着原因留在文档里。
+
+### 场景六：重要产物过一遍红队
+
+值得过红队的只有那几份：会影响钱、影响权限、影响数据的 PRD，以及已经对外承诺过的路线图和发布计划。顺序是先把方案讲成最强的版本，再去打它最吃重的那条假设——顺序反了就变成挑刺，挑刺不产生结论。
+
+一次真实的红队记录长这样：
+
+```text
+Steelman：导出是运营高频动作，手工替代成本高，实现路径清晰，值得先做。
+承重假设：5 万行 60 秒内可完成。
+  证据：本地 2 万行 18 秒；生产未测。
+  影响：若不成立，AC-1 与 AC-2 同时失效，要改成异步任务 + 完成通知。
+  最便宜的验证：拿生产影子库跑一次 5 万行导出，半天内可得。
+Elephant：没人问过导出文件里能不能带手机号——带了就是一次数据外发。
+```
+
+最后那条才是红队的价值：它不在任何清单上，但会决定这个功能能不能上。
+
+### 场景七：交接给下一个角色
+
+写完不是终点，能被下一个人直接拿走才是。交接段落写成可核对的形式，而不是一句"已完成"：
+
+```markdown
+## 交接
+- 文档：PRD-2026-014 v0.3 / Review
+- 已确认事实：客服工单抽样、订单列表筛选接口现状
+- 交付面：Web 管理端（有页面）；移动端 not-applicable
+- 交互逻辑：入口 = 订单列表工具栏；主流程 = 筛选 → 导出 → 下载；
+  异常 = 超限拒绝 / 任务失败；恢复 = 重试；权限 = 订单导出权限点
+- 下游 Owner：frontend-design 出设计证据 → project-manager 写入 TODO
+- 未决：Q1 行数上限归属、Q2 决策人
+- 下一检查点：Q1 有结论后升 v0.4，请决策人过 Review
+```
+
+纯后端需求把交付面直接标成 `not-applicable`，不生成页面占位；有页面的需求把交互逻辑写到能直接交给 [frontend-design](/skills/skills-reference/high/frontend-design/) 的粒度。
+
+<Aside type="tip">
+判断交接是否合格有个土办法：把文档发给下一个人，如果对方第一句话是"那这个…谁定"或者"这里是要做成什么样"，说明交接段落还差东西。
+</Aside>
+
+## 常见误用
+
+| 现象 | 实际该走 |
+| --- | --- |
+| 想法还没定就来要 PRD，指望文档帮自己想清楚 | 先用 [product-manager](/skills/skills-reference/critical/product-manager/) 收敛，口径不清先 [grilling](/skills/skills-reference/medium/grilling/) |
+| 拿 PRD 当任务清单，希望它直接排出谁做什么 | [project-manager](/skills/skills-reference/high/project-manager/) 写 TODO，[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 维护状态 |
+| 要求文档写上具体技术选型和接口签名 | [tech-decision](/skills/skills-reference/high/tech-decision/) 冻结方案，[api-development](/skills/skills-reference/high/api-development/) 定契约 |
+| 把 KR 写成"完成 X 个功能"，再问为什么不达标 | KR 只衡量结果变化，行动项放 Backlog |
+| 让路线图给出精确到周的日期 | 没有容量和依赖证据时只能给顺序和假设 |
+| 让它把还没合并的内容写进"已发布" | 候选版逐项标状态，正式版只收已发布并验证的事实 |
+| 用它写指标口径和 SQL | [product-analytics](/skills/skills-reference/medium/product-analytics/) 出指标契约 |
+| 已批准范围变了，想直接在 PRD 里改一行 | [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 先算影响面 |
+
+## 与其他 Skill 的关系
+
+### 一次编排走完，还是分三段叫
+
+同一个需求，两种进法都成立，区别在你手上已经有什么：
+
+```text
+想法还没确认        → product-manager 一次编排（研究 → 收敛 → 定义 → 验收）
+                       └ 内部按需借用 discovery / strategy / execution 的能力
+方向已经很清楚      → 直接叫 product-execution，只补文档
+证据不够，先要研究  → product-discovery → product-strategy → product-execution
+```
+
+三段式适合"每一段都要留下能被追问的产物"的场景；一次编排适合"我只想要一个能开工的结论"。最容易出错的是中间态：拿着一份没有证据的 PRD 去开工，比没有 PRD 更贵。
+
+- **上游**：[product-strategy](/skills/skills-reference/high/product-strategy/) 给市场与商业模式的选择，[product-discovery](/skills/skills-reference/high/product-discovery/) 给研究证据和验证结论。
+- **下游**：[product-manager](/skills/skills-reference/critical/product-manager/) 与 [project-manager](/skills/skills-reference/high/project-manager/) 把结论汇总成完整定义和功能+菜单 TODO；工程开工后，[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 是唯一的任务状态源。
+- **协作**：[frontend-design](/skills/skills-reference/high/frontend-design/) 出设计证据，[product-analytics](/skills/skills-reference/medium/product-analytics/) 出指标契约，[internal-comms](/skills/skills-reference/low/internal-comms/) 做纪要与发布沟通，[doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/) 处理法律文本。
+
+典型链路：
+
+```text
+product-strategy ┐
+                 ├→ product-manager → product-execution（PRD/OKR/Roadmap）
+product-discovery┘                          ↓
+                                     project-manager → task-todo-workflow → dev
+```
+
+## 产出与验收
+
+留在仓库里的是一份或多份带真实状态的产品文档，路径是你指定的位置或仓库既有的产品文档目录——不新建平行文档树，也不生成 TODO 投影。
+
+判断真的完成了，看三件事：
+
+1. **状态是真的**：文档标识、版本、`Draft | Review | Approved`、决策人和批准来源都能被追溯，不是模板占位。
+2. **下一个角色不用回头问**：交付面、UI/UX 适用性、接收 Owner 写明；有页面的需求带交互逻辑，纯后端标 `not-applicable`。
+3. **取舍是显式的**：被延后和被拒绝的项连着原因留在文档里，不是只留下一个胜出列表。
+
+<Aside type="danger">
+"已发布"这三个字最贵。只有真的发出去并验证过的事实才能进正式 Release Notes；候选版可以包含还在路上的内容，但每一条都要带着自己的真实状态。同理，容量、排期、负责人、日期、Story Point 一旦被编出来，下游会照着它执行。
+</Aside>
+
+<Aside type="note">
+一个用户故事写完，需求并没有写完：权限、失败路径、边界和数据规则不会因为故事读起来通顺就自动成立。部分产品执行方法经通用化改写自 `phuryn/pm-skills` v2.1.0。
+</Aside>
+
+## 下一步
+
+- 方向还没定 → [product-manager](/skills/skills-reference/critical/product-manager/)
+- 证据还不够 → [product-discovery](/skills/skills-reference/high/product-discovery/)
+- 文档已批准、要开工 → [project-manager](/skills/skills-reference/high/project-manager/) → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)
+- 有页面要落地 → [frontend-design](/skills/skills-reference/high/frontend-design/) → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)
+- 稳定下来的项目事实 → [project-details](/skills/skills-reference/high/project-details/)
+

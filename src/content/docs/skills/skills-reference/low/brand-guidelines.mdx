@@ -1,0 +1,98 @@
+---
+title: Anthropic 品牌规范（brand-guidelines）
+description: 把已有交付物统一到 Anthropic 官方品牌视觉，含字体缺失时的自动回退
+order: 21
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"按品牌规范来"这句话如果没有确定的取值，最后就会变成每个人凭印象调一次颜色。`brand-guidelines` 持有 Anthropic 官方品牌身份的确定事实——主色与强调色的精确取值、标题和正文各自的字体与回退方案——并按元素类型自动套用。它是一次**后处理**：作用在已经存在的交付物上，不参与内容创作。
+
+它替你做掉的判断是"这个元素该用哪个色、哪个字体、多大算标题"。它不做代码实现、不做 UI 组件、不定义产品、不写业务逻辑。它也不是通用品牌系统——里面的取值只属于 Anthropic，换成客户或第三方品牌时一条都不适用。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "按品牌规范美化一下这份材料" | 已有交付物需要统一到品牌视觉 |
+| "Anthropic 的品牌色是什么" | 需要精确取值，不靠截图取色 |
+| "标题该用什么字体" | 需要标题与正文的字体分工 |
+| "这个 PPT 看着不像我们的东西" | 视觉身份不一致的排版返工 |
+| "强调色怎么用" | 非文本形状的配色规则 |
+
+触发词概括起来是两组：品牌规范、Anthropic 品牌；场景关键词还包括品牌识别、视觉识别、样式后处理和排版统一。
+
+## 什么时候不要用
+
+- **写前端代码、做界面组件** → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/)。
+- **决定页面视觉方向、产出设计规格** → [frontend-design](/skills/skills-reference/high/frontend-design/)。品牌规范给的是取值，不是设计方案。
+- **决定产品要做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **业务逻辑** → [universal-development](/skills/skills-reference/low/universal-development/)。
+- **客户品牌、第三方品牌、白标场景** → 不适用。这里的色值和字体不能拿去套别人的品牌。
+- **从零创作视觉作品** → [canvas-design](/skills/skills-reference/low/canvas-design/)。品牌规范是套在成品上的，不是创作起点。
+
+不适用范围概括为四条：代码实现、产品定义、UI 组件、业务逻辑。
+
+## 前置条件
+
+它没有声明 `gates`，真实的输入要求来自流程边界：
+
+1. **必须已有一个交付物作为套用对象**。它只执行既有 TODO 里的品牌样式步骤，是后处理，不产出新内容。
+2. **字体不需要预先安装**。系统里有指定字体时直接使用，没有时自动回退到通用替代字体。这是设计好的降级路径，不是失败。
+3. **不维护任务状态**。TODO 状态由对应 Skill 处理。
+
+<Aside type="note">
+"无需安装字体"是这套规范的明确立场：可读性优先于字体精确性。要求你先装字体再继续，属于把可降级的步骤当成阻塞——遇到这种情况说明用错了流程。
+</Aside>
+
+## 怎么用
+
+### 1. 指出要套用的交付物
+
+你只需要说清对象（哪份 PPT、哪份文档、哪一页），不需要提供色号或字体名——取值在 Skill 内部，不需要你转述，也不该由你凭记忆提供。
+
+### 2. 它按元素类型自动判断
+
+三类判断是自动的：
+
+- **文本**：按字号分界决定用标题字体还是正文字体，文字颜色根据背景智能选择，原有的层级和格式保留。
+- **非文本形状**：使用强调色，并按固定顺序循环，保证视觉有变化又不跑出品牌。
+- **可读性**：指定字体不可用时回退，跨系统保持可读，不因为缺字体而破版。
+
+<Aside type="tip">
+字号是标题与正文的自动分界依据，所以调整字号会连带改变字体归属。需要某段文字保持正文字体时，注意不要把它放大到标题区间——这是套完样式后最常见的"为什么这行字变了"。
+</Aside>
+
+### 3. 落到具体载体
+
+它作用在文件本身。最直接的载体是 [pptx](/skills/skills-reference/low/pptx/) 生成的演示文稿，文档类交付物见 [docx](/skills/skills-reference/low/docx/)。这两个不在它声明的相关列表里，属于承载样式的输出格式，而不是协作 Skill。
+
+<Aside type="caution">
+不要把这套取值当成"通用高级配色"往任何地方套。它是一个组织的品牌身份，用错对象时问题不是审美而是合规——非 Anthropic 的交付物需要拿到对应品牌自己的规范。
+</Aside>
+
+## 与其他 Skill 的关系
+
+它的相关列表是平铺的：[frontend-design](/skills/skills-reference/high/frontend-design/)、[doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)，没有前置或后续分组，所以它是一个可以随时插入的**独立入口**。
+
+- **协作**：[frontend-design](/skills/skills-reference/high/frontend-design/) 定视觉方向时可以引用这里的确定取值，避免自己造色板；[doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/) 成稿之后由本 Skill 做样式收口。
+- **载体**：[pptx](/skills/skills-reference/low/pptx/)、[docx](/skills/skills-reference/low/docx/) 负责生成和写回文件本身。
+
+```text
+doc-coauthoring / pptx（先有内容和文件）
+        ↓
+brand-guidelines（套色、套字体、套形状规则）
+        ↓
+交付物本身被改写，不新增独立文档
+```
+
+## 产出与验收
+
+它不产出新文档——改的是已有交付物本身。判断真的完成了：
+
+- 标题和正文各自命中指定字体，或明确回退到替代字体，回退发生时有说明而不是静默变形；
+- 颜色精确等于品牌取值，不是"接近的颜色"；
+- 非文本形状按强调色顺序循环，没有出现品牌外的颜色；
+- 文字与背景对比可读，深底浅字、浅底深字的选择正确；
+- 原有的文本层级和格式没有被破坏——套样式不等于重排版；
+- 交付物之外没有多余的说明文件、色板图或规范副本。

@@ -1,0 +1,128 @@
+---
+title: Medium 优先级 Skill
+description: 30 个专业领域 Skill 的速查目录
+order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 这一层是什么
+
+Medium 优先级的 30 个 Skill 覆盖**具体技术领域**：任务状态维护、基础设施、测试、文档、Skill 自身管理。
+
+和 Critical / High 的区别在于调用方式：
+
+- Critical / High 通常由流程自动串起来（产品定义 → 架构 → 技术选型 → 实施）。
+- Medium 更多是**你在流程中途点名调用**的能力，例如"设计一下 Redis 缓存""把这个任务加到 TODO""检查一下后端规范"。
+
+<Aside type="tip">
+每个 Skill 的完整说明、触发词、门槛和协作关系在 [Skill 参考手册](/skills/skills-reference/) 里；本页只做速查和选型。
+</Aside>
+
+## TODO 与任务状态（4 个）
+
+TODO 是整个框架的唯一状态源。这四个 Skill 分别负责写入、挑选、回写和统计。
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [add-todo](/skills/skills-reference/medium/add-todo/) | "把这个也加进去" | 向唯一 TODO 追加去重、可验收且纵向完整的功能或步骤 |
+| [next](/skills/skills-reference/medium/next/) | "接下来做什么" | 按依赖和代码事实挑出下一项可执行的完整功能 |
+| [update-status](/skills/skills-reference/medium/update-status/) | 功能做完后 | 按代码、Review 和 Git 事实回写 TODO 状态 |
+| [progress](/skills/skills-reference/medium/progress/) | "现在进度多少" | 只读统计功能进度，不改任何状态 |
+
+<Aside type="caution">
+这四个 Skill 都只操作**当前开发者唯一的那份 TODO**。不要用它们去改别人目录下的 TODO。
+</Aside>
+
+## 基础设施（6 个）
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [error-handler](/skills/skills-reference/medium/error-handler/) | 统一异常、错误码 | 异常、参数校验、错误码、日志和事务响应 |
+| [satoken-core](/skills/skills-reference/medium/satoken-core/) | 登录态、鉴权 | Sa-Token 认证会话的实现与排查 |
+| [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/) | 定时任务、延迟队列 | 定时、延迟和分布式任务 |
+| [websocket-sse](/skills/skills-reference/medium/websocket-sse/) | 实时推送 | 推送、认证、重连和跨实例语义 |
+| [tenant-management](/skills/skills-reference/medium/tenant-management/) | SaaS 多租户 | 租户隔离、上下文和跨租户运维 |
+| [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/) | 部署到服务器 | SSH 连接、源码优先构建、验证与部署 |
+
+## 数据与工具（3 个）
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [redis-cache](/skills/skills-reference/medium/redis-cache/) | 加缓存、分布式锁 | 缓存与锁的设计和排查 |
+| [file-oss-management](/skills/skills-reference/medium/file-oss-management/) | 上传、下载、私有读写 | 文件与对象存储的接入和加固 |
+| [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) | 想写个工具方法之前 | 先从仓库找已有工具类和 API，避免重复封装 |
+
+## 质量与测试（5 个）
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [check](/skills/skills-reference/medium/check/) | 按团队规范自查 | 按仓库已证明的后端规范检查实现 |
+| [performance-doctor](/skills/skills-reference/medium/performance-doctor/) | 慢、卡、超时 | 按指标定位并优化性能 |
+| [test-strategy](/skills/skills-reference/medium/test-strategy/) | 你明确要测试方案时 | 设计最小测试策略与用例 |
+| [test-development](/skills/skills-reference/medium/test-development/) | 你明确要写测试代码时 | 编写或修改最小测试代码 |
+| [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/) | 要真实点一遍页面 | 用真实 Chromium 跑端到端业务流程并留证据 |
+
+<Aside type="caution">
+`test-strategy` 和 `test-development` 只在你**本轮明确要求**时才会启动。覆盖率不够、Review 提了意见、CI 有门禁，都不构成自动写测试的授权。
+</Aside>
+
+## 需求澄清与方案发散（4 个）
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [grilling](/skills/skills-reference/medium/grilling/) | 需求说不清、口径不一致 | 一次一个问题追问到约 95% 清晰 |
+| [brainstorm](/skills/skills-reference/medium/brainstorm/) | 有几种做法拿不定 | 在已确认约束内发散并收敛，不替你做决策 |
+| [project-navigator](/skills/skills-reference/medium/project-navigator/) | 刚接手陌生仓库 | 定位结构、入口、模块和参考实现 |
+| [archify](/skills/skills-reference/medium/archify/) | 要一张能看的架构图 | 生成可交互 HTML 架构图/时序图/状态图 |
+
+## 文档与产品（3 个）
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [init-docs](/skills/skills-reference/medium/init-docs/) | 项目缺共享文档或项目记忆 | 初始化最少团队共享文档，补齐 `PROJECT-MEMORY.md` |
+| [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/) | 长文档要人机共写 | 协作撰写与校对文档、提案、草案 |
+| [product-analytics](/skills/skills-reference/medium/product-analytics/) | 指标口径、漏斗、留存 | 定义指标并分析行为与实验数据 |
+
+## 前端状态（1 个）
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [store-pc](/skills/skills-reference/medium/store-pc/) | 状态散在组件里 | 按仓库实际方案实现 Store 与 Hooks |
+
+## Skill 自身管理（4 个）
+
+这一组用来维护框架自己，日常业务开发一般不需要。
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [find-skills](/skills/skills-reference/medium/find-skills/) | "有没有现成的 Skill" | 发现、比较并安装合适 Skill |
+| [skill-creator](/skills/skills-reference/medium/skill-creator/) | 要新建一个 Skill | 创建 Skill 或实施已确认的结构改动 |
+| [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) | "这个 Skill 触发不准" | 直接审查或修改你点名的现有 Skill |
+| [add-skill](/skills/skills-reference/medium/add-skill/) | Skill 写完要能被发现 | 注册到 CLI 与共享仓库，校验 Hook 与路由 |
+
+## 常见组合
+
+新增一个带缓存的接口：
+
+```
+tech-decision → api-development → redis-cache → error-handler → check → code-review
+```
+
+功能做完收口：
+
+```
+update-status → git-commit → next
+```
+
+线上变慢了：
+
+```
+bug-detective → performance-doctor → redis-cache（如涉及缓存）→ code-review
+```
+
+## 下一步
+
+- [Low & Fallback 优先级](/skills/catalog/low-fallback/) - 扩展能力与兜底能力
+- [Critical & High 优先级](/skills/catalog/critical-high/) - 核心流程能力
+- [Skill 参考手册](/skills/skills-reference/) - 每个 Skill 的完整说明

@@ -1,0 +1,265 @@
+---
+title: Excel 表格处理（xlsx）
+description: 安全读写 XLSX/XLSM/CSV/TSV：保原件、保公式、保类型精度，并说清哪些边界只有原生 Excel 能确认
+order: 35
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+表格出错和代码出错的区别在于反馈延迟。一个被静默转成浮点的订单号、一个被整表重写掉的公式，通常不会当场报错，而是几个月后由一句"这个数一直不对"浮出来。这个 Skill 的重心因此落在"怎么改得可回退"上：原件不动，输出先写临时文件再发布，公式保住不换成固化值，数字类型不悄悄漂移，宏和签名不悄悄丢失，做不到的部分明说交给原生 Excel。
+
+它直接处理你指定的那个文件，不维护任务清单，也不为普通任务另写一份说明文档——交付信息写在回复里。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "读一下这个 Excel 里的数据" | 结构摘要加你要的那几列，不会把整表打出来 |
+| "把这几列汇总成一张新表" | 一个新文件，原件保持原样 |
+| "在这个模板里填上本月数据" | 只动目标单元格，模板的样式和公式都在 |
+| "这张表的公式显示 #REF!" | 错误单元格定位，以及重算后的结果 |
+| "CSV 打开是乱码 / 前导零没了" | 固定编码与分隔符的往返，关键列按文本读写 |
+| "这份带宏的表能改吗" | 能改的部分改掉，宏与签名的边界说清楚 |
+| "帮我搭一个财务模型" | 假设单元格独立、公式可追溯的工作簿 |
+
+## 什么时候不要用
+
+- 要写代码、改代码 → [universal-development](/skills/skills-reference/low/universal-development/)。
+- 需求和验收还没定 → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- Word 文档 → [docx](/skills/skills-reference/low/docx/)；PDF → [pdf](/skills/skills-reference/low/pdf/)；演示文稿 → [pptx](/skills/skills-reference/low/pptx/)。
+- 要设计数据表、加索引、写迁移 → [database-design](/skills/skills-reference/high/database-design/) 与 [database-ops](/skills/skills-reference/high/database-ops/)。Excel 不是数据库，拿它当中间层迟早要还。
+- 需要 VBA 调试、数字签名、Power Query、数据模型，或者需要一份"打开来跟设计稿一模一样"的最终确认 → 保留原件，交给原生 Excel。这几项不在它能担保的范围内。
+
+## 前置条件
+
+它不假定这台机器上装了什么。开工前先探一次能力，探到什么就只承诺到什么：
+
+```bash
+python3 -c "import pandas, openpyxl; print('ok')"
+command -v soffice || command -v libreoffice
+```
+
+| 探到了 | 能做到 |
+| --- | --- |
+| pandas | 数据分析、CSV/TSV 往返、批量转换、简单导出 |
+| openpyxl | 单元格、公式、样式、合并区域、工作表结构 |
+| LibreOffice | 副本重算，把公式的缓存值算出来 |
+| 都没有 | 只能做结构层面的读取和校验，并且必须写明公式未重算 |
+
+缺依赖时降级继续，但结论要如实——"结构校验通过"和"公式算对了"是两件事，不能互相顶替。
+
+## 使用示例
+
+### 示例 1：先看清楚这个文件是什么
+
+你说："这个 3.6MB 的表里有什么？"
+
+```python
+from openpyxl import load_workbook
+
+wb = load_workbook("2026Q1-对账.xlsx", read_only=True, keep_links=True)
+for ws in wb.worksheets:
+    print(f"{ws.title!r}  {ws.dimensions}  行{ws.max_row} 列{ws.max_column}  隐藏={ws.sheet_state}")
+print("合并区域:", wb["明细"].merged_cells.ranges)
+print("1904 日期系统:", wb.epoch)
+wb.close()
+```
+
+```text
+'汇总'  A1:H24    行24 列8   隐藏=visible
+'明细'  A1:M5218  行5218 列13 隐藏=visible
+'旧版'  A1:K900   行900 列11  隐藏=hidden
+合并区域: [A1:H1, A2:B2]
+1904 日期系统: 1899-12-30 00:00:00
+```
+
+拿到的是一份结构摘要——不会把 5218 行倒到终端里，也不会把里面的客户名和手机号打出来。
+
+### 示例 2：往模板里填数据
+
+你说："把三月的数字填进这个模板，公式别动。"
+
+```python
+from openpyxl import load_workbook
+
+wb = load_workbook("模板-月报.xlsx", keep_links=True)   # 注意没有 data_only
+ws = wb["输入"]
+
+for row, (name, value) in enumerate(monthly_rows, start=4):
+    ws.cell(row=row, column=2, value=name)          # 只写目标格
+    ws.cell(row=row, column=3, value=value)          # 样式沿用模板本身的
+
+ws["C2"] = "2026-03"
+wb.save("out/月报-2026-03.tmp.xlsx")                 # 先落临时文件
+wb.close()
+```
+
+```python
+# 重开一次确认能打开、公式还在，再原子发布
+check = load_workbook("out/月报-2026-03.tmp.xlsx")
+assert check["汇总"]["D8"].value.startswith("=")
+check.close()
+os.replace("out/月报-2026-03.tmp.xlsx", "out/月报-2026-03.xlsx")
+```
+
+<Aside type="danger">
+`data_only=True` 只能用来读缓存结果。用这个模式打开再保存，工作簿里所有公式都会变成写死的数字。同理，用 pandas 把一个带公式、批注、图表、条件格式的工作簿整表重写，等于把一个还能算的模型压成一张死数据。
+</Aside>
+
+### 示例 3：订单号变成了科学计数法
+
+你说："导出来的订单号显示 `1.23457E+18`，卡号前面的 0 也没了。"
+
+问题出在这些编号本质是文本，却被当成数字读。Excel 的数值只能可靠保存 15 位有效数字，19 位的雪花 ID 一进去就丢尾数：
+
+```python
+import pandas as pd
+
+# 读的时候就固定成文本，晚一步就已经丢了
+df = pd.read_csv(
+    "orders.csv",
+    dtype={"order_no": "string", "id_card": "string", "bank_card": "string", "zip": "string"},
+    keep_default_na=False,
+)
+
+# 写回 Excel 时也按文本格式落格，避免 Excel 打开时又自动转
+with pd.ExcelWriter("orders.xlsx", engine="openpyxl") as w:
+    df.to_excel(w, index=False, sheet_name="订单")
+    ws = w.sheets["订单"]
+    for col in ("A", "F", "G"):
+        for cell in ws[col][1:]:
+            cell.number_format = "@"
+```
+
+写完再读一遍核对，这一步不能省：
+
+```python
+back = pd.read_excel("orders.xlsx", dtype={"order_no": "string"})
+assert back.shape == df.shape
+assert back["order_no"].iloc[0] == df["order_no"].iloc[0]   # 逐位相等，不是约等于
+```
+
+### 示例 4：CSV 的编码和分隔符
+
+你说："这个 CSV 在 Excel 里打开全是乱码。"
+
+```python
+import csv, chardet
+
+raw = open("in.csv", "rb").read(64_000)
+print(chardet.detect(raw))            # {'encoding': 'GB18030', ...}
+
+with open("in.csv", encoding="gb18030", newline="") as f:
+    dialect = csv.Sniffer().sniff(f.read(8192)); f.seek(0)
+    rows = list(csv.reader(f, dialect))
+
+# 给 Excel 的 UTF-8 CSV 要带 BOM，否则中文还是乱
+with open("out.csv", "w", encoding="utf-8-sig", newline="") as f:
+    csv.writer(f, quoting=csv.QUOTE_MINIMAL).writerows(rows)
+```
+
+还有一个容易忽略的点：来自用户输入的文本，如果以 `=`、`+`、`-`、`@` 开头，写进 CSV 后会被 Excel 当公式执行。这类字段要按文本转义再写；而明确是数值的列、以及本来就该是公式的列，不要跟着一起转。
+
+### 示例 5：带宏的工作簿
+
+```python
+wb = load_workbook("报表工具.xlsm", keep_vba=True, keep_links=True)
+wb["参数"]["B2"] = "2026-03"
+wb.save("out/报表工具.xlsm")     # 扩展名不能改成 .xlsx，改了宏就没了
+```
+
+如果这份文件带数字签名，改动会让签名失效。没有重新签名的办法之前，不要用它替换正在流转的那份交付件——签名坏掉这件事在别人手里才会被发现。
+
+### 示例 6：重算并核对
+
+结构能打开不代表算得对。要确认公式，得让一个真正的计算引擎跑一遍副本：
+
+```bash
+python3 scripts/recalc.py 月报-2026-03.xlsx --output out/月报-final.xlsx --timeout 30
+python3 scripts/office/validate.py out/月报-final.xlsx
+```
+
+```text
+recalc: 3 个工作表，428 个公式，重算完成
+        错误单元格 0，缺失缓存 0
+validate: OOXML 结构与关系正常
+```
+
+如果这里报出错误单元格，交付前必须清零——`#REF!`、`#DIV/0!`、`#VALUE!` 这类留在文件里，收到文件的人第一眼就会看到。工具跑不起来的时候，写"公式未重算"，不要拿结构校验的通过顶上去。
+
+### 示例 7：新建财务模型
+
+财务圈有一套沿用很久的着色习惯：输入用蓝色、公式用黑色、跨表引用用绿色、外部文件引用用红色，待确认的假设加黄底。它的价值在于扫一眼就知道哪个格能改。除此之外常见的还有：年份按文本显示，货币标题写清单位，零值显示 `-`，负数用括号。
+
+```text
+B4  假设：月增长率     3.0%        ← 蓝色，可改
+B5  假设：客单价       128         ← 蓝色，可改
+C8  =B8*(1+$B$4)                   ← 黑色，引用假设格
+D8  =明细!D20                      ← 绿色，跨表
+E8  ='[2025预算.xlsx]汇总'!C8      ← 红色，外部文件
+```
+
+<Aside type="tip">
+改别人的模板时，模板自己的惯例优先。别把一张用了三年的表改成"更规范"的样子——公式是对的，颜色变了，用它的人反而不敢动了。
+</Aside>
+
+### 示例 8：收尾时你会看到的回复
+
+```text
+输出
+  out/月报-2026-03.xlsx（原件 模板-月报.xlsx 未改动）
+
+改了什么
+  输入!B4:C15 填入三月数据，输入!C2 改为 2026-03
+  样式、公式、合并区域沿用模板
+
+验证
+  重开可打开，汇总!D8 仍是公式
+  recalc：428 个公式，错误 0，缺失缓存 0
+  validate：OOXML 结构正常
+
+仍需人工确认
+  这份表在 Excel for Mac 上的打印分页（本机无 Excel）
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 同族 | [docx](/skills/skills-reference/low/docx/) | Word 文档 |
+| 同族 | [pdf](/skills/skills-reference/low/pdf/) | PDF 读写与 OCR |
+| 同族 | [pptx](/skills/skills-reference/low/pptx/) | 表格数据要做成图进汇报材料时 |
+| 协作 | [file-oss-management](/skills/skills-reference/medium/file-oss-management/) | 生成的文件要上传或分发时 |
+| 边界外 | [database-design](/skills/skills-reference/high/database-design/) | 数据要长期存下来时 |
+
+```text
+你指定的表格文件
+        ↓
+xlsx（勘察 → 最小改动 → 临时文件 → 重算校验 → 原子发布）
+        ↓
+pptx（图进汇报）  file-oss-management（上传）  原生 Excel（专属能力确认）
+```
+
+## 常见坑
+
+**用 pandas 整表重写一个模板。**  数据是对的，公式、条件格式、图表、批注全没了。这类损失在打开文件时看不出来，要等到下个月有人改一个假设值、发现汇总不动了。
+
+**原地保存。**  改完直接盖回原文件，出问题就没有对照物了。写临时文件再替换，多两行代码换一次可回退。
+
+**大文件全量加载。**  几十万行的表用普通模式打开会把内存吃光。读用 `read_only=True`，写用 `write_only=True`，CSV 走分块。
+
+**把整表打到终端或回复里。**  里面往往有客户名、手机号、金额。只输出你要的那几列和结论。
+
+**临时文件留在仓库里。**  `.tmp.xlsx`、锁文件、LibreOffice 的用户目录，跑完要清掉，否则它们会跟着下一次提交进去。
+
+## 下一步
+
+- [docx](/skills/skills-reference/low/docx/) — Word 文档处理
+- [pdf](/skills/skills-reference/low/pdf/) — PDF 读写与 OCR
+- [pptx](/skills/skills-reference/low/pptx/) — 把表格数据变成汇报材料
+- [file-oss-management](/skills/skills-reference/medium/file-oss-management/) — 文件上传与访问控制
+- [database-design](/skills/skills-reference/high/database-design/) — 数据该进数据库时
+
+
+
+

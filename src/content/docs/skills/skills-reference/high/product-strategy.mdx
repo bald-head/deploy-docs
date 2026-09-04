@@ -1,0 +1,217 @@
+---
+title: 产品战略（product-strategy）
+description: 定清楚在哪个市场、用什么方式赢，以及明确不做什么，包含市场规模、竞争、商业模式与定价取舍
+order: 27
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+战略的内容是选择，不是框架。`product-strategy` 会逼出两句话："我们选择在哪里竞争、靠什么赢"，以及"我们明确不做什么"。填满一张 SWOT 四象限、把 Lean Canvas 每个区块都写上字，都不构成战略——那只是把已知信息重新排了一遍。所以它交出来的每条结论都会标出这是事实、外部来源、内部数据还是判断。
+
+它负责的是市场、竞争、商业模式和定价这一层的取舍，并给出验证路径。它不写 PRD，不选技术，不排项目，也不改真实价格。战略结论要变成可执行的东西，必须先经过真实的产品批准和项目门禁——`Draft` 和 `Review` 状态的战略不能冒充 `Ready-for-Project`。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "我们的产品战略是什么" | 一句"在哪里竞争、靠什么赢"，配一份同样明确的"不做什么" |
+| "这个产品该怎么定位" | 谁、为什么、现在怎么凑合的、我们怎么解、他还有什么别的选择 |
+| "商业模式怎么设计" | 一张画布，选一张填，不是三张都填 |
+| "这个东西该怎么收费" | 从用户拿到的价值反推的计费方式，附支付意愿证据 |
+| "这个市场有多大" | 带来源、系数、区间和关键假设的估算，缺证据的地方明确标出来 |
+| "竞品都在做什么" | 分三类的对手图景，未知的地方写"未知"而不是猜 |
+| "帮我看看外部环境风险" | 一个选定的分析角度，加上它导出的真实取舍 |
+
+<Aside type="tip">
+框架之间打架的时候，答案是指出真实取舍，而不是把所有象限都写成"建议同时推进"。缺数据的那条路径会给你模型和取数计划并标为待验证，不会用一个看起来合理的数字补上。
+</Aside>
+
+## 什么时候不要用
+
+- **要写 PRD、OKR、路线图、Backlog** → [product-execution](/skills/skills-reference/high/product-execution/)。
+- **要做用户研究、受访者研究、机会与假设实验** → [product-discovery](/skills/skills-reference/high/product-discovery/)。这里把它的证据转成战略选择，不猜研究结论。
+- **要指标契约、SQL、市场/定价数据计算或实验统计解释** → [product-analytics](/skills/skills-reference/medium/product-analytics/)。
+- **要定 ICP、定位落地、具体渠道、发布与增长计划** → [go-to-market](/skills/skills-reference/low/go-to-market/)。战略给方向，GTM 给执行。
+- **要选技术栈或比较实现方案** → [tech-decision](/skills/skills-reference/high/tech-decision/)；**要划系统边界** → [architecture-design](/skills/skills-reference/high/architecture-design/)。
+- **要排项目、维护任务状态、跑 Git 节奏** → [project-manager](/skills/skills-reference/high/project-manager/) 与 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。
+- **要写代码** → [universal-development](/skills/skills-reference/low/universal-development/) 或 [dev](/skills/skills-reference/high/dev/)。
+- **要财务、税务、合同、消费者保护或法务判断** → 保留真实专业复核与人工批准，这里不替代。
+- **想法还没收敛就想要一个战略结论** → [product-manager](/skills/skills-reference/critical/product-manager/) 是整条产品流程的编排入口；单独叫这里，只会拿到一份带真实状态的战略产物，它不会自己宣布产品被批准了。
+
+## 前置条件
+
+问题得真的落在市场、竞争、商业模式或定价这一层，这次也确实需要做一个选择。如果你要的其实是"帮我把已定的方向写成文档"，那是 [product-execution](/skills/skills-reference/high/product-execution/) 的活；如果连"用户到底有没有这个问题"都还没证据，先去 [product-discovery](/skills/skills-reference/high/product-discovery/)。
+
+另外有一件事会决定它这一轮能走多远：这个决策是可逆的还是不可逆的。改一版落地页文案和改整个计费模式，值得投入的严谨度差一个量级；不先把这一点说清楚，要么被过度论证拖住，要么在真正贵的地方草率下结论。
+
+<Aside type="danger">
+一旦沾到真人、真钱、真价格，它会停下来先要授权：联系或招募受访者、动生产商业数据、对外报价、跑试点、收预购或押金、改线上价格、对真实用户做价格实验。没有明确授权时，你拿到的是一份实验或研究方案，而不是一个已经跑起来的实验——它不会替你去联系外部对象，也不会替你把价格改掉。
+</Aside>
+
+## 怎么用
+
+### 场景一："我们的产品战略是什么"
+
+它不会先给你框架，会先问你要在哪一层做选择，然后把你已有的东西按"这是事实还是判断"重新摊开。摊开这一步经常直接改掉结论——很多"共识"其实是三个人各自的假设叠在一起。
+
+最后交出来的核心部分很短：
+
+```markdown
+## 战略结论
+- 选择：做中型电商的售后履约协同，切"多平台订单在售后阶段对不上"这个口子
+- 靠什么赢：已有的多平台订单打通能力 + 客服工单侧的数据沉淀，竞品从 ERP 侧切进来做不到
+- 不做：自建物流对接（改用现有聚合商）、不做小微商家（付费意愿证据不足）
+- 不做：不进大型集团客户（要求私有化 + 定制，团队规模撑不住）
+
+## 依据
+- 事实：现有 320 家客户中 61% 已接 2 个以上平台（内部数据 2026-07）
+- 外部来源：两家竞品官网与帮助中心均无售后阶段对账能力（2026-08 核对）
+- 判断：ERP 厂商三个月内不会补齐（无路线图证据，标为假设）
+```
+
+"不做"那两行是这份产物真正的分量所在。只列要做什么，等于把选择推给了下游。
+
+### 场景二："这个市场有多大"
+
+要一个完整估算，就得同时给出边界、自上而下的来源和折算系数、自下而上的客户数乘价格频率模型、TAM/SAM/SOM 各自被什么卡住、币种年份地域和区间、以及会显著改变结果的那几条假设。缺证据的那一格不会被填满，会明确标出来并附取数计划：
+
+```text
+边界      中国大陆 · 中型电商（年 GMV 1000 万–5 亿）· 售后协同软件 · 2026 年 · 人民币
+自上而下  行业报告电商 SaaS 规模 X 亿 → 售后类占比 12%（报告口径，未拆中型）→ 折算系数 0.35（内部判断，标假设）
+自下而上  目标商家数 4.2 万（工商 + 平台公开榜单交叉）× 年客单 2.4 万（现有成交中位）
+TAM       全部中型电商都用同类产品 —— 约 10 亿
+SAM       仅接 2 个以上平台的商家（61%）—— 约 6 亿
+SOM       现有渠道 18 个月可触达 —— 约 4000 万；卡在销售人力，不卡在需求
+区间      ±35%，主要来自折算系数 0.35 这一条
+关键假设  年客单不随下沉而腰斩（当前无低价段成交样本，待验证）
+```
+
+`SOM` 那行写的是"卡在销售人力"——不经过成本、渠道、法规和能力验证的 SOM 只是一个愿望。
+
+### 场景三："竞品都在做什么"
+
+对手会被分成三类：直接竞品、替代方案，以及"用户干脆什么都不做"。第三类最常被漏掉，也最常是真正的对手。能力只有在有公开证据时才写成事实：
+
+| 对手 | 类型 | 有证据的能力 | 未知 |
+| --- | --- | --- | --- |
+| A 厂 ERP | 直接竞品 | 订单同步、库存（官网 + 帮助中心 2026-08） | 售后对账是否在做、客户数、赢单原因 |
+| Excel + 客服群 | 替代方案 | 零成本、无学习门槛（访谈 9/12 在用） | 出错率无数据 |
+| 什么都不做 | 不采取行动 | 月均损失 3–8 单争议（访谈估算，非账面） | 商家是否感知得到这个损失 |
+
+"客户数""路线图""为什么赢了那一单"这类东西，除非有公开来源，一律停在"未知"。把对手的路线图猜出来写进战略，是这一层最常见的自伤。
+
+### 场景四："这个东西该怎么收费"
+
+它不会从对手标价往回推。理由很直接：对手的标价里包含了对手的成本结构、渠道折扣和历史包袱，跟你的用户愿意为什么付钱没有必然关系。问卷里的"愿意买"同样不算证据——那不是一次成交。
+
+真正会被拿来用的是这几类痕迹：历史成交与流失记录、给过的折扣、实际使用量、访谈里用户"现在已经在为这件事花的钱"、价格敏感度研究，以及在拿到授权后真实跑过的报价或成交实验。
+
+```markdown
+## 定价结论
+- 价值度量：每月被追回的争议订单金额
+- 付费对象：售后负责人（有预算），不是客服执行者
+- 计费单位：按接入平台数分档，不按坐席（坐席数波动大，用户抗拒）
+- 依据：现有客户已在为人工对账支付约 1.2 人/月（访谈 7 例一致）
+- 待验证：分档阈值定在 2 / 5 个平台是否合理（需一次真实报价实验，未授权）
+```
+
+要跑价格实验时，人群、为什么这批人价格不同、公平性怎么保证、合同和税务怎么处理、退款和老客户怎么保护、主指标和护栏是什么、谁负责、什么条件下停、怎么回滚——这些会先写清楚，然后等你授权，而不是先跑起来再说。
+
+### 场景五：框架按问题选，不是按顺手选
+
+这一步最容易走偏：重复填三套画布会带来一种确定感，但那种确定感不是判断。判断路线：
+
+```text
+你现在想回答什么？
+├─ 整个产品的方向和取舍     → 完整战略：愿景 / 市场 / 价值 / 取舍 / 指标 / 能力
+├─ 一个新业务能不能立住     → 按信息成熟度选一张画布：Lean / Business Model / Startup
+├─ 用户为什么会选我们       → 价值主张：谁、为什么、现在怎么做、我们怎么解、他还有什么选择
+├─ 内外部一起看一眼         → SWOT
+├─ 宏观变量在变什么         → PESTLE
+├─ 这个行业结构是怎样的     → Porter's Five Forces
+├─ 往哪个方向长             → Ansoff
+└─ 怎么收钱                 → 订阅 / 用量 / 席位 / 交易 / 一次性 / 混合 的比较
+```
+
+更细的框架说明放在 Skill 自带的 `references/` 里，命中之后按需读取，不会一次全塞给你。
+
+### 场景六：给风险配一个最便宜的验证
+
+只列风险不产生行动。每条高风险假设要挂上"现在有什么证据""最便宜怎么验""什么条件下掉头"：
+
+| 高风险假设 | 现有证据 | 最便宜验证 | Kill / 调整条件 |
+| --- | --- | --- | --- |
+| 售后对账是中型商家的付费痛点 | 访谈 7/12 提及，无成交 | 找 3 家做付费意向报价 | 3 家全部不接受预付 → 回到 discovery |
+| ERP 厂商短期不会补齐 | 无路线图证据 | 监控两家官网更新 + 客户侧问询 | 任一家发布同类能力 → 重估"靠什么赢" |
+| 按平台数分档可接受 | 无 | 一次真实报价实验（需授权） | 分档被普遍绕过 → 换计费单位 |
+
+第三行的状态是"无证据 + 需要授权"。这种状态会被如实写出来，而不是先假设它成立。
+
+## 常见误用
+
+| 现象 | 实际该走 |
+| --- | --- |
+| 想要一个市场规模数字去放进融资材料，没有取数条件 | 拿到的是模型和取数计划，数字那一格会标待验证 |
+| 希望它顺手把竞品的客户数和路线图查出来 | 公开证据之外的一律写"未知"，要真实调研走 [product-discovery](/skills/skills-reference/high/product-discovery/) |
+| 拿 SWOT 当结论交上去 | 框架只是角度，结论必须是"选择 + 不做" |
+| 把"收入翻倍""成为行业领先"当北极星 | 那是结果的愿望，不是可指导取舍的方向 |
+| 要求它直接把线上价格改掉，或对用户跑价格实验 | 会先给方案并等你授权，不会自己动真实价格 |
+| 战略刚写完就要求下游按它开工 | `Draft` / `Review` 不是准入，先走产品批准与 [project-manager](/skills/skills-reference/high/project-manager/) 的项目门禁 |
+| 让它顺便把技术方案也定了 | [tech-decision](/skills/skills-reference/high/tech-decision/) 比较并冻结方案 |
+| 已批准的战略范围真的变了，想直接改文档 | [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 先算影响面 |
+
+## 与其他 Skill 的关系
+
+### 三段式，还是一次编排
+
+```text
+想法还没确认       → product-manager 一次编排（研究 → 收敛 → 定义 → 验收）
+只缺市场/商业选择  → 直接叫 product-strategy
+从头要证据链       → product-discovery → product-strategy → product-execution
+战略要变成动作     → product-strategy → go-to-market（对外）/ project-manager（对内）
+```
+
+- **上游/编排**：[product-manager](/skills/skills-reference/critical/product-manager/) 是完整产品流程的入口；未确认的想法先由它收敛，再决定这一轮到不到战略这一层。
+- **证据来源**：[product-discovery](/skills/skills-reference/high/product-discovery/) 提供用户与机会证据，[product-analytics](/skills/skills-reference/medium/product-analytics/) 提供指标定义、数据计算和统计解释。
+- **下游执行**：[go-to-market](/skills/skills-reference/low/go-to-market/) 接 ICP、定位、渠道、发布和增长；[product-execution](/skills/skills-reference/high/product-execution/) 接 PRD、OKR、路线图和 Backlog。
+- **落地门禁**：已批准的战略如果会改变真实价格、产品行为、数据处理或交付面，要先过 [project-manager](/skills/skills-reference/high/project-manager/) 的项目门禁；工程方案由 [tech-decision](/skills/skills-reference/high/tech-decision/) 比较冻结，TODO、验证、Review 和 Git 节奏由 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 维护。
+
+### 和 architecture-design 的分界
+
+这条界经常被跨过去。战略说"我们不做私有化部署的大型集团客户"，这是一个市场取舍；架构说"多租户共享实例，租户隔离在数据层做"，这是一个系统边界。前者变了后者可能要重做，反过来则不一定——所以顺序是战略先落，[architecture-design](/skills/skills-reference/high/architecture-design/) 后接。
+
+典型链路：
+
+```text
+product-discovery → product-strategy → product-manager → project-manager
+                          ↓                    ↓
+                    go-to-market        product-execution
+```
+
+## 产出与验收
+
+留下的是一份带真实状态的战略产物：战略文档、市场规模模型、竞品证据表或定价方案，写在你指定的路径或仓库既有位置。如果这些结论后续要落进代码、接口或配置，字段固定的结构就用具名业务类型和封闭枚举承载，不要退化成一个什么都能塞的字典。
+
+判断真的完成了：
+
+1. **有"不做"**：只写了要做什么、没写放弃什么，就还不是战略结论。
+2. **每条结论可追溯**：是事实、外部来源、内部数据还是判断，标注和来源都在；市场、竞品、支付数据没有一个是编出来的。
+3. **风险有最便宜的验证**：高风险假设配了验证方式和掉头条件，不是只列风险。
+4. **状态诚实**：`Approved` 背后有真实的决策人、批准来源和版本号。
+
+<Aside type="caution">
+只有 `Approved` 且能指向真实决策人、批准来源和版本的战略，才能当作后续产品或项目的输入。战略选择本身不替代产品批准、技术选型、发布授权，也不替代人工或外部验收。
+</Aside>
+
+<Aside type="note">
+最常见的四种自伤：编一份看起来专业的市场数据或引用；用一张填满的框架图代替原创判断；把收入、DAU 或"成为行业领先者"直接当成愿景；给出一个没经过成本、渠道、法规和能力验证的 SOM。部分产品战略方法经通用化改写自 `phuryn/pm-skills` v2.1.0。
+</Aside>
+
+## 下一步
+
+- 证据不够 → [product-discovery](/skills/skills-reference/high/product-discovery/)
+- 战略已定、要写文档 → [product-execution](/skills/skills-reference/high/product-execution/)
+- 要对外打市场 → [go-to-market](/skills/skills-reference/low/go-to-market/)
+- 要开工 → [product-manager](/skills/skills-reference/critical/product-manager/) → [project-manager](/skills/skills-reference/high/project-manager/)
+- 稳定下来的项目事实 → [project-details](/skills/skills-reference/high/project-details/)
+

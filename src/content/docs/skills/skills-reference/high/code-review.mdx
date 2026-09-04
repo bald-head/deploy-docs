@@ -1,471 +1,111 @@
 ---
-title: code-review
+title: 代码审查 - code-review
 description: 代码审查 - 缺陷优先的完整 Review，核对验收与交付证据
 order: 10
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+import { Aside } from '@astrojs/starlight/components';
 
 ## 概述
 
-`code-review` 是 **High 优先级** Skill，对指定 diff 做缺陷优先的完整 Review，并核对验收与交付证据。
-
-**适用场景**：
-- 代码实现完成后的质量审查
-- 核对文档意图与实际实现
-- 审计生成代码
-- 判断发布证据是否充分
-
-**不适用场景**：
-- 代码实现 → 使用 `dev` 或 `universal-development`
-- 产品定义 → 使用 `product-manager`
-- 架构设计 → 使用 `architecture-design`
-- 测试编写 → 使用 `test-development`
-
-## 快速开始
-
-### 代码审查的完整流程
-
-```bash
-# 1. 确认代码已实现
-git status
-git diff
-
-# 2. 执行 Review
-/code-review
-
-# 3. 查看 findings
-# - 严重 (Critical): 必须修复
-# - 重要 (Major): 应该修复
-# - 次要 (Minor): 可选修复
-# - 信息 (Info): 建议
-
-# 4. 修复问题
-# 修复所有严重和重要问题
-
-# 5. 重新 Review
-/code-review
-
-# 6. 通过后提交
-/git-commit
-```
-
-## 使用示例
-
-### 场景 1：Review 登录功能实现
-
-**实现的代码**：
-```java
-@RestController
-@RequestMapping("/api/v1/auth")
-public class AuthController {
-    
-    @PostMapping("/login")
-    public Result<LoginResponse> login(@RequestBody LoginRequest request) {
-        // 查询用户
-        UserEntity user = userMapper.selectByEmail(request.getEmail());
-        
-        // 验证密码
-        if (!user.getPassword().equals(request.getPassword())) {
-            throw new BusinessException("密码错误");
-        }
-        
-        // 生成 Token
-        String token = UUID.randomUUID().toString();
-        
-        return Result.ok(new LoginResponse(token, user.getId()));
-    }
-}
-```
-
-**Review findings**：
-
-```markdown
-## Critical Findings
-
-### CRIT-001: 密码明文比较
-- 位置: AuthController.java:12
-- 问题: 使用明文比较密码，应该使用 BCrypt 等加密算法
-- 影响: 严重安全漏洞
-- 修复:
-  ```java
-  if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-      throw new BusinessException(ErrorCode.INVALID_PASSWORD, "密码错误");
-  }
-  ```
-
-### CRIT-002: 缺少用户存在性检查
-- 位置: AuthController.java:10
-- 问题: 用户不存在时会抛出 NullPointerException
-- 影响: 系统崩溃
-- 修复:
-  ```java
-  if (user == null) {
-      throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
-  }
-  ```
-
-### CRIT-003: Token 生成不安全
-- 位置: AuthController.java:17
-- 问题: 使用 UUID 作为 Token，不包含用户信息和过期时间
-- 影响: 无法验证 Token 合法性
-- 修复:
-  ```java
-  String token = jwtTokenProvider.generateToken(user.getId());
-  ```
-
-## Major Findings
-
-### MAJ-001: 缺少参数校验
-- 位置: AuthController.java:9
-- 问题: 请求参数未添加 @Valid 注解
-- 影响: 无效参数可能导致异常
-- 修复:
-  ```java
-  public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-  ```
-
-### MAJ-002: 错误码不统一
-- 位置: AuthController.java:13
-- 问题: 直接传字符串而非错误码枚举
-- 影响: 客户端无法统一处理错误
-- 修复:
-  ```java
-  throw new BusinessException(ErrorCode.INVALID_PASSWORD, "密码错误");
-  ```
-
-## Minor Findings
-
-### MIN-001: 缺少 API 文档
-- 位置: AuthController.java:8
-- 建议: 添加 Swagger/OpenAPI 注解
-- 修复:
-  ```java
-  @Operation(summary = "用户登录", description = "邮箱密码登录")
-  ```
-```
-
-**修复后重新 Review**：
-
-```markdown
-## Review 结果: PASS
-
-✅ 所有 Critical findings 已修复
-✅ 所有 Major findings 已修复
-✅ 验收标准已满足:
-   - AC-001: 用户可以登录 ✓
-   - AC-002: 返回 JWT Token ✓
-   - AC-003: 密码安全加密 ✓
-
-可以提交代码。
-```
-
-### 场景 2：Review CRUD 实现
-
-**实现的代码**：
-```java
-@RestController
-@RequestMapping("/api/v1/users")
-public class UserController {
-    
-    @GetMapping
-    public List<UserEntity> list() {
-        return userMapper.selectAll();
-    }
-    
-    @PostMapping
-    public void create(@RequestBody UserEntity user) {
-        userMapper.insert(user);
-    }
-}
-```
-
-**Review findings**：
-
-```markdown
-## Critical Findings
-
-### CRIT-001: 直接暴露 Entity
-- 位置: UserController.java:7
-- 问题: 直接返回 Entity，可能暴露敏感字段（如密码）
-- 影响: 数据泄露风险
-- 修复:
-  ```java
-  public Result<List<UserVO>> list() {
-      List<UserEntity> entities = userMapper.selectAll();
-      List<UserVO> vos = entities.stream()
-          .map(this::convertToVO)
-          .collect(Collectors.toList());
-      return Result.ok(vos);
-  }
-  ```
-
-### CRIT-002: 缺少分页
-- 位置: UserController.java:7
-- 问题: 查询全部用户，数据量大时会 OOM
-- 影响: 系统崩溃
-- 修复:
-  ```java
-  public Result<PageResult<UserVO>> list(UserQuery query) {
-      Page<UserEntity> page = new Page<>(query.getPage(), query.getPageSize());
-      IPage<UserEntity> result = userMapper.selectPage(page, null);
-      return Result.ok(PageResult.of(result));
-  }
-  ```
-
-## Major Findings
-
-### MAJ-001: 缺少统一响应格式
-- 位置: UserController.java:7, 12
-- 问题: 未使用 Result<T> 包装响应
-- 修复: 所有接口返回 Result<T>
-
-### MAJ-002: 缺少参数校验
-- 位置: UserController.java:11
-- 问题: 创建用户时未校验参数
-- 修复:
-  ```java
-  public Result<Void> create(@Valid @RequestBody CreateUserRequest request) {
-  ```
-
-### MAJ-003: 缺少事务控制
-- 位置: UserController.java:12
-- 问题: 业务逻辑应该在 Service 层
-- 修复:
-  ```java
-  @Service
-  public class UserService {
-      @Transactional
-      public void create(CreateUserRequest request) {
-          // 业务逻辑
-      }
-  }
-  ```
-```
-
-### 场景 3：Review 后的修复验证
-
-**原始问题**：
-```java
-// 问题: SQL 注入风险
-String sql = "SELECT * FROM users WHERE username = '" + username + "'";
-List<User> users = jdbcTemplate.query(sql, userRowMapper);
-```
-
-**修复后**：
-```java
-// 修复: 使用参数化查询
-String sql = "SELECT * FROM users WHERE username = ?";
-List<User> users = jdbcTemplate.query(sql, userRowMapper, username);
-```
-
-**验证步骤**：
-```bash
-# 1. 查看 diff
-git diff src/main/java/repository/UserRepository.java
-
-# 2. 确认修复
-- String sql = "SELECT * FROM users WHERE username = '" + username + "'";
-+ String sql = "SELECT * FROM users WHERE username = ?";
-+ List<User> users = jdbcTemplate.query(sql, userRowMapper, username);
-
-# 3. 重新 Review
-/code-review
-
-# 结果: PASS
-✅ CRIT-001: SQL 注入风险 已修复
-```
-
-## 关键规则
-
-### 1. 同一 diff 只 Review 一次
-
-```markdown
-<!-- 正确 -->
-完成全部交付面 → 一次 code-review → 修复 findings → 提交
-
-<!-- 错误 -->
-完成数据库 → code-review
-完成 API → code-review
-完成前端 → code-review
-```
-
-### 2. 严重和重要问题必须修复
-
-```text
-Finding 级别:
-- Critical (严重): 必须修复才能提交
-- Major (重要): 应该修复才能提交
-- Minor (次要): 可选修复
-- Info (信息): 建议改进
-```
-
-### 3. 核对验收标准
-
-```markdown
-<!-- Review 必须核对 -->
-验收标准:
-- AC-001: 用户可以登录 → 已实现 ✓
-- AC-002: 返回 JWT Token → 已实现 ✓
-- AC-003: 密码安全加密 → 已实现 ✓
-
-全部通过 → Review PASS
-```
-
-### 4. 保护现有改动
-
-```bash
-# Review 范围
-git diff  # 只 Review 当前任务的改动
-
-# 不 Review
-- 任务开始前的既有改动
-- 其他开发者的改动
-- 不属于当前 Feature 的文件
-```
-
-## Review 检查清单
-
-### 功能完整性
-
-```markdown
-- [ ] 所有验收标准已满足
-- [ ] 菜单/入口已实现
-- [ ] 前后端联动正常
-- [ ] 数据库迁移已创建
-- [ ] 权限控制已实现
-```
-
-### 代码质量
-
-```markdown
-- [ ] 无 SQL 注入风险
-- [ ] 无 XSS 风险
-- [ ] 密码已加密
-- [ ] 敏感数据不暴露
-- [ ] 参数已校验
-- [ ] 错误处理完整
-- [ ] 事务控制正确
-- [ ] 日志记录合理
-```
-
-### 性能
-
-```markdown
-- [ ] 分页查询已实现
-- [ ] 索引已创建
-- [ ] 无 N+1 查询
-- [ ] 缓存策略合理
-```
-
-### 可维护性
-
-```markdown
-- [ ] 代码风格一致
-- [ ] 命名清晰
-- [ ] 注释充分
-- [ ] 无重复代码
-- [ ] 符合项目规范
-```
-
-## Skill 协调
-
-`code-review` 在以下阶段执行：
-
-| 阶段 | 说明 |
-|------|------|
-| business-development 完成后 | 强制一次 Review |
-| 修复 findings 后 | 重新 Review 验证 |
-| 提交前 | 最终 Review |
+同一段代码被审三遍，会得到三份互相矛盾的意见；只审最后改过的那个文件，又会漏掉真正的缺陷。`code-review` 要解决的就是这两头：对一个功能的完整 production diff 做一次缺陷优先的审查，findings 直接交回实施者，后续 Skill 消费这些结论，而不是重新审一遍。
+
+它的顺序是固定的。先把范围钉死——当前 diff、任务自己的未跟踪文件、受影响的调用链，同时把任务开始前就存在的既有改动和不属于当前功能的路径排除掉。然后按严重程度找问题：功能错误、数据丢失、安全漏洞、权限与租户、并发、性能、兼容性和证据缺口，每条给到 `file:line`、规则 ID 与层级、触发证据、影响和最小修复。最后逐条核对稳定验收：每个 `AC-*` 有没有生产实现、有没有适用的消费者、证据等级和声明的档位是否匹配。
+
+规则按命中条件加载：所有生产代码读通用规则；只有真的改了 Java 源码才加 Java 规则；只有依赖、配置、导入或现有注解证明本次涉及 Swagger 3 / OpenAPI 3 / SpringDoc / NextDoc4j 时，才加那一层。没命中的语言和框架规则不读、不查，所以它不会对一个 Vue 改动报 Java 规范问题。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "看看这些改动有没有问题" | 完整 diff 的缺陷优先审查 |
+| "这个功能算做完了吗" | 逐条核对 `AC-*` 与证据等级 |
+| "生成的代码能用吗" | 审计生成器产出 |
+| "能提交了吗" | 判断交付证据是否充分、有没有未关闭的严重问题 |
+| "文档写的和代码做的一样吗" | 意图与实现差异核对 |
+| "上线前再过一次" | 发布就绪审查 |
+
+触发面覆盖代码审查、改动质量核对、生成物审计与交付证据判断这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。在 Claude Code 里可以直接按名字调用（`/code-review`）；Codex 走自己的原生发现，把意图说清就行。
+
+## 什么时候不要用
+
+- **动手写代码或改 bug** → [dev](/skills/skills-reference/high/dev/)、[universal-development](/skills/skills-reference/low/universal-development/)。它审查已经写好的代码，自己不改。
+- **仓库专项规范检查与静态分析** → [check](/skills/skills-reference/medium/check/)。check 按目标仓库已证明的后端规范逐条核对；本 Skill 做的是缺陷优先的完整审查。两者不互相替代，也不该对同一范围各审一遍。
+- **已经发生的线上故障** → [bug-detective](/skills/skills-reference/high/bug-detective/)。一个是预防性审查，一个是按现场证据倒推根因。
+- **性能指标与瓶颈定位** → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。
+- **只看动效与 motion 系统** → [review-animations](/skills/skills-reference/low/review-animations/)。
+- **只整理仓库既有模式** → [code-patterns](/skills/skills-reference/low/code-patterns/)，那是只读梳理，不产出缺陷。
+- **写测试或设计验证方案** → [test-development](/skills/skills-reference/medium/test-development/)、[test-strategy](/skills/skills-reference/medium/test-strategy/)。注意：Review 报出的风险本身不构成写测试代码的授权。
+
+## 前置条件
+
+**有明确的 diff 或文件范围。** 没有范围就没有"一次完整 Review"这回事，只能退化成全仓扫描——既慢，又会把任务开始前的既有改动算到你头上。
+
+**生产面已经收敛。** 对应流程状态机里 `business-development` 阶段完成。边写边审的结果是同一段代码被审多次、findings 互相矛盾，而且验收根本没法判断闭环。
+
+持久 TODO 不是前置条件。它只在任务本身已经采用 TODO 时作为范围来源；普通的、独立的一次 Review 直接就能做。
+
+## 怎么用
+
+1. **把范围交给它**：这次的完整改动、指定的几个文件，或者某个功能。它会读当前 diff、`git status`、项目记忆里相关的章节和受影响调用链，重点核对这次改动有没有绕过记忆里的真实 Owner、重复已有入口或违反稳定边界——但不会因此扩成全仓扫描。
+2. **按命中条件加载规则层**，再按严重程度逐项检查，并复核潜在误报：确认数据来源、设计意图、适用条件和现有验证是否真的覆盖了。
+3. **拿到分档 findings**：`严重 / 重要 / 建议`。严重和重要未关闭时，结论会明确写成不可提交。
+4. **修复后只核对关闭状态**和受影响的最小命令，不重跑全量 Review。范围扩大时只审新增的路径和 hunk，以及它们与已审边界的调用关系。
+
+涉及接口或数据结构时会多做一件事：建最小契约矩阵并逐项取证——生产者、传输对象、持久化、消费者、测试与文档。只改了一端、只加字段没更新消费者，或者手写一堆同语义 setter，都会按影响报告出来。
+
+<Aside type="danger">
+没有证据时它的结论是"未验证"，不是"没发现问题就算通过"。每条 AC 要么映射到具体 evidence，要么被显式写成 `unverified`，不允许省略。低层证据不能证明高层验收：静态检查和 mock 的结果关不掉需要真实服务、端到端或真机的 AC；人工交接文档写完了也不等于设备或真实环境通过。
+</Aside>
+
+<Aside type="caution">
+审后台或业务前端时，它会检查工程化分层是否真实存在：基础布局壳、路由页面、模块组件、API/Store/Composable、样式 tokens 和 fixture。把多菜单、多标签或一整个系统塞进单文件页面会按阻断问题退回。只把 API 字段堆成表格、渲染原始 JSON、静态 mock 或"接口调用成功"都不能关闭前端交付。菜单、面包屑或布局标题已经说明了页面用途时，内容区再重复一遍页面标题、用途副标题和显而易见的操作说明，会按信息层级问题报告。
+</Aside>
 
 <Aside type="note">
-同一 diff 只做一次完整 Review，修复后只核对 findings 关闭状态。
+配置、部署和认证接入文件里的用户名、密码、Token 和服务凭据，不因为是明文或在内网就被误报成泄密并据此阻断。用户已经要求写入配置，或已经要求提交推送且文件在精确范围内时，它不会再要一次凭据专项确认，也不会为了让 Review 通过而建议你脱敏、删除、排除文件或强制迁移。
 </Aside>
+
+## 它接受什么样的证据
+
+同一件事声明的验证档位不同，能关闭它的证据就不同。这决定了 Review 会不会放过一条 AC：
+
+| 档位 | 可以关闭 AC 的证据 |
+| --- | --- |
+| `Evidence-only` | 源码、契约、调用链组合取证，或复用现有检查，或跑一次真实主路径 |
+| `Test-first` | 只在用户本轮明确授权写测试时，检查对应的失败与通过证据 |
+| `Regression-required` | 修复前的可复现失败或等价基线，加上修复后的证据 |
+
+`Regression-required` 覆盖的是 Bug、权限与租户、安全、迁移与回滚、并发和公开契约变化。没有测试源码授权时，它会用现有测试、真实请求或人工演练取证；仍然不足就保持 `unverified`，不会因为"看起来没问题"而放过。
+
+两件事按需触发，不默认执行：目标系统本来就有架构、流程、权限、配置或测试文档时，才做意图与实现的差异对照，而且每个差异必须同时引用"应当怎样"和"实际怎样"两侧证据——普通过程文档缺失不算 finding，只有必要的公共契约、迁移与回滚、发布或外部交接证据缺失才报可审计性缺口。用户要求上线或交付审查时，才走发布就绪那一套，并且只检查目标系统实际存在的能力和风险面。
+
+审 Skill 或提示词改动时它会自动降档：默认只看改动 diff、frontmatter 与直接引用，加一次 `git diff --check`；只有脚本、Hook 或 Schema 本身变了，才补跑一个对应的确定性检查。
 
 ## 与其他 Skill 的关系
 
-### 选择决策
+**上游（before）**：[dev](/skills/skills-reference/high/dev/)、[universal-development](/skills/skills-reference/low/universal-development/)、[crud-development](/skills/skills-reference/high/crud-development/)、[crud](/skills/skills-reference/high/crud/)——实现收敛后交出完整 diff。
+
+**下游（after）**：[test-development](/skills/skills-reference/medium/test-development/)（仅在用户本轮明确要求写测试时）、[git-commit](/skills/skills-reference/high/git-commit/)。
+
+**协作（complement）**：[security-guard](/skills/skills-reference/high/security-guard/)、[performance-doctor](/skills/skills-reference/medium/performance-doctor/)、[check](/skills/skills-reference/medium/check/)。
 
 ```text
-代码实现 → dev/universal-development
-代码审查 → code-review
-专项检查 → check
-测试编写 → test-development
+dev / universal-development / crud-development（实现收敛）
+      ↓ 完整 production diff
+code-review（一次缺陷优先审查 + AC 核对）
+      ├─ 有严重/重要 finding → 交回实施者修复 → 只核对关闭状态
+      └─ 全部关闭
+            ├─ git-commit（授权后精确提交与推送）
+            └─ update-status（唯一 Owner 回写一句结论）
 ```
 
-### Related Skills
+它是流程状态机里 `code-review` 阶段的 Owner：先确认 `business-development` 的生产面已收敛，有严重或重要 finding 时保持在当前阶段并交回修复，全部关闭后才推进到 `test-generation`。
 
-**前置依赖**:
-- `dev` - 通用功能开发
-- `universal-development` - 通用开发
-- `crud-development` - CRUD 开发
+## 产出与验收
 
-**后续推荐**:
-- `test-development` - 测试开发
-- `git-commit` - Git 提交
+findings 直接在回复里给出，不落一份报告文件——先结论，再按三档分类。没有发现问题时它会说明实际检查过的路径、加载了哪几层规则、跑了哪些验证命令，而不是只回一句"通过"。跨端变更额外列"契约核对范围"；存在人工或外部门禁时额外列"未验证边界"，包括仍需人工、设备、模型或外部环境完成的事项和交接位置。
 
-**协作 Skill**:
-- `security-guard` - 安全审查
-- `performance-doctor` - 性能审查
-- `check` - 专项规范检查
+已有持久 TODO 时，它只回一句合并结论供唯一 Owner 写回，不把完整审查证据复制进 TODO。本轮 diff 证明了后续会复用的新 Owner、契约或边界时，这条收口要求交给 Feature Owner 当轮原位更新项目记忆。
 
-## 最佳实践
-
-### 1. 完整 diff Review
-
-```bash
-# 正确: Review 完整 diff
-git diff  # 查看所有改动
-/code-review  # Review 全部
-
-# 错误: 只 Review 最后修改的文件
-git diff src/main/java/controller/UserController.java
-```
-
-### 2. 修复后验证
-
-```bash
-# 修复 findings
-git diff  # 确认修复
-
-# 重新 Review
-/code-review
-
-# 确认通过
-# ✅ 所有 Critical findings 已修复
-# ✅ 所有 Major findings 已修复
-```
-
-### 3. 核对验收标准
-
-```markdown
-<!-- 每次 Review 必须核对 -->
-验收标准:
-- AC-001: ... → 已实现 ✓
-- AC-002: ... → 已实现 ✓
-- AC-003: ... → 已实现 ✓
-```
-
-### 4. 保持修复最小化
-
-```java
-// 正确: 只修复 finding
-- if (!user.getPassword().equals(request.getPassword())) {
-+ if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-
-// 错误: 修复时重构整个方法
-- public Result<LoginResponse> login(...) {
--     // 旧实现
-- }
-+ public Result<LoginResponse> login(...) {
-+     // 完全重写
-+ }
-```
-
-## 下一步
-
-- [dev](/skills/skills-reference/high/dev) - 通用功能开发
-- [universal-development](/skills/skills-reference/high/universal-development) - 通用开发
-- [test-development](/skills/skills-reference/medium/test-development) - 测试开发
-- [git-commit](/skills/skills-reference/high/git-commit) - Git 提交
-- [security-guard](/skills/skills-reference/high/security-guard) - 安全防护
+判断真的完成了：严重和重要 findings 全部关闭；每条 AC 要么有匹配等级的 evidence，要么被显式标成 `unverified`；你清楚它读了哪些路径、排除了哪些既有改动、以及哪些边界它承认没验证。

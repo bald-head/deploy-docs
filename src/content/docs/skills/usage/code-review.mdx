@@ -1,0 +1,287 @@
+---
+title: 代码审查流程
+description: 用 code-review 做一次缺陷优先的审查，并把 findings 真正关闭
+order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+`code-review` 是同一份 diff 的主要审查入口。它读你这次任务真正改动的代码和受影响的调用链，按缺陷优先的顺序给出 findings，并核对验收条件是否真的有实现、有证据。
+
+它不是风格检查器，也不替你写代码或写测试。
+
+**预计时间**：15 分钟 - 1 小时（取决于 diff 大小）
+
+**前置条件**：
+- ✅ 存在明确的 diff 或文件范围（这次任务的生产面已经收敛，不是边写边审）
+- ✅ 知道这次任务的验收条件（有 TODO 时来自当前 `[~]` 项的 `AC-*`）
+- ✅ 需要的规范检查已经跑过（可选，见 [与 check 的分工](#code-review-与-check-的分工)）
+
+<Aside type="tip">
+Review 的输入是"范围"，不是"文件名"。范围说清楚，findings 才准；只丢一个文件名过去，通常只会拿到那一个文件的表面问题。
+</Aside>
+
+## 一次 Review 的完整流程
+
+### 第 1 步：确定审查范围
+
+先让范围可见：
+
+```bash
+# 当前分支和工作区状态
+git status --short --branch
+
+# 这次任务的完整改动
+git diff
+git diff --cached
+
+# 未跟踪文件要逐个确认归属，不能整目录带进来
+git status --porcelain | grep '^??'
+```
+
+范围规则：
+
+- 只审**这次任务**改的内容。任务开始前就已经存在的脏改动、别人的改动、不属于当前功能的路径，都排除在外并在结论里说明排除了什么。
+- 有 TODO 时，范围来自当前 `[~]` 项声明的并行写集。diff 越过写集边界本身就是一个要报告的问题，而不是顺手放过。
+- 跨端改动（接口、DTO、枚举、数据库字段）要把生产者和消费者一起纳入范围。只改一端、只加字段不更新消费者，是这里最常见的缺陷。
+
+✅ **检查点**：你能一句话说清"这次 Review 覆盖哪些路径、排除了哪些既有改动"。
+
+### 第 2 步：触发 Review
+
+自然语言或斜杠命令都可以：
+
+```text
+"审查这次改动"
+"review 一下订单导出这个功能"
+/code-review
+```
+
+范围不是"当前全部改动"时，直接把范围说出来，Review 会按它取事实：
+
+```text
+"审查 USER-LOGIN 这个 Feature 的改动，不要带上我早上改的 DateUtils"
+```
+
+### 第 3 步：读 findings
+
+findings 直接出现在回复里，先结论、再按 `严重 / 重要 / 建议` 分级。每一项都应该能定位、能验证、能最小化修复：
+
+```markdown
+## 结论
+订单导出功能存在 1 个严重问题，暂不可提交。
+
+## 严重
+### 导出接口缺少租户过滤
+- 位置: OrderExportController.java:42
+- 证据: selectExportList 直接按 status 查询，未拼接当前租户条件；
+  同模块 OrderQueryService.java:88 的查询都带 tenantId
+- 影响: 跨租户数据泄露
+- 最小修复: 在导出查询里复用 OrderQueryService 已有的租户条件构造
+
+## 重要
+### 导出失败没有可区分的错误语义
+- 位置: OrderExportService.java:61
+- 证据: 所有异常统一 catch 后返回"导出失败"
+- 影响: 前端无法区分权限不足与数据超限，用户拿不到可操作提示
+- 最小修复: 按已有错误码枚举区分两类失败
+
+## 建议
+### 导出字段顺序与列表页不一致
+- 位置: OrderExportService.java:75
+```
+
+一份合格的 findings 至少要有：位置、触发它的证据、影响、最小修复。只说"这里不太好"的条目没法关闭，看到就要求补证据。
+
+✅ **检查点**：每条 finding 你都能点开对应代码，看到它说的那个问题。
+
+### 第 4 步：按最小修复改
+
+修复只做 finding 指出的那一处：
+
+```java
+// 正确: 复用已有的租户条件构造
+- List<OrderDO> list = orderMapper.selectExportList(status);
++ List<OrderDO> list = orderMapper.selectExportList(status, TenantContext.currentId());
+
+// 错误: 借修复的名义重写整个导出服务
+```
+
+修复涉及的文件不在当前写集内时，先更新写集或另开任务，不要静默扩大改动面。
+
+### 第 5 步：回归核对
+
+修完不重跑完整 Review，只核对两件事：
+
+```bash
+# 1. findings 指向的位置现在是什么样
+git diff src/main/java/service/OrderExportService.java
+
+# 2. 受影响范围的最小验证（用仓库里已有的命令，不要新造一套）
+./mvnw -pl order-service test -Dtest=OrderExportServiceTest
+```
+
+范围扩大了（修复时新增了路径或 hunk），只审新增部分以及它和已审边界的调用关系。
+
+✅ **检查点**：每条严重/重要 finding 都有一个明确状态：已修复、已确认误报（附仓库证据）、或未验证。
+
+### 第 6 步：收口并交给提交
+
+- 严重和重要 finding 全部关闭后，把**一句** Review 结论回写到 TODO 当前项（由唯一 Owner 写，不要把完整审查证据复制进去），再进入 [Git 操作指南](/skills/usage/git-workflow/)。
+- 还有未关闭的严重/重要 finding 时，明确标记为不可提交，流程停在 `code-review` 阶段不推进。
+
+<Aside type="note">
+修 findings 期间照样可以改生产文件：`code-review` 阶段仍在允许写入生产代码的区间内。只有流程推进到 `git-delivery` 之后，才只剩状态核验和已授权的 Git 交付动作。
+</Aside>
+
+## 同一 diff 只做一次完整 Review
+
+这是整套流程里最重要的成本规则，也是最容易被违反的一条。
+
+```text
+# 正确
+数据库 + API + 前端全部完成
+  → 一次完整 code-review
+  → 修 findings
+  → 只核对 findings 关闭状态和受影响的命令
+  → 提交
+
+# 错误
+数据库完成 → code-review
+API 完成   → code-review
+前端完成   → code-review
+修完再来一次完整 code-review
+```
+
+为什么半成品多审几次反而更糟：
+
+- 早期 findings 会被后续改动作废，等于白审。
+- 三次半成品 Review 的读取成本高于一次完整 Review，而跨端缺陷只有在两端都在时才看得见。
+- 每次 Review 都要重新建立范围共识，"哪些是既有改动"会越来越难说清。
+
+后续 Skill 的正确做法是**消费**这一次的 findings，而不是对同一范围再做一遍完整审查：
+
+| 后续 Skill | 该做的 | 不该做的 |
+|---|---|---|
+| 实现类（[dev](/skills/skills-reference/high/dev/)、[universal-development](/skills/skills-reference/low/universal-development/)） | 按 findings 做最小修复 | 顺带重构未被指出的代码 |
+| 专项类（[security-guard](/skills/skills-reference/high/security-guard/)、[performance-doctor](/skills/skills-reference/medium/performance-doctor/)） | 补 Review 明确留下的证据缺口 | 对同一 diff 再走一遍完整审查 |
+| [git-commit](/skills/skills-reference/high/git-commit/) | 核对严重/重要 finding 是否已关闭 | 因为"想再确认一下"重新发起 Review |
+| [update-status](/skills/skills-reference/medium/update-status/) | 写入一句结论 | 把 findings 全文抄进 TODO |
+
+## code-review 与 check 的分工
+
+两个 Skill 都会"看代码"，但问的问题不同：
+
+| 你想知道 | 用哪个 |
+|---|---|
+| 这段实现有没有功能错误、安全漏洞、权限或租户越界、数据丢失、跨端契约不一致 | `code-review` |
+| 这段实现符不符合**本仓库已经证明存在**的规范（lint、formatter、编译器配置、包结构、注解约定） | [check](/skills/skills-reference/medium/check/) |
+| 提交前想快速自检机械问题 | `check` |
+| 功能完成后的强制一次质量门禁 | `code-review` |
+
+关键差别：
+
+- `check` 的依据来自仓库里真实存在的规则和检查命令。仓库没有对应配置，就没有 `check` 的依据，它不会把别的脚手架规则当成你的标准。
+- `code-review` 不依赖仓库有没有 lint。它按缺陷严重程度检查，仓库规则只能加强门禁，不能静默降低功能闭环、安全、权限、数据完整性这些底线。
+- 两个都要做时顺序是 `check` → `code-review`：先用机械检查排掉格式和约定问题，再把 Review 的预算花在真正的缺陷上。
+
+## findings 的关闭标准
+
+一条 finding 只有三种合法终态：
+
+| 终态 | 需要什么 |
+|---|---|
+| 已修复 | 代码已改 + 回归核对看到修复后的状态 |
+| 已确认误报 | 指出数据来源、设计意图或已有验证真实覆盖了它，并给出仓库证据 |
+| 未验证（unverified） | 明确写出证据缺口、影响和剩余风险，由你决定是否接受 |
+
+不合法的关闭方式：
+
+- **自报完成**。"我改好了"不是证据。关闭要能指向具体代码位置、命令输出或一次真实主路径。
+- **拿"没发现问题"当验收通过**。没有证据时结论是未验证，不是通过。
+- **用低层证据证明高层验收**。静态检查和 mock 证明不了集成，集成证明不了真机或真实模型行为；需要人工、设备或外部环境完成的部分，要作为未验证边界写出来并说明交接位置。
+
+有 TODO 时，每条 `AC-*` 都要能映射到具体证据；映射不上的要明确标成 `unverified`，不能因为"代码看起来没问题"就当验收通过。
+
+## 常见误用
+
+### 1. 把 Review 当风格检查
+
+```text
+# 误用
+"review 一下，看看命名和缩进有没有问题"
+
+# 正确
+先跑 check（仓库已有的 lint/formatter），再让 code-review 看缺陷
+```
+
+缩进、import 顺序、命名风格由 formatter 和 `check` 管。Review 的绝大部分预算应该花在代码、diff、调用链的实际问题上，花在风格上就是浪费。
+
+### 2. 拿 finding 当作写测试的授权
+
+Review 报告了证据缺口，**不等于**授权去写测试代码。只有你在当轮明确要求"补测试"时才会动测试源码；finding 本身、覆盖率数字、仓库惯例、CI 门禁都不构成授权。
+
+证据不足时的正确产物是一条明确的"未验证"，附上缺什么、影响是什么。
+
+需要补测试时显式说：
+
+```text
+"给订单导出的租户过滤补一个最小回归测试"
+```
+
+### 3. 跳过 Review 直接提交
+
+`git-commit` 的前置条件之一就是没有未关闭的严重/重要 finding。跳过 Review 提交，问题不会消失，只会变成一个已经推上远端的提交，而已推送提交的修正比本地修复贵得多。
+
+### 4. 边写边审
+
+每完成一层就审一次，早期 findings 会被后续改动作废，等于白花一次预算。见上面的[同一 diff 只做一次完整 Review](#同一-diff-只做一次完整-review)。
+
+### 5. 把 Review 全文搬进 TODO
+
+TODO 里只留一句结论和必要的 finding 标识。完整审查证据留在对话里给实施者看，抄进 TODO 只会让状态文件越来越难读，也容易和真实代码状态脱节。
+
+## Review 前自查清单
+
+```markdown
+- [ ] 生产面已完成，不是半成品
+- [ ] 能说清审查范围和排除项
+- [ ] 跨端改动的两端都在范围内
+- [ ] 验收条件（AC）已知
+- [ ] 仓库已有的检查命令已经跑过
+```
+
+## 常见问题
+
+### Q1: Review 结论写"未验证"，是没通过吗？
+
+未验证既不是"有缺陷"也不是"通过"，它是一个显式的证据缺口。你有两个选择：补证据（跑一次真实主路径、提供真机或线上操作记录），或者把它作为已知风险接受并记录。它不会自己变成通过。
+
+### Q2: findings 修完要再跑一次完整 Review 吗？
+
+不用。只核对 findings 的关闭状态和受影响的最小命令。只有范围真的扩大了，才审新增的路径和它与已审边界的调用关系。
+
+### Q3: Review 要改的文件不在当前写集里怎么办？
+
+先更新当前 Feature 的写集，或者另开一个任务。并行开发时写集就是互斥边界，静默越界会和别人的改动撞上。
+
+### Q4: 我只想跑规范检查，不要完整 Review？
+
+直接说"跑一下检查"或"提交前自检"，那是 [check](/skills/skills-reference/medium/check/) 的场景。想要完整审查再说"审查代码"。
+
+### Q5: Review 说某个 finding 是误报，我不同意？
+
+要求它给出仓库证据：数据来源、设计意图、适用条件，或已有验证真实覆盖了这个路径。给不出证据的"误报"结论不成立，应该退回按未验证处理。
+
+## 下一步
+
+- 📝 [Git 操作指南](/skills/usage/git-workflow/) - Review 通过后如何提交和推送
+- 🔧 [功能开发流程](/skills/usage/feature-development/) - Review 之前的实现步骤
+- 🔍 [code-review Skill 参考](/skills/skills-reference/high/code-review/) - 完整能力说明
+- ✅ [check Skill 参考](/skills/skills-reference/medium/check/) - 仓库规范检查
+- 🧪 [test-development Skill 参考](/skills/skills-reference/medium/test-development/) - 需要补测试时
+- 💡 [最佳实践](/skills/best-practices/) - 少踩坑的通用做法
+
+

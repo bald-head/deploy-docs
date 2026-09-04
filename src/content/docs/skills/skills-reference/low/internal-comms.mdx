@@ -1,0 +1,139 @@
+---
+title: 内部沟通写作（internal-comms）
+description: 按沟通类型加载对应指南，写出会议纪要、状态更新、FAQ 和发布说明，并且不把推测写成结论
+order: 31
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+内部沟通翻车基本都是同一个原因：把"有人提过"写成了"团队决定"，把"已合并"写成了"已上线"。`internal-comms` 的价值不在于文笔，而在于它给每种沟通类型配了一份带事实门槛的指南——先判断你要写的是哪一类，再按那一类的规则收集内容和排版。
+
+它管的是内部读者：3P 更新、公司周报、FAQ、状态报告、向上汇报、项目更新、事故报告。`SKILL.md` 的流程边界写明：仅执行既有 TODO 的内部沟通写作步骤，不维护任务状态。
+
+## 什么时候用
+
+| 你会这样说 | 场景 | 加载的指南 |
+| --- | --- | --- |
+| "把这次会议整理成纪要" | 有记录、转录或笔记，需要提炼决定与行动项 | `examples/meeting-notes.md` |
+| "写一下这个版本的发布说明" | 需要区分已发布、待验证、待发布内容 | `examples/release-notes.md` |
+| "出一份本周的 3P 更新" | 团队周报：Progress / Plans / Problems | `examples/3p-updates.md` |
+| "写个公司层面的通讯稿" | 面向全员的 newsletter | `examples/company-newsletter.md` |
+| "这几个常见问题统一回一下" | FAQ 与常见问题答复 | `examples/faq-answers.md` |
+| "给领导写个项目状态更新" | 状态报告、向上汇报、项目更新、事故报告 | `examples/general-comms.md`（不匹配上述类型时） |
+
+触发词来自 `SKILL.md` 的 `triggers`：内部沟通、会议纪要、发布说明。正文的 Keywords 还列了：3P updates、company newsletter、weekly update、faqs、meeting notes、release notes、status updates 等英文说法。
+
+<Aside type="tip">
+沟通类型判断不出来时不要硬套模板。`SKILL.md` 的指引是：类型不匹配任何既有指南时，要求补充说明或更多上下文，再决定用 `general-comms.md` 还是继续澄清。
+</Aside>
+
+## 什么时候不要用
+
+- **定义产品要做什么、验收标准是什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。沟通文档不能反向定义需求。
+- **代码文档、接口说明、实现记录** → [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/) 或 [api-development](/skills/skills-reference/high/api-development/)。
+- **用户手册、面向客户的说明** → [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)。读者从内部变成外部，事实门槛和口吻都不一样。
+- **技术博客、对外内容** → 不属于本 Skill 范围（`not_for` 明确排除）。
+- **每天的个人工作汇报** → [daily-report-writer](/skills/skills-reference/low/daily-report-writer/)。日报是个人产出摘要，不是团队沟通。
+- **只想统计功能完成度** → [progress](/skills/skills-reference/medium/progress/)。
+
+`not_for` 明确排除：产品定义、代码文档、用户手册、技术博客。
+
+## 前置条件
+
+frontmatter 没有 `gates`，真正的门槛在各类指南的"事实门槛"里：
+
+1. **会议纪要需要完整原始记录**。指南要求完整阅读用户提供的记录、转录或笔记，只记录材料支持的参与者、观点与决定；说话人无法识别时用中性标记。
+2. **Release Notes 需要可验证的发布事实**。取材范围限定为已发布构建、部署记录、已完成工单、合并记录、Changelog 和验证结果。
+3. **落盘前需要确定文档存储前缀**。仅在对话里交付时不需要；要写文件且用户未指定路径、仓库也没有目录约定时，必须先问。
+
+不满足会发生什么：纪要里出现推断出来的"决定"，Release Notes 把待验证功能写成已上线，或者文件被随手放到一个没人约定过的目录里。
+
+## 怎么用
+
+### 1. 判断沟通类型
+
+从请求里识别类型：3P 更新、公司通讯、FAQ、状态报告、向上汇报、项目更新、事故报告。类型决定后面所有规则。
+
+### 2. 加载对应指南
+
+`examples/` 目录下是真实存在的六份指南，按类型取一份读：
+
+```text
+examples/3p-updates.md          Progress / Plans / Problems 团队更新
+examples/company-newsletter.md  全公司通讯稿
+examples/faq-answers.md         常见问题答复
+examples/meeting-notes.md       会议决定、未决问题与行动项
+examples/release-notes.md       已验证的用户向或内部发布沟通
+examples/general-comms.md       不匹配上述任何一类时的兜底
+```
+
+### 3. 按指南收集内容并排版
+
+以会议纪要为例，`examples/meeting-notes.md` 给的输出骨架是固定的：
+
+```markdown
+# 会议纪要：<topic>
+
+- 日期/时间、参与者、目的
+
+## 背景与事实
+## 讨论选项与关键取舍
+## 已确认决定
+## 未决问题
+## 行动项（表格：Action / Owner 状态 / Deadline 状态 / 验收后续）
+## 风险与依赖
+```
+
+<Aside type="caution">
+会议里没有明确结论时写"未形成决定"，不得从语气推断。Owner 或期限没说清楚时写"待确认"。"有人建议""团队讨论过""已经决定"是三种不同状态，必须分开表述。
+</Aside>
+
+Release Notes 的规则更严，`examples/release-notes.md` 要求先给每项内容归档到四种状态之一：
+
+| 状态 | 能否写成完成 |
+| --- | --- |
+| 已发布并验证 | 可以，正式 Release Notes 只有这一类写成无条件完成 |
+| 已部署待验证 | 必须标注状态 |
+| 已合并待发布 | 必须标注状态 |
+| 计划中 | 必须标注，或直接排除 |
+
+用户版本的分节是：新增、改进、修复、需要操作/迁移。
+
+<Aside type="danger">
+把"已合并待发布"或"已部署待验证"的内容写进正式发布说明的完成列表，是这个 Skill 最需要防的事故——读者会据此对外承诺。宁可条目少，也不要状态错。
+</Aside>
+
+### 4. 决定交付形态
+
+落盘规则按优先级判断：
+
+1. 只在对话里交付 → 不创建文件，也不询问存储前缀；
+2. 用户已指定输出路径 → 直接用，不改写目录、不重复询问；
+3. 用户未指定但仓库已有明确文档目录约定 → 沿用仓库约定；
+4. 两者都没有 → 首次写文件前询问文档存储前缀，内容保存到 `<doc-prefix>/internal-comms/`。
+
+已确认的前缀在当前任务内复用；除非用户要求，不把个人前缀写成团队全局默认值。
+
+## 与其他 Skill 的关系
+
+`SKILL.md` 的 `related_skills` 是不分方向的列表：[doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)、[daily-report-writer](/skills/skills-reference/low/daily-report-writer/)。按实际链路：
+
+- **上游**：状态类沟通的事实来自 TODO 与代码，由 [update-status](/skills/skills-reference/medium/update-status/) 依据代码、Review 和 Git 事实更新；发布类沟通的事实来自 [git-workflow](/skills/skills-reference/high/git-workflow/) 与 [code-review](/skills/skills-reference/high/code-review/) 的结论。
+- **协作**：个人日报内容可以由 [daily-report-writer](/skills/skills-reference/low/daily-report-writer/) 先整理；需要多轮共创长文时转 [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)。
+- **下游**：沟通结论涉及范围变化时，交给 [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 定向更新受影响功能，而不是在纪要里顺手改需求。
+
+```text
+update-status / code-review / git-workflow（事实）
+        ↓
+internal-comms（纪要 / 状态更新 / 发布说明）
+        ↓
+change-impact-analysis（沟通中确认了真实范围变化时）
+```
+
+## 产出与验收
+
+- **主产物**：一份按类型指南排版的中文沟通文本；需要落盘时位于用户指定路径、仓库既有约定目录，或确认过前缀的 `<doc-prefix>/internal-comms/`。
+- **状态标注**：纪要中的决定、未决问题、Owner 与期限状态齐全；发布说明中每项内容都能对到四种状态之一。
+- **状态不变**：TODO 状态未被改动，未经授权不操作 Git。
+
+判断真的完成了：把文档给一个没参会的人，他能分清哪些是已确认的决定、哪些还在讨论、谁在什么时候要交付什么；发布说明给到支持或销售，他们不会因为读了这份文档而对外承诺一个还没验证的功能。

@@ -8,59 +8,60 @@ import { Aside } from '@astrojs/starlight/components'
 
 ## Skill 分类
 
-Skills Framework 包含 95 个专业 Skill，按优先级分为：
+Skills Framework 包含 95 个专业 Skill，按 frontmatter 声明的优先级分为：
 
-- **Critical**（1 个）：任务管理核心
-- **High**（19 个）：核心开发流程
+- **Critical**（2 个）：`change-impact-analysis`、`product-manager`
+- **High**（25 个）：核心开发流程
 - **Medium**（30 个）：专业领域能力
-- **Low**（35 个）：扩展功能
-- **Fallback**（10 个）：兜底能力
+- **Low**（38 个）：扩展能力与兜底
+
+优先级只影响**路由抢占顺序**，不代表能力强弱：优先级高的 Skill 会在话术模糊时先被选中，优先级低的需要你说得更具体。
 
 ## 按优先级浏览
 
-### Critical & High 优先级（20 个）
+### 核心流程（20 个详解）
 
-核心开发流程的关键 Skill，路由优先级最高。
+日常最常用的 20 个 Skill，串起"想清楚 → 定方案 → 写代码 → 审查 → 提交"主线，每个都含触发词、门槛和协作关系。
 
-👉 [查看详情](/skills/catalog/critical-high)
+👉 [查看详情](/skills/catalog/critical-high/)
 
 **包含**：
-- 任务管理：task-todo-workflow
-- 产品和架构：product-manager, project-manager, architecture-design
-- 开发实施：crud-development, api-development, database-design, frontend-design, ui-pc, ui-app
-- 质量保障：code-review, bug-detective
-- Git 操作：git-commit, git-workflow
-- 其他：change-impact-analysis, project-navigator, frontend-polish, progress
+- 任务与规划：task-todo-workflow、product-manager、project-manager、change-impact-analysis
+- 架构与选型：architecture-design、tech-decision
+- 开发实施：crud-development、api-development、database-design、frontend-design、ui-pc、ui-app、frontend-polish
+- 质量保障：code-review、bug-detective
+- Git 操作：git-commit、git-workflow
+- 辅助：project-navigator、progress、universal-development
 
 ### Medium 优先级（30 个）
 
-专业领域的 Skill，涵盖数据库、安全、前端、测试等。
+具体技术领域的能力：TODO 状态维护、基础设施、测试、文档、Skill 自身管理。
 
-👉 [查看详情](/skills/catalog/medium)
-
-**包含**：
-- TODO 管理：add-todo, update-status, next
-- 项目管理：init-docs, find-skills, check, error-handler
-- 头脑风暴：brainstorm, grilling
-- 工具和性能：utils-toolkit, performance-doctor
-- 测试：test-strategy, test-development
-- Skill 管理：add-skill, skill-creator, skill-optimizer
-- 专业能力：archify, next, store-pc, redis-cache, websocket-sse, satoken-core, server-docker-deployment, scheduled-jobs
-- 文档和产品：doc-coauthoring, file-oss-management, product-analytics, tenant-management, real-browser-automation
-
-### Low & Fallback（45 个）
-
-扩展功能和特殊场景的 Skill。
-
-👉 [查看详情](/skills/catalog/low-fallback)
+👉 [查看详情](/skills/catalog/medium/)
 
 **包含**：
-- 代码生成：code-generator
-- 文档处理：docx, pptx, pdf, xlsx, mermaid
-- 平台集成：alova-client-usage, alova-server-usage, penpot, penpot-prototype
-- 产品和营销：product-discovery, product-strategy, product-execution, go-to-market
-- 开发工具：github-code-interpreter, prompt-optimizer, snowflake-id
-- 其他专业能力：algorithmic-art, animation-vocabulary, backend-annotations, brand-guidelines, canvas-design, 等
+- TODO 与状态：add-todo、next、update-status、progress
+- 基础设施：error-handler、satoken-core、scheduled-jobs、websocket-sse、tenant-management、server-docker-deployment
+- 数据与工具：redis-cache、file-oss-management、utils-toolkit
+- 质量与测试：check、performance-doctor、test-strategy、test-development、real-browser-automation
+- 澄清与发散：grilling、brainstorm、project-navigator、archify
+- 文档与产品：init-docs、doc-coauthoring、product-analytics
+- 前端状态：store-pc
+- Skill 管理：find-skills、skill-creator、skill-optimizer、add-skill
+
+### Low 优先级（38 个）
+
+扩展能力：文件处理、设计工具、第三方集成、提示词工程、本机操作。
+
+👉 [查看详情](/skills/catalog/low-fallback/)
+
+**包含**：
+- 兜底与生成：universal-development、code-generator
+- 文档与文件：docx、xlsx、pptx、pdf、mermaid、daily-report-writer、development-process-doc-writer、internal-comms、humanizer-zh
+- 设计与视觉：penpot、penpot-prototype、canvas-design、algorithmic-art、brand-guidelines
+- 后端与集成：backend-annotations、json-serialization、sms-mail、snowflake-id、workflow-engine、alova 系列、worma-guidelines
+- AI 与 Agent：prompt-optimizer、agent-optimizer、mcp-builder
+- 其他：code-patterns、github-code-interpreter、experience-sedimentation、computer-use、storage-analyzer、go-to-market、动效与 Skill 治理
 
 ## 按场景查找
 
@@ -261,7 +262,8 @@ product-manager:
 
 ## 下一步
 
-- [Critical & High 优先级](/skills/catalog/critical-high) - 查看核心 Skill 详情
-- [Medium 优先级](/skills/catalog/medium) - 查看专业 Skill 详情
-- [Low & Fallback](/skills/catalog/low-fallback) - 查看扩展 Skill 详情
-- [使用指南](/skills/usage) - 学习如何使用这些 Skill
+- [核心流程 Skill 详解](/skills/catalog/critical-high/) - 最常用的 20 个 Skill
+- [Medium 优先级](/skills/catalog/medium/) - 专业领域能力速查
+- [Low & Fallback](/skills/catalog/low-fallback/) - 扩展与兜底能力速查
+- [Skill 参考手册](/skills/skills-reference/) - 95 个 Skill 的独立说明页
+- [使用指南](/skills/usage/) - 学习如何使用这些 Skill

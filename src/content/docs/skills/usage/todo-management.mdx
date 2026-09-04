@@ -1,0 +1,340 @@
+---
+title: TODO 管理
+description: 把唯一 TODO 用成真正的状态源：落点、状态标记、四个 Skill 的分工和常见错误
+order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+TODO 是任务和执行状态的**唯一持久来源**。每个开发者只有一份活动 TODO，规划、进行中、完成结果都原位更新在这一个文件里 —— 不是"主要写在这里"，是只写在这里。
+
+配套的边界同样简单：
+
+- **状态**只写 TODO
+- **稳定项目事实**只写 [PROJECT-MEMORY.md](/skills/core-concepts/project-memory/)
+- 两者都不产生第二份副本、Context JSON 或执行日志
+
+这套约束的价值在于：任何时候的 checkbox 都能由 TODO、代码、Git、Review 和新鲜验证事实重新算出来。一旦状态里混进了猜测，[next](/skills/skills-reference/medium/next/)、[progress](/skills/skills-reference/medium/progress/) 和 Review 都会基于假事实继续推进。
+
+## 落点：一个开发者，一份 TODO
+
+路径形如：
+
+```
+docs/<developer-id>/tasks/todo/<文件名>.md
+```
+
+`<developer-id>` 的解析顺序：
+
+1. 当前 Git 仓库的 `git config user.name`，规范化成小写、目录安全的形式
+2. Git identity 不可用时 → 当前系统登录用户名
+3. 两者都不可用时 → 才接受显式的 `AGENT_DEVELOPER_NAME`
+
+```bash
+git config user.name
+# tanner
+
+ls docs/tanner/tasks/todo/
+# order-system.md
+```
+
+几条硬规则：
+
+- 当前开发者目录里**只能有一个**活动 `.md` TODO。发现第二份会直接阻断并要求合并，不会按文件名、时间或哪份 checkbox 更多来猜哪份是真的
+- 迁移旧 TODO 时保留原文件名的日期或业务前缀，不要重命名成通用的 `TODO.md`
+- 旧布局（仓库级 `docs/tasks/todo/`、根 `tasks/todo/`、单数 `task/`）只做只读兼容。发现后迁进当前开发者的复数 `tasks/todo/`，迁完就不能再当状态源
+- 其他 `<developer-id>` 目录**只读**。别人的任务不勾、不迁、不合并、不接管；任务转交由目标开发者在自己那份 TODO 里受理
+- TODO 顶部记录 `Owner`，文件里只列这个 Owner 的事项
+
+<Aside type="caution">
+同一个 Git identity 下的主 Agent 和 subagent 共用同一份 TODO。多执行实例、跨会话、多 worktree 都不构成开第二份 TODO 的理由 —— linked worktree 只承担隔离实现，领取、完成、阻塞和释放都要回主 checkout 由主 Agent 执行。
+</Aside>
+
+## 状态标记
+
+| 标记 | 含义 | 谁能写 | 附带字段 |
+|---|---|---|---|
+| `[ ]` | 未开始 | 状态机 | 不带执行实例 |
+| `[~]` | 进行中，已被某个实例原子领取 | 领取它的那个实例 | `执行实例：<runtime-instance-id>` |
+| `[!]` | 阻塞 | 领取它的那个实例 | 原因、已完成边界、恢复条件；`执行实例` 改写成 `最后执行实例` |
+| `[x]` | 已完成 | 状态机 | 合并结果摘要；不保留执行实例 |
+
+流转路径：
+
+```
+[ ] ──原子领取──> [~] ──完成门禁通过──> [x]
+                   │
+                   ├──遇到外部阻塞──> [!] ──恢复──> [~]
+                   │
+                   └──实例已停止、主 Agent 显式释放──> [ ]
+```
+
+一份 TODO 长什么样：
+
+```markdown
+# 订单系统 TODO
+
+- Owner：`tanner`
+- 规划来源：docs/PRD.md、docs/architecture.md
+
+## 功能队列
+
+- [x] `ORDER-QUERY` 菜单：`order.list`；Owner：`tanner`
+  - 目标：运营可以按时间和状态查询订单
+  - 验收：`AC-001` 列表分页返回真实数据
+  - 完成面：API、backend、web、permission、review、git
+  - 结果：来源复核：`docs/PRD.md#订单查询` -> 与锚点一致；
+    `AC-001 -> 真实请求已验证`；Review：通过；commit：`a1b2c3d`
+
+- [~] `ORDER-EXPORT` 菜单：`order.export`；Owner：`tanner`
+  - 执行实例：`adocs-usage-1-0e35362`
+  - 目标：运营可以把当前筛选结果导出成 Excel
+  - 验收：
+    - `AC-001` 点击导出得到 xlsx 文件
+    - `AC-002` 无导出权限时返回 403 并有中文提示
+  - 依赖：`ORDER-QUERY`
+  - 并行写集：`services/order-export/`、`apps/admin/src/orders/export/`
+
+- [!] `ORDER-SYNC` 菜单：`order.sync`；Owner：`tanner`
+  - 最后执行实例：`adocs-usage-1-0e35362`
+  - 阻塞：等待上游系统开放测试环境账号
+  - 恢复条件：拿到账号并确认可连通
+
+- [ ] `ORDER-REPORT` 菜单：`order.report`；Owner：`tanner`
+```
+
+Epic 是个例外：它是同一文件里的**派生汇总**，只用 `[ ]` 和 `[x]`，不能是 `[~]` 或 `[!]`，也不带执行实例、依赖、写集、AC、验证或 Git 字段。全部直接子 Feature 变成 `[x]` 之后，状态机在同一次原子写回里把它汇总成 `[x]` —— 不能手工提前勾，也不为 Epic 再做一次 Review 或提交。
+
+<Aside type="danger">
+checkbox 必须能由 TODO、实现、Git、Review 和新鲜验证事实**重算**出来。手工把 `[ ]` 改成 `[x]` 而代码没做完，是这套体系里最贵的一种错误：它不会立刻报错，而是让后面每一次领取、统计和 Review 都建立在假事实上。
+</Aside>
+
+## 四个 Skill 的分工
+
+| Skill | 读还是写 | 负责什么 | 明确不做什么 |
+|---|---|---|---|
+| [add-todo](/skills/skills-reference/medium/add-todo/) | 写结构 | 向现有 TODO 去重追加功能或步骤 | 不创建新 TODO、不改状态、不写代码、不动 Git |
+| [next](/skills/skills-reference/medium/next/) | 读 + 原子领取 | 按依赖、写集互斥和 Git 事实挑下一项 | 不改 TODO 结构、不写业务代码 |
+| [update-status](/skills/skills-reference/medium/update-status/) | 写状态 | 按代码、Review 和 Git 事实回写开始 / 阻塞 / 完成 | 不改业务代码、不执行 Git 写操作 |
+| [progress](/skills/skills-reference/medium/progress/) | 只读 | 统计功能进度并报告状态失真 | 什么都不改 |
+
+整份 TODO 的结构规则和生命周期由 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 定义；一次完整规划的落盘由 [project-manager](/skills/skills-reference/high/project-manager/) 负责。上面这四个是日常最常用的入口。
+
+### add-todo：去重追加
+
+```
+"加个功能：订单可以导出 Excel"
+"补充任务：订单同步失败要能重试"
+```
+
+它会：
+
+- 只定位当前开发者那一份活动 TODO；不存在就报告缺失，存在多份就阻断要求合并
+- 拿 featureId、菜单/入口、用户结果、验收和范围跟已有项比一遍，避免语义重复
+- 按"功能点 + 菜单/入口"追加，写清 Owner、来源锚点、目标、验收、依赖、并行写集和全部交付面
+- 新项的 Owner 必须等于当前 `<developer-id>`
+
+它不会：
+
+- 把数据、API、后端、页面、权限、Review、Git 拆成独立 checkbox —— 它们是同一个 Feature 的内部完成面
+- 把新追加的项直接标成 `[~]`；Ready 由状态机重新计算
+- 因为新增了功能就重建整个计划；新范围影响到已有项时，只做一次 [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 定向更新
+
+<Aside type="note">
+`add-todo` 的前提是这个功能已经确认过、并且完成了一次产品 / 方案 / 设计规划。想用一句话追加一个从没定义过的大功能，先走 [product-manager](/skills/skills-reference/critical/product-manager/)。
+</Aside>
+
+### next：挑下一项
+
+```
+"下一个任务"
+"继续"
+"接着做什么"
+```
+
+一项要成为 Ready，四个条件必须同时成立：
+
+1. 自身是 `[ ]`
+2. 全部依赖的 `[x]` 已经随功能提交进了远端 —— 只有本地 `[x]` 还没 push 不算
+3. 没被其他执行实例领取
+4. 并行写集与所有 `[~]` 互斥；共享数据库迁移、公共配置、契约、端口、账号等独占资源也算冲突
+
+只读询问和授权续作是两种行为：只读只返回候选和原因；已经授权继续时才通过状态机原子领取，`[ ]` 变 `[~]`。说"继续"时，如果当前实例已经有一个 `[~]`，只会续作那一项。
+
+排序上，阻断正确性 / 安全 / 数据 / 构建的问题优先，然后是当前 Feature 还没完成的交付面、能解锁最多后继的依赖、下一个已确认的菜单功能，最后才是不阻断交付的优化和清理。
+
+<Aside type="tip">
+TODO 还在规划阶段（当前阶段没推进到 `business-development`）时，`next` 只会返回当前阶段、阶段 Owner、门禁、产物和下一步，不会领取任何 Feature。这时候需要的是推进阶段，不是找活干。
+</Aside>
+
+### update-status：按事实回写
+
+```
+"开始任务 ORDER-EXPORT"
+"这个卡住了，等对方给测试账号"
+"完成"
+```
+
+四个动作：开始、阻塞、完成、释放。**实施过程中不写 TODO** —— 内部的数据、API、后端、页面步骤留在执行上下文里，不在 TODO 里写流水。只在开始、阻塞、完成或项目基线变化时更新。
+
+它认的事实只有这些：
+
+- 实际的生产文件和调用链
+- 已经跑过的一个最小 compile / typecheck / lint，加一次 `git diff --check`
+- 当前完整 diff 的一次 [code-review](/skills/skills-reference/high/code-review/)
+- commit、upstream、remote ref 和 CI / provider 的原生状态
+- 明确的人工、设备、账号或外部系统阻塞
+
+完成摘要要**一次写齐**：先原样写进这个 Feature 的 `结果`，再用完全相同的字符串调用完成命令，不靠先报错再补字段。
+
+| 情况 | 摘要里必须有 |
+|---|---|
+| 所有档位 | 来源复核结论、每条稳定 AC 的 evidence、Review 通过结论；且不含 `unverified` |
+| `Test-first` | 另加修复前 RED 与修复后 GREEN |
+| `Regression-required` | 另加可复现的修复前基线与修复后证据 |
+| `High-risk` | 另加风险边界、回滚方式、方案复核、发布检查 |
+
+关于释放：执行实例异常退出**不会**按超时自动释放它占着的 Feature。主 Agent 确认旧实例确实已经停了，才能用显式释放把 `[~]` 或 `[!]` 恢复成 `[ ]`，然后由新实例重新原子领取。任何时刻一个 Feature 仍然只有一个执行实例。
+
+### progress：只读统计
+
+```
+"查看进度"
+"现在做了多少"
+```
+
+输出大致是这样的结构：
+
+```markdown
+- 范围：TODO / 分支 / HEAD / 时间
+- 功能：未开始 3 / 进行中 1 / 已完成 5 / 阻塞 1
+- Epic：已完成 1 / 未完成 1；每项已完成子 Feature / 总子 Feature
+- 菜单覆盖：已覆盖 / 缺失映射
+- 进行中：Feature -> 执行实例 -> 写集；目标、已完成面、缺失面、阻塞
+- 验收证据：已验证 AC N / unverified AC N / 等级不匹配 N
+- 下一 ready：可原子领取的 Feature ID
+- 状态失真：Feature、代码事实和建议修正
+- 未验证边界：外部环境或未读取范围
+```
+
+它会主动报出这些问题：可疑的 `[x]`、AC 没有匹配等级的证据、并发不变量被破坏（同一 Feature 两个实例、一个实例两个 `[~]`、依赖没完成就在做、写集重叠）、Epic 被提前勾选。本地已经 `[x]` 但还没随功能推到远端的会单列成 `delivery-pending`，不计入已交付。
+
+发现 TODO 和代码不一致时它只报告精确的 Feature 和缺失交付面，**不自己改状态** —— 修由 `update-status` 按事实做。
+
+<Aside type="tip">
+不要拿文件数、代码行数、TODO/FIXME 数量或"某条命令跑通了"当完成率，`progress` 也不这么算。同样地：等待外部条件不算进行中，取消或被替代不算已实现。
+</Aside>
+
+## 状态归 TODO，事实归项目记忆
+
+| 内容 | 落点 | 例子 |
+|---|---|---|
+| 任务与执行状态 | 唯一 TODO | checkbox、执行实例、依赖、并行写集、AC 证据、阻塞与恢复条件、commit 引用 |
+| 稳定项目事实 | `PROJECT-MEMORY.md` | 技术栈与版本来源、真实 Owner、复用地图、契约与边界、常用命令 |
+
+分辨方法是问一句：**下一个 Feature 还会用到这条信息吗？**
+
+- 会 —— "API 请求统一走 `src/api/request.ts`，不要新建第二个封装" → 项目记忆的 `Reuse map`
+- 不会 —— "`ORDER-EXPORT` 的 `AC-002` 已经用真实请求验证过" → TODO 的结果摘要
+
+项目记忆由 [project-details](/skills/skills-reference/high/project-details/) 在确认事实的那一轮原位归并；它不保存任务状态，也不替代 PRD 和架构文档。文件缺失或主要章节为空时，会先路由 [init-docs](/skills/skills-reference/medium/init-docs/) 采集核对事实。
+
+<Aside type="caution">
+把进度写进项目记忆是第二贵的错误。记忆文件每轮都会按当前问题注入有界摘要 —— 一旦混进状态，过期的"进行中""待办"会被当成稳定事实反复消费，而且没人会去核对它。
+</Aside>
+
+## 常见错误
+
+### 1. 手改状态，代码没做完
+
+最典型：直接把 `[ ]` 或 `[~]` 编辑成 `[x]`，或者后端做完了就勾上。
+
+**症状**：`progress` 把它报成状态失真；下一次 `next` 基于这个假 `[x]` 解锁了后继 Feature；Review 时发现整条纵向少了一半。
+
+**怎么修**：把这一项改回 `[~]`（真的被外部卡住就用 `[!]` 并写恢复条件），补齐缺失的交付面，重新走完成门禁。有菜单或按钮入口的功能，要同时具备菜单/按钮权限记录、默认角色授权、后端鉴权、前端页面和页面上的真实接口数据 —— 少一件就不能勾。
+
+### 2. 把进度写进项目记忆
+
+**症状**：`PROJECT-MEMORY.md` 里出现"当前正在做订单导出""待办：报表模块"这类句子，几天后没人更新它。
+
+**怎么修**：把状态挪回 TODO；记忆里只留会被后续 Feature 复用的公共 Owner、组件、工具、契约和禁止重复实现的边界。
+
+### 3. 多份 TODO 并存
+
+**常见来源**：改了 `git config user.name`（`<developer-id>` 跟着变了）、从旧布局迁移时留了副本、在 linked worktree 里另存了一份、手工在仓库根建了个 `TODO.md`。
+
+**症状**：勾选莫名丢失、依赖判断错乱、两个实例各看一份文件、`progress` 数出来的功能数和实际不符。
+
+**怎么修**：先停下（状态机遇到第二份会直接阻断），把内容合并回当前开发者目录里那唯一一份，删掉副本。旧布局路径迁完就不要再写。worktree 里不要放 TODO 副本 —— 它会立刻变成第二个状态源。
+
+```bash
+# 排查：当前开发者目录下是不是只有一份
+ls docs/tanner/tasks/todo/
+
+# 排查：仓库里有没有遗留的旧布局或手工副本
+ls docs/tasks/todo/ tasks/todo/ 2>/dev/null
+```
+
+### 4. 一个 Feature 被拆成后端 / 前端两个 checkbox
+
+**症状**：后端那半被勾成完成，用户其实什么都还用不了；两半各做了一次 Review，各提了一次交。
+
+**怎么修**：合成一个 Feature，把数据、API、后端、Web/App、权限、联调、Review、Git 写成它的完成面。内部确实缺步骤时，在这个 Feature 下补一句说明就够了。
+
+### 5. 依赖的 `[x]` 还没 push 就领下一项
+
+**症状**：本地看起来依赖已完成，实际远端 TODO 里还是 `[ ]`；换设备或换实例后状态对不上。
+
+**怎么修**：先完成当前功能的 commit 和 push，核验 local / upstream / remote OID，确认远端 TODO 已经包含这个 `[x]`，再领下一项。状态机报 `delivery-pending` 时就是在说这件事。
+
+### 6. 给 Epic 手工勾 `[x]`
+
+**症状**：Epic 显示完成，子 Feature 里还有 `[ ]`；依赖这个 Epic 的后继被错误解锁。
+
+**怎么修**：把 Epic 改回 `[ ]`，让它在最后一个子 Feature 完成时由状态机汇总。Epic 不接受开始、完成、阻塞、释放命令，也不产生独立的提交。
+
+## 常见问题
+
+### Q1: 改了 Git user.name，TODO 找不到了怎么办？
+
+`<developer-id>` 是从 `git config user.name` 动态解析的，改名等于换了目录。确认想用哪个身份，然后把那份 TODO 迁到对应的 `docs/<developer-id>/tasks/todo/` 下，保留原文件名，并删掉旧目录里的副本 —— 留着就是两份并存。
+
+### Q2: 多人怎么并行？
+
+每人一份 TODO，靠**并行写集互斥**并行。你只写自己目录下那一份，别人的目录只读。写集有交集时不能同时开工：要么等对方完成并推送，要么让对方先提交冲突的那部分，要么调整写集边界。
+
+### Q3: 一份 TODO 里能同时有多个 `[~]` 吗？
+
+可以，但必须是不同执行实例各自独占的**不同** Feature，而且每一项的依赖都已完成、并行写集两两互斥。同一个 Feature 不能被两个实例共同领取，一个实例也不能同时持有两个 `[~]`。
+
+### Q4: "阻塞"和"还没开始"怎么区分？
+
+`[!]` 是这一项已经领取并做了一部分、被真实的外部条件卡住（等账号、等设备、等对方接口），要写清原因、已完成边界和恢复条件。还没开始的就是 `[ ]`。注意 `progress` 的口径：等待外部条件不算进行中。
+
+### Q5: TODO 和代码已经不一致了，从哪下手？
+
+先用 `progress` 只读定位：它会给出精确的 Feature、缺失交付面和状态失真结论。然后用 `update-status` 按代码、Review 和 Git 事实回写。顺序不要反过来 —— 不要改代码去迁就 checkbox。
+
+### Q6: 状态机在哪里保证"原子"？
+
+领取、完成、阻塞、释放和阶段推进都由 Runtime Hook 提供的状态机脚本加锁、重读、原子写回，进程不直接竞争编辑状态行。执行实例 ID 也由 Hook 注入。机制见 [Runtime Hook](/skills/core-concepts/runtime-hooks/) 和 [Hook 参考](/skills/hooks/)。
+
+## 下一步
+
+- [功能开发流程](/skills/usage/feature-development/) - TODO 在一次功能交付中的实际用法
+- [新项目开始](/skills/usage/new-project/) - 第一份 TODO 是怎么建起来的
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) - TODO 结构与生命周期规则
+- [update-status](/skills/skills-reference/medium/update-status/) - 状态回写与完成摘要
+- [progress](/skills/skills-reference/medium/progress/) - 只读进度统计
+- [项目记忆](/skills/core-concepts/project-memory/) - 稳定事实的落点
+- [问题排查](/skills/troubleshooting/) - 状态冲突和阻断时先看这里
+
+
+
+
+
+
+
+

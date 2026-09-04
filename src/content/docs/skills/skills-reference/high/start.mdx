@@ -1,0 +1,243 @@
+---
+title: 项目概览（start）
+description: 用可核对的证据为陌生仓库建立一份紧凑概览，并把核对出来的稳定事实交给项目记忆
+order: 29
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+面对一个完全不认识的仓库，最贵的错误是猜。`start` 不带任何预设进场——这个项目叫什么、用什么语言、跑成什么形态、有没有数据库、部署在哪，全部从仓库里真实存在的构建清单、配置、入口和源码里读出来。
+
+它的输出会把三类东西分开摆：已确认事实、待确认假设、通用建议。你能一眼看出哪句话背后有文件路径撑着，哪句只是它的推测。
+
+这是一次性的上手动作，不是长期维护工具。概览直接写在回复里，不落盘。唯一可能留在仓库里的痕迹是：这一轮真正核对出来的稳定入口、Owner、边界和命令，交给 [project-details](/skills/skills-reference/high/project-details/) 归并进那份唯一的 `PROJECT-MEMORY.md`。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这个项目是干什么的" | 用途、运行形态、仓库布局 |
+| "带我快速上手这个仓库" | 技术栈、真实入口，加一条走通的调用链 |
+| "我刚接手，从哪看起" | 先规则、再构建清单、再入口，不批量翻文档 |
+| "这个项目怎么跑起来" | 安装、启动、测试、构建命令，每条带出处 |
+| "技术栈是什么、版本从哪来的" | 版本要有来源，不是凭包名猜 |
+| "最近都在改哪一块" | 有 Git 的话看少量近期提交和当前差异 |
+
+<Aside type="tip">
+不是 Git 仓库也能用，扫文件照样能得到结论。只是提交历史和工作树这两类证据会缺，回复里会明说缺了什么——缺证据就说缺，比给一个听着完整的结论有用得多。
+</Aside>
+
+## 什么时候不要用
+
+- **要精确定位某个入口、模块、组件或参考实现在哪** → [project-navigator](/skills/skills-reference/medium/project-navigator/)。分工很清楚：陌生仓库的第一次整体概览归 `start`，"这个类定义在哪一行、有没有生产调用、该照哪份实现写"归它。
+- **已经熟悉的项目要做日常导航** → 同样是 [project-navigator](/skills/skills-reference/medium/project-navigator/)。整体概览只值得做一次，之后按目标定位更省。
+- **要判断任务进度** → [progress](/skills/skills-reference/medium/progress/)。
+- **要决定接下来做什么** → [next](/skills/skills-reference/medium/next/)。
+- **要维护项目记忆里的长期事实** → [project-details](/skills/skills-reference/high/project-details/)；**记忆还是空的、需要首次采集或初始化团队共享文档** → [init-docs](/skills/skills-reference/medium/init-docs/)。
+- **要定义产品做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)；**要写代码** → [dev](/skills/skills-reference/high/dev/) 或 [universal-development](/skills/skills-reference/low/universal-development/)。
+- **要建、勾选或统计 TODO** → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。它不判断完成度，也不创建报告文件或状态文档。
+- **想读的是 GitHub 上某个外部仓库** → [github-code-interpreter](/skills/skills-reference/low/github-code-interpreter/)。`start` 面对的是你本地打开的这个。
+
+## 前置条件
+
+**没有门槛，任何仓库都能直接进来。** 但有几条输入纪律决定了它给你的东西可不可靠：
+
+**它读文档是有顺序也有节制的。** 先看你这次到底问了什么，再找仓库里适用的 Agent 规则文件，然后才按需要翻 README、架构说明、贡献指南和构建入口。整个 `docs/` 目录不会被一口吞进上下文——那样既慢，又容易让一堆过期文档盖掉真正的答案。
+
+**已经写清楚的事不重扫一遍。** 进来之前，请求入口已经把这个仓库的项目记忆摘要摆在它面前了。它先花掉这份现成的，再针对你的问题去核对相关章节。
+
+**记忆是空的时候它会自己去采一次。** 优先吃仓库里已有的 Agent 规则文件（包括 Codex 或 Claude 用 `/init` 生成的那份概览）、README 和少数几个源码入口，核对过之后交给 [project-details](/skills/skills-reference/high/project-details/) 归并。规则原文和生成模板不算项目事实，不会被当结论抄进去。
+
+**默认它什么都不改。** 不提交、不推送、不发版、不装依赖、不起服务，也不跑任何会写数据或碰远端的命令。要它真的执行验证，得你开口。
+
+<Aside type="danger">
+命令默认只读不跑。只有你明确要求实测，或者已经确认这条命令不装依赖、不动源码与配置、不起服务、不写数据、不碰远端而且耗时可控，它才会真的执行。剩下的命令它只说明用途和前提。缺依赖、缺凭证、缺设备时它会把这道门禁记下来，不会编一个"跑通了"给你。
+</Aside>
+
+## 使用示例
+
+### 场景 1：完全陌生的仓库
+
+**你的输入**：
+
+```text
+我刚接手这个项目，带我上手。
+```
+
+**它会先站稳位置，再找规则**：
+
+```bash
+pwd
+git rev-parse --show-toplevel
+git status --short
+rg --files -g 'AGENTS.md' -g 'CLAUDE.md' -g 'README*' -g 'CONTRIBUTING*'
+```
+
+**然后用文件发现代替目录假设**——不预设这是个什么工程：
+
+```bash
+rg --files -g 'package.json' -g 'pnpm-workspace.yaml' -g 'pom.xml' -g 'build.gradle*' \
+  -g 'settings.gradle*' -g 'go.mod' -g 'Cargo.toml' -g 'pyproject.toml' \
+  -g 'requirements*.txt' -g 'Makefile' -g 'Dockerfile*' -g 'compose*.yml' \
+  -g 'compose*.yaml' -g '.github/workflows/*'
+```
+
+这串 glob 只是常见入口的样本，不是支持范围。碰上别的语言或构建体系，它按仓库里真实有的东西扩展。
+
+**你会拿到的产出**（结构固定，内容按仓库实际情况填）：
+
+```text
+## 这是什么
+运营后台的服务端 + 管理端，单仓双包，本地起两个进程
+证据  pnpm-workspace.yaml / apps/api / apps/admin
+
+## 技术栈与来源
+Node 20        .nvmrc, CI 的 setup-node
+NestJS 10.3    apps/api/package.json + pnpm-lock.yaml 锁定
+Vue 3 + Vite   apps/admin/package.json
+PostgreSQL     apps/api/prisma/schema.prisma, compose.yml 的 db 服务
+Redis          compose.yml 里有；源码只在 apps/api/src/cache/ 出现一次   ← 待确认是否生产依赖
+
+## 一条走通的链路
+POST /orders
+  apps/api/src/order/order.controller.ts   路由与入参校验
+  → order.service.ts                       事务边界在这儿
+  → prisma.order.create()                  落库
+  → events/order-created.publisher.ts      往 Redis Stream 发一条
+
+## 怎么跑
+装依赖   pnpm i                      来源 README
+起后端   pnpm --filter api dev       来源 apps/api/package.json
+起前端   pnpm --filter admin dev     来源 apps/admin/package.json
+测试     pnpm test                   来源 CI；README 写的是 npm test，已过期
+构建     pnpm build                  来源 CI
+必需     DATABASE_URL / REDIS_URL / JWT_SECRET（只列名字，不回显值）
+未验证   本轮没有执行任何命令，以上均为读取所得
+
+## 最近在动哪儿
+近 5 个提交集中在 apps/api/src/order/
+工作树有未提交改动：apps/admin/src/views/order/List.vue（不是本次任务产生的）
+
+## 待确认 / 下一步
+待确认   Redis 是缓存还是事件总线，只有一处调用，需要看 events/ 的消费方
+下一步   读 apps/api/src/order/order.service.ts，那是订单主流程唯一的事务边界
+```
+
+**为什么这份产出长这样**：
+
+**版本要有来源。** `package.json` 里写着某个依赖，只证明有人声明过它。要说"这个项目真的在用"，得再找到配置、初始化代码、调用点，或者构建与测试里的证据。只靠包名推断的一律标成待确认——上面那条 Redis 就是这个待遇。
+
+**那条链路是整份概览里最值钱的一段。** 从一个真实入口一路追到数据落库或者发出去为止，比十个模块名的列表有用得多。模块名只告诉你有什么，链路告诉你它怎么运转。
+
+**命令不是它编的。** 三个地方各读一遍再互相对照：README 写的、构建脚本里定义的、CI 里真的跑的。三处不一致本身就是个发现，通常意味着 README 过期了——上面那条 `npm test` 就是。
+
+### 场景 2：项目记忆还是空的
+
+第一次在这个仓库里干活，`PROJECT-MEMORY.md` 刚被创建、里头还什么都没有。这时它会顺手做一次首采：
+
+```text
+## 记忆状态
+bootstrap-required → 转入首采模式
+
+## 采集来源（按顺序，用完即止）
+CLAUDE.md          有，含一段 /init 生成的仓库概览 → 作为线索，不当结论
+README.md          有，命令部分与 CI 不一致，取 CI
+pnpm-workspace.yaml + 两个 package.json
+apps/api/src/main.ts, apps/admin/src/main.ts
+
+## 交给 project-details 归并的稳定事实
+入口   apps/api/src/main.ts（服务端）、apps/admin/src/main.ts（管理端）
+命令   pnpm i / pnpm --filter api dev / pnpm --filter admin dev / pnpm test
+边界   订单写路径的事务只在 order.service.ts 开；其他地方不直接开事务
+Owner  未在仓库中声明，本轮不写入
+
+## 没写进记忆的
+"Redis 是事件总线" —— 只有一处调用，证据不足，留在本轮回复里
+```
+
+规则文件里的话是线索，不是事实。`/init` 生成的概览同样得回到源码里核对一遍才能进记忆。
+
+### 场景 3：不是 Git 仓库
+
+```text
+你：看看这个目录里的项目。
+
+它：这里不是 Git 仓库，工作树状态和提交历史这两类证据拿不到，
+    "最近在改哪一块"这一节我给不了。技术栈、入口、命令照常从文件读。
+```
+
+### 场景 4：其实不该用它
+
+```text
+你：这个项目做到什么程度了？完成率大概多少？
+
+它：概览不回答这个。模块数、文件数、提交频率只能说明有人在动它，
+    说明不了做完了多少或者质量如何。要看进度走 progress，要排优先级走 next。
+```
+
+## 与其他 Skill 的关系
+
+**上游**：没有——它通常就是一切的起点。记忆为空时会自动借用 [init-docs](/skills/skills-reference/medium/init-docs/) 的首采方式。
+
+**唯一落盘出口**：[project-details](/skills/skills-reference/high/project-details/)。只有这一条通道会往仓库里写东西，写的也只是核对过的稳定事实。没有新的稳定事实时，仓库里一个字都不多。
+
+**下游**：想更精确地定位代码 → [project-navigator](/skills/skills-reference/medium/project-navigator/)；想看进度 → [progress](/skills/skills-reference/medium/progress/)；想决定下一步 → [next](/skills/skills-reference/medium/next/)。
+
+```text
+（陌生仓库）start ──归并──→ project-details（PROJECT-MEMORY.md）
+       │
+       ├─→ project-navigator（定位到具体位置）→ next（决定做哪条）→ dev
+       └─→ progress（只读看进度）
+```
+
+## 产出与验收
+
+概览是一段回复，不是文件。默认覆盖五项：项目用途和运行形态；技术栈、布局、真实入口加一条链路；命令及其出处；跟当前理解有关的工作树和近期活动；待确认的事、没验证的边界，以及一项能马上动手的下一步。
+
+这一趟到底做成没做成，看四条：
+
+| 检查 | 通过标准 |
+| --- | --- |
+| 证据分层 | 每个重要结论后面都有一条最小必要的源码、配置、构建路径或 Git 命令；没有证据的明确标为待确认 |
+| 链路 | 至少一条从入口追到落库或对外输出的真实路径，不是模块名罗列 |
+| 命令 | 每条带出处，并说清哪些在当前环境根本没跑过 |
+| 下一步 | 是"读某个具体文件的某段逻辑"，不是"建议进一步了解项目" |
+
+<Aside type="note">
+概览不给完成率。一个仓库提交得勤，只说明有人在动它，说明不了它做完了多少、质量如何、离交付还有多远。
+</Aside>
+
+## 常见坑
+
+**拿它当长期文档生成器。** 它不写文件、不产报告，也不该每周跑一遍。整体概览只值得做一次，之后按目标定位。
+
+**把"依赖声明"读成"项目在用"。** 这是陌生仓库里最容易出的错，也是后续一连串错误结论的源头。
+
+**按目录名猜架构。** 一个叫 `services/` 的目录里可能什么服务都没有。名字是线索，调用点才是证据。
+
+**让它替你跑命令验证。** 默认不跑是设计，不是缺陷。你要实测就明说，否则拿到的是"读取所得"而不是"验证通过"。
+
+**把别人的未提交改动算成本次任务的。** 工作树里的脏文件不一定跟你有关，回复里会区分，你自己看的时候也要区分。
+
+**一次性把 docs 全读了。** 无关文档挤掉的是真正有答案的那几个文件的位置。
+
+## 最佳实践
+
+**先问一个具体问题。** "这个项目怎么起来"比"介绍一下这个项目"能拿到密度高得多的回答，因为它会直接奔向构建清单和 CI。
+
+**盯着那条链路看。** 如果它给的链路只到 Controller 就停了，说明还没真正追通，值得追问一句"这条写路径的事务在哪儿开"。
+
+**把待确认项当任务清单。** 那几条恰好是这个仓库里最容易踩的地方。
+
+**记忆为空时别跳过首采。** 多花的这一次，省的是后面每一轮的重复扫描。
+
+## 下一步
+
+- [project-navigator](/skills/skills-reference/medium/project-navigator/) - 精确定位入口、模块和参考实现
+- [project-details](/skills/skills-reference/high/project-details/) - 维护长期项目事实
+- [init-docs](/skills/skills-reference/medium/init-docs/) - 首次采集与团队共享文档
+- [next](/skills/skills-reference/medium/next/) - 决定接下来做哪一条
+- [progress](/skills/skills-reference/medium/progress/) - 只读地看进度
+- [dev](/skills/skills-reference/high/dev/) - 开始实现

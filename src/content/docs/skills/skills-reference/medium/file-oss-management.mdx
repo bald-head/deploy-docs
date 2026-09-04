@@ -1,0 +1,91 @@
+---
+title: 文件与对象存储接入（file-oss-management）
+description: 先确认仓库真实的存储后端与现有入口，再接入并保护文件上传、下载、删除与预签名链路
+order: 32
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"接一下 OSS"这句话里藏着最容易出错的假设：看到配置里有 `endpoint` 就认定项目在用某家云，看到供应商名就猜客户端类名和方法签名，然后写出一段编译不过、或者绕过了仓库既有适配层的代码。`file-oss-management` 把顺序倒过来——先把依赖、配置、客户端初始化和生产调用串成一条证据链，确认"实际后端是什么、业务应该走哪套现有入口"，再谈怎么写。
+
+它负责存储能力的事实发现、方案设计、接入和验证：对象键怎么生成、私有对象怎么访问、元数据存哪、删除语义是什么、密钥和跨租户边界怎么守。它不设计数据库表和迁移（[database-design](/skills/skills-reference/high/database-design/) / [database-ops](/skills/skills-reference/high/database-ops/)），也不定义业务接口形态（[api-development](/skills/skills-reference/high/api-development/)）。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "加个文件上传" | 业务需要把用户文件落到存储并留元数据 |
+| "接一下 OSS" / "MinIO 怎么接" | 需要确认真实后端并选定接入入口 |
+| "对象存储" / "云存储接入" | 评估本地文件系统、S3 兼容还是云厂商 SDK |
+| "文件下载链接怎么给" | 私有对象访问、预签名有效期与代理下载 |
+| "文件管理" / "文件存储" | 上传、列举、删除、生命周期的整体方案 |
+| "S3 接入" | 端点能力、签名版本、分片和路径风格核对 |
+
+触发面覆盖文件上传、对象存储、文件管理、云存储/MinIO/S3 接入这一类说法，具体触发词在 Skill 自己的 frontmatter 里维护。
+
+## 什么时候不要用
+
+- **设计通用业务接口** → [api-development](/skills/skills-reference/high/api-development/)。本 Skill 只做文件存储专项接入。
+- **设计表结构、审计字段、迁移** → [database-design](/skills/skills-reference/high/database-design/) 与 [database-ops](/skills/skills-reference/high/database-ops/)。本 Skill 只定义元数据需要承载哪些信息。
+- **通用威胁建模、认证授权体系** → [security-guard](/skills/skills-reference/high/security-guard/)。本 Skill 只管文件存储专项安全：MIME 白名单、对象键、预签名、响应头、跨租户读写。
+- **多租户整体隔离模型** → [tenant-management](/skills/skills-reference/medium/tenant-management/)。存储侧的桶、前缀、凭证隔离必须与租户模型一致。
+- **产品定义、后端 API、泛化的代码实现** → 都在排除范围内。
+
+## 前置条件
+
+三条门槛加一条硬门禁，共同拦住"凭供应商名写代码"这类事故：需要确实是接入文件或对象存储的任务、存储后端和业务场景已经明确、上传下载的业务逻辑已经确定（谁能上传、绑定到哪个业务对象、删除意味着什么）。这三件事决定了对象键和元数据长什么样。
+
+<Aside type="danger">
+硬门禁是一条完整的证据链：依赖、配置、客户端定义与初始化、生产调用、现有验证。任一环缺失时，它不会设计适配层、不会写供应商 API、不会给出可复制的接入代码，也不会声称"项目使用某某 OSS"。只发现了依赖而没找到初始化和调用，结论只能是"检测到 SDK"。
+</Aside>
+
+## 怎么调用
+
+直接说需求即可——"给头像加上传"、"文件下载链接怎么发"、"删除后对象没清掉"。它会按这个顺序推进：
+
+1. **回答三个事实问题**。实际后端是本地文件系统、某云厂商、S3 兼容服务还是多套并存；业务应该走自定义服务、统一工厂、框架适配器还是原生 SDK；文件类型判断、对象键、预签名、元数据和异常分别由哪些已存在的工具负责。发现两套以上抽象时，它会按业务调用方逐一映射，输出"业务场景 → 现有入口 → 底层 SDK → 证据"，并说明本次选中和排除了哪些入口。
+2. **选定适配方式**。本地文件系统、S3 兼容 SDK、云厂商 SDK、仓库自有适配层各有各的成立条件；供应商名只用于比较，不代表默认选择。已有统一适配层时优先复用，而不是再包一层。
+3. **把需求映射成中性能力**。上传、下载、删除、元数据、预签名这些是概念，不是类名和方法名；只有在真实入口确认之后才会落成具体签名。
+4. **实现上传链路**。校验、对象键生成、摘要与内容策略、客户端调用与超时重试、元数据落库、失败补偿逐项定死，重点是不要留下孤儿对象或只删了数据库记录。
+5. **处理私有访问**。私有对象优先走服务端代理或短期预签名，响应头、缓存策略、注入防护和资源释放一并确认。
+6. **定义删除语义与生命周期**。先说清业务删除是立即删除、逻辑删除后异步回收、版本化保留还是合规留存，再谈顺序、幂等、批量上限和重试。
+7. **核对配置与租户隔离，跑验证清单**。端点、区域、桶、前缀、访问域名、私有公开策略、超时、重试、分片阈值、凭证来源与轮换逐项核对，再按上传、下载、删除、对象键、元数据、安全六类跑验证。
+
+<Aside type="caution">
+不能仅靠客户端传入的租户字段做隔离。多租户场景必须验证越权读取、越权删除、配置切换和缓存键碰撞——**只有 key 前缀而没有读取授权，不构成隔离**。密钥可以按授权写入项目配置，但不进日志、不进回复、不进截图，长期密钥不下发客户端。
+</Aside>
+
+<Aside type="note">
+它会主动盯几个高频错误：看到供应商名就猜类名；把对象 URL 当稳定主键；只删数据库记录不删对象；用原始文件名或用户输入拼接对象键；把私有桶改成公开桶来"解决"预签名问题。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游（before）**：[architecture-design](/skills/skills-reference/high/architecture-design/)、[security-guard](/skills/skills-reference/high/security-guard/)
+
+**下游（after）**：[test-development](/skills/skills-reference/medium/test-development/)、[code-review](/skills/skills-reference/high/code-review/)
+
+**协作（complement）**：[api-development](/skills/skills-reference/high/api-development/)、[database-design](/skills/skills-reference/high/database-design/)、[tenant-management](/skills/skills-reference/medium/tenant-management/)
+
+```text
+architecture-design（定存储形态）
+  → security-guard（定通用安全边界）
+    → file-oss-management（事实发现 → 接入 → 验证）
+        ├─ api-development（上传下载接口形态）
+        ├─ database-design（元数据表与迁移）
+        └─ tenant-management（桶/前缀/凭证隔离）
+              → code-review（一次回归 Review）
+```
+
+## 期望产出与验证
+
+- **代码侧**：上传、下载、删除、预签名的真实调用，对象键生成，元数据落库和补偿逻辑。
+- **结论侧**：一张"业务场景 → 现有入口 → 底层 SDK → 证据"的映射表，以及本次选中与排除的入口及原因；输出会区分已确认事实、待确认假设和通用建议三类。
+- **验证侧**：真实环境或模拟器上跑过的命令与输出。
+- **边界侧**：没有目标仓库或测试凭据时明确标记为静态设计，不会声称上传链路已经通过。
+
+判断真的完成了：能指出一条具体的生产调用路径（哪个服务的哪个方法调了哪个客户端），能说清一个对象从上传到删除全程的键、元数据和权限，并且列出了哪些边界还没跑过。
+
+<Aside type="caution">
+本 Skill 不创建或更新 TODO、不改功能状态、不操作 Git，只把路由顺序、修改结论、验证与未覆盖边界返回给 feature owner。用户结果、菜单、验收或交付边界无法从当前任务和源码确定时，它会报告范围变化而不是继续往下写。
+</Aside>

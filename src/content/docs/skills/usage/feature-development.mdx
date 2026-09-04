@@ -1,0 +1,392 @@
+---
+title: 功能开发流程
+description: 在已有项目中交付一个新功能的完整操作流程
+order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+本指南覆盖在**已有项目**里交付一个功能的完整链路：先判断这是新功能还是需求变更，然后领取任务、冻结技术选型、纵向实现、自验、Review、回写状态、提交推送，最后领下一项。
+
+如果项目还没有 TODO 和项目记忆，先走[新项目开始](/skills/usage/new-project/)。
+
+**预计时间**：单个功能 1-4 小时，取决于交付面数量。
+
+**前置条件**：
+
+- ✅ 当前开发者已有唯一活动 TODO（见 [TODO 管理](/skills/usage/todo-management/)）
+- ✅ 这个功能已经过产品定义和规划，进入了 TODO 的功能队列
+- ✅ 流程状态机已推进到 `business-development`
+
+<Aside type="caution">
+状态机没到 `business-development`、或者当前实例还没原子领取到功能项时，Runtime Hook 会**拒绝**对生产文件的写入。这不是提醒，是拦截。机制见 [Runtime Hook](/skills/core-concepts/runtime-hooks/)。
+</Aside>
+
+## 第 0 步：分清新功能和需求变更
+
+这是整条链路上最容易走错的一步，两条路的入口 Skill 完全不同。
+
+| 你的情况 | 入口 Skill | 产出 |
+|---------|-----------|------|
+| 全新的、还没人定义过的功能 | [product-manager](/skills/skills-reference/critical/product-manager/) | 研究、产品定义与验收，再由 [project-manager](/skills/skills-reference/high/project-manager/) 落进 TODO |
+| 已批准的范围、契约、权限、数据或交付面真的变了 | [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) | 受影响的功能、契约和交付面被定向识别并原位更新到 TODO |
+| 功能已经在 TODO 里，只是还没做 | 直接从第 1 步开始 | 领取并实现 |
+
+判断办法只有一个问题：**这个功能在 TODO 里有对应的 Feature 吗？**
+
+- 没有，也从没定义过 → 新功能，走 `product-manager`
+- 有，但用户结果、菜单、验收、API、权限或数据边界跟当初写的不一样了 → 变更，走 `change-impact-analysis`
+- 有，且和当初写的一致 → 不需要任何规划 Skill，直接实现
+
+<Aside type="note">
+Bug 修复、编译或测试失败、Review finding、checkbox 对不上、不改变行为的文案调整都**不算**范围变更，不要触发 `change-impact-analysis`。它只处理已批准范围的真实变化。
+</Aside>
+
+**触发示例**：
+
+```
+# 新功能（还没定义过）
+"加一个功能：用户可以把自己的订单导出成 Excel"
+
+# 需求变更（已批准范围变了）
+"需求改了，订单列表现在管理员要能看到所有人的订单"
+
+# 已在 TODO 里
+"开始实现 ORDER-EXPORT"
+```
+
+## 完整链路
+
+```
+[新功能] product-manager → project-manager（写入 TODO）
+[变更]   change-impact-analysis（原位更新 TODO）
+   ↓
+next（原子领取一项 Feature，[ ] → [~]）
+   ↓
+来源复核 + project-details（回读锚点章节与项目记忆）
+   ↓
+tech-decision（该 Feature 的具名技术结论；生产编辑的硬门槛）
+   ↓
+实现 Skill（crud-development / dev / api-development / ui-pc / ui-app ...）
+   ↓
+开发者自验（一个判别力最强的命令 + 真实启动 + 走一遍真实入口）
+   ↓
+code-review（同一 diff 只做一次完整 Review）
+   ↓
+update-status（写完成摘要，[~] → [x]）
+   ↓
+git-commit（代码 + 这次 TODO hunk 一次提交推送，核验 upstream）
+   ↓
+next（领下一项）
+```
+
+### 第 1 步：领取一个 Feature
+
+用 [next](/skills/skills-reference/medium/next/) 挑并领取：
+
+```
+"下一个任务"
+"继续"
+```
+
+只读询问时它只返回候选，形如：
+
+```markdown
+- 当前 Feature：`ORDER-EXPORT`
+- 下一动作：实现导出接口并接入管理端入口
+- 原因：缺失交付面（API / web）
+- 范围：services/order-export/、apps/admin/src/orders/export/
+- 执行实例：尚未领取
+- 完成条件：AC-001、AC-002
+- 来源复核：docs/PRD.md#订单导出 -> 与来源锚点一致
+- 项目记忆：完整
+- 阻塞：无
+```
+
+几个会影响你能不能领到任务的事实：
+
+- 只有依赖全部 `[x]`**且已经推到远端**、并行写集与所有进行中项互斥的 `[ ]` 才可能被领取
+- 一个执行实例同一时刻只能有一个 `[~]`；说"继续"时只会续作属于当前实例的那一项，别人的 `[~]` 只读
+- Epic 不是候选，它只是子 Feature 的汇总项
+- TODO 还处在规划阶段（当前阶段没到 `business-development`）时，`next` 只会告诉你当前阶段、阶段 Owner、门禁和下一步，不会领取任何 Feature
+
+✅ **检查点**：TODO 里该 Feature 变成 `[~]`，并带上了 `执行实例`。
+
+### 第 2 步：来源复核
+
+领取之后、写代码之前，要把这个 Feature 的来源锚点列出的原始章节重新读一遍：PRD/CR、设计、架构、技术决策，以及 `PROJECT-MEMORY.md` 的相关章节。
+
+这一步会输出一行结论，它会跟着完成结果一起保留：
+
+```markdown
+来源复核：docs/PRD.md#订单导出 -> 与锚点一致
+来源复核：docs/tech-decision.md#导出实现 -> 与锚点一致
+```
+
+什么时候必须重做这次复核：首次领取、继续一个 `[~]`、换 runtime 或换设备恢复、上下文被压缩之后，以及任何可能改变范围的编码之前。只凭上一轮对话、摘要或 checkbox 就继续是不行的。
+
+同时会路由 [project-details](/skills/skills-reference/high/project-details/) 针对**当前这个** Feature 核对真实 Owner、复用入口和实现边界 —— 目的是别在已经有 Owner 的地方悄悄新建一套平行实现。不相关的类别标成不适用，不为了凑覆盖率扫全仓。
+
+<Aside type="tip">
+原文和锚点冲突时，立刻停止生产编辑，走 `change-impact-analysis` 定向复核并更新 TODO，然后再继续。按旧上下文闷头实现，代价会在 Review 或验收时以整段重做的形式还回来。
+</Aside>
+
+### 第 3 步：技术选型是生产编辑的硬门槛
+
+每个业务 Feature 在**任何**生产代码编辑之前，必须有一次映射到它的 [tech-decision](/skills/skills-reference/high/tech-decision/) 结论。这个结论可以在首次完整规划时就做完，也可以在领取之后补齐；已经有明确映射到当前 Feature 的确认结论时直接复用，不重复比较。
+
+结论必须点名具体的技术、库、框架、协议或实现机制。这是最常见的一处误用：
+
+```markdown
+❌ 技术选型：复用现有技术栈
+❌ 技术选型：沿用当前项目方案
+
+✅ 技术问题：导出大结果集时如何避免内存峰值
+✅ 具名候选：EasyExcel 流式写出 / POI SXSSF / 后台任务 + 对象存储下载
+✅ 选择：EasyExcel 流式写出（仓库已有生产链路）
+✅ 采用方式：reuse-existing
+✅ 生产路径、配置、验证与回滚：…
+```
+
+"复用现有""自研""成熟方案"是**采用方式**或泛称，不是被选择的技术。现有技术经过比较后胜出，也要先写清具体选了什么，再标注采用方式。
+
+四种采用方式：`reuse-existing`（原样复用）、`extend-existing`（沿用同一技术但加配置或扩展点）、`introduce-new`（引入仓库还没用过的技术）、`replace-existing`（替换现有方案，并说明迁移与退出）。
+
+<Aside type="note">
+纯 Bug 修复和不改变业务行为的维护只做一次技术适配核对，不用完整走一遍选型。但一旦涉及新依赖、公共契约、数据、权限、基础设施或长期维护路径的变化，就必须重新选型。
+</Aside>
+
+✅ **检查点**：能一句话回答"这个功能选了什么具体技术、为什么、怎么落地、怎么回退"。回答不出来就还没到能写代码的状态。
+
+### 第 4 步：选实现 Skill
+
+优先级是固定的：**专业 Skill > `dev` > `universal-development`**。
+
+| 功能主体是什么 | 用哪个 |
+|---|---|
+| 对一张表做增删改查，配列表页 / 表单页 / 详情页 | [crud-development](/skills/skills-reference/high/crud-development/) |
+| 跨层但不止 CRUD：状态机、导出、外部集成、异步任务、报表 | [dev](/skills/skills-reference/high/dev/) |
+| 接口契约、参数校验、错误语义、接口文档 | [api-development](/skills/skills-reference/high/api-development/) |
+| PC / 管理端页面 | [ui-pc](/skills/skills-reference/high/ui-pc/) |
+| 移动端、小程序、跨端应用页面 | [ui-app](/skills/skills-reference/high/ui-app/) |
+| 表结构、索引、迁移 | [database-design](/skills/skills-reference/high/database-design/) + [database-ops](/skills/skills-reference/high/database-ops/) |
+| 认证、授权、数据可见性 | [security-guard](/skills/skills-reference/high/security-guard/) / [data-permission](/skills/skills-reference/high/data-permission/) |
+| 扫完整个清单确实没有对口的 | [universal-development](/skills/skills-reference/low/universal-development/) |
+
+三句话判断：
+
+- 主体是"对一张表增删改查 + 对应页面" → `crud-development`
+- 跨层、有业务规则或外部依赖，但不属于某个专业领域 → `dev`
+- 连 `dev` 都不沾（改个工具函数、修一个边缘脚本、清理一处死代码）→ `universal-development`
+
+<Aside type="tip">
+不需要手工把这些 Skill 逐个调用一遍。命中 `dev` 或 `crud-development` 之后，它会按这个 Feature 声明的交付面，在**同一个实现遍**里统一应用需要的专业能力，整个功能共用一次自验和一次 Review。路由怎么算出来的见 [Skill 路由](/skills/core-concepts/routing/)。
+</Aside>
+
+`universal-development` 是最低优先级兜底，它明确不做 API 契约、数据模型、业务页面和安全能力 —— 遇到这些交付面时它会让位给对应的专业 Skill。不确定有没有对口 Skill 时，先用 [find-skills](/skills/skills-reference/medium/find-skills/) 查一遍，或翻 [Skill 目录](/skills/catalog/)。
+
+### 第 5 步：纵向实现，一次做完一整条
+
+一个 Feature 的交付单位是**纵向一条**，不是一层。数据层、接口、后端逻辑、页面入口、权限，都是同一个 Feature 的内部完成面：
+
+```markdown
+完成面：data、API、backend、web、permission、review、git
+```
+
+下面这些都不算完成：
+
+- 只写了 API，页面没接
+- 页面渲染的是静态 mock 或 fixture
+- 只插了菜单记录和权限 SQL，页面和接口没做
+- 页面把接口字段堆成表格，或者直接把原始 JSON 打在屏幕上
+- 接口调用成功，但真实响应数据没有出现在查询、详情或操作状态里
+
+有菜单或按钮入口的业务功能，要同时具备五件事：数据库里的菜单/按钮权限记录、默认角色授权、后端鉴权、前端页面、页面上展示的真实接口数据。少任何一件，这个 Feature 都不能关闭。
+
+<Aside type="danger">
+不要先把多个功能的后端批量做完再集中补前端。当前功能的后端真实接口一完成，就在切到下一个功能**之前**把对应页面、真实接口接入、权限，以及加载 / 空 / 无权限 / 错误 / 成功状态做完。
+</Aside>
+
+实现期间只改这个 Feature 声明的并行写集。发现必须越界、写集和别的进行中项重叠、或者要新增依赖时，停下这一项，交给主 Agent 调整写集或串行化 —— 不要静默扩大范围。
+
+排障时同一种方法最多试三次，每次都要带来新观察或改变假设。重复跑同一条命令不算新方法；连续同一根因失败就升级，别在原地磨。排查调用链故障可以用 [bug-detective](/skills/skills-reference/high/bug-detective/)。
+
+### 第 6 步：开发者自验
+
+自验的原则是"判别力优先，不重复"：
+
+```bash
+# 每个受影响的构建根只跑一个最有判别力的命令
+cd backend && mvn -q -DskipTests compile
+cd frontend && npm run type-check
+
+# 加一次格式检查和一次 diff 检查
+npm run format:check
+git diff --check
+```
+
+共享基础框架完成之后，每个 Feature 还要多做一次**真实启动验证**：
+
+1. 先读项目的 compose / deploy / 环境配置，探测已有的本地容器、进程和可达的远程中间件；能复用就不再启动同类新实例，只有确实缺失且项目需要时才在本机 Docker 起
+2. 用仓库已有的命令启动后端和前端，等真实的健康检查或端口就绪
+3. 走一遍这个功能的新入口：真实 HTTP 请求或浏览器路径，覆盖真实 API、权限，以及加载 / 空 / 错 / 成功里至少一条主路径
+
+只编译不启动、静态页面、mock、孤立接口都不能替代这一步。需要真实浏览器操作时用 [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/)。
+
+每个 Feature 在 TODO 里都有一个验证档位，它决定证据要多硬：
+
+| 档位 | 什么时候用 | 需要的证据 |
+|---|---|---|
+| `Evidence-only` | 默认 | 源码 / 契约 / 调用链、已有检查，或一次真实主路径 |
+| `Test-first` | 只在你本轮明确要求先写测试时 | 修复前 RED + 修复后 GREEN |
+| `Regression-required` | Bug、权限/租户、安全、迁移回滚、并发、公开契约变更 | 可复现的修复前基线 + 修复后证据 |
+
+✅ **检查点**：每条 `AC-*` 都有和它等级匹配的新鲜证据，没有一条是 `unverified`。低层证据不能关闭需要真实集成、设备或外部环境的 AC。
+
+### 第 7 步：一次完整 code-review
+
+```
+"审查代码"
+```
+
+[code-review](/skills/skills-reference/high/code-review/) 是同一个 diff 的**主要且唯一**的完整 Review 入口：
+
+- 范围是当前 Feature 写集内的完整 production diff，排除任务开始前的既有改动和其他实例的改动
+- 逐条核对稳定 `AC-*`：有没有生产实现、有没有匹配等级的新鲜证据；"没发现代码问题"不能用来关闭验收
+- 每个 finding 会给出文件位置、规则 ID 与层级、触发证据、影响和最小修复
+- 严重 / 重要 finding 未关闭 → 不可提交
+- 修完之后只核对 finding 的关闭状态和受影响的最小命令，**不重新跑一遍全量 Review**
+
+<Aside type="caution">
+不要让架构、开发、UI、测试几个 Skill 对同一范围各做一遍完整审查。已有 findings 覆盖当前 diff 时，后续 Skill 只消费 findings、补缺失证据。仓库的专项规范检查是 [check](/skills/skills-reference/medium/check/) 的职责，和 `code-review` 不重复。
+</Aside>
+
+findings 的分级、关闭顺序和取证要求见[代码审查流程](/skills/usage/code-review/)。
+
+### 第 8 步：写完成摘要，把 `[~]` 改成 `[x]`
+
+顺序容易搞反：**先**把完成摘要写进 TODO 并勾上 `[x]`，**然后**代码和这次 TODO 改动一起提交。TODO 的这个 hunk 属于同一次功能提交。
+
+由 [update-status](/skills/skills-reference/medium/update-status/) 一次写齐：
+
+```markdown
+- 结果：来源复核：`docs/PRD.md#订单导出` -> 与锚点一致；
+  `AC-001 -> 管理端导出按钮触发真实接口，返回 xlsx（真实请求已验证）`；
+  `AC-002 -> 无导出权限时返回 403，页面给出中文提示（真实请求已验证）`；
+  Review：通过
+```
+
+- 摘要里出现 `unverified` 就**不能**改 `[x]`，这一项保持 `[~]` 并写清恢复条件
+- 不同验证档位要多带的字段不同：`Test-first` 要 RED / GREEN，`Regression-required` 要修复前基线和修复后证据，`High-risk` 还要风险边界、回滚方式、方案复核和发布检查
+- 摘要只写已有事实和真实的未验证边界。为了让字段看起来齐全而编造测试、真机或发布证据，是把问题推到更贵的阶段
+
+字段细节和状态流转见 [TODO 管理](/skills/usage/todo-management/)。
+
+### 第 9 步：提交并推送
+
+```
+"提交并推送"
+```
+
+[git-commit](/skills/skills-reference/high/git-commit/) 只在你明确授权后执行，并且要求没有未关闭的严重 / 重要 finding。它会精确暂存：这个 Feature 写集内的生产代码、必要的契约 / 迁移 / 回滚文档，以及这一次的 TODO hunk，一次提交推送，然后核验 local / upstream / remote OID。
+
+- push 之后不再补状态提交
+- 只有远端的 TODO 已经包含这个 `[x]`，依赖它的后续 Feature 才会解锁
+- 未授权或推送失败时，状态机返回 `delivery-pending` 并写恢复条件；这时不要提前开始下一项
+
+分支、合并、rebase、stash、历史和冲突不属于 `git-commit`，用 [git-workflow](/skills/skills-reference/high/git-workflow/)；两者的分工和边界见 [Git 操作指南](/skills/usage/git-workflow/)。
+
+### 第 10 步：领下一项
+
+```
+"继续"
+```
+
+`next` 会重新走一次原子领取，而不是沿用上一次的候选。只有依赖的 `[x]` 全部进了远端、没被其他实例领取、并行写集互斥的 Feature 才会成为候选。
+
+## 测试类 Skill 什么时候启动
+
+只有你在**本轮**明确要求写或改测试代码时，[test-strategy](/skills/skills-reference/medium/test-strategy/) 和 [test-development](/skills/skills-reference/medium/test-development/) 才会进入。
+
+会启动：
+
+```
+"给导出功能补几个单元测试"
+"先写测试再实现，走 TDD"
+"这个边界条件加个用例"
+```
+
+**不会**启动 —— 下面这些都不构成测试代码授权：
+
+- 功能风险高
+- Review 提了 finding
+- 覆盖率不达标
+- 仓库里别的模块有测试
+- CI 配了测试门禁
+
+<Aside type="note">
+默认档 `Evidence-only` 用源码、契约、调用链、已有检查或一次真实主路径取证，不新增测试代码。证据确实不够时，对应的 AC 老实标 `unverified` 并保持 `[~]`，写清缺什么 —— 不要为了勾 `[x]` 临时造一个测试。
+</Aside>
+
+## 常见坑
+
+| 现象 | 原因 | 怎么办 |
+|---|---|---|
+| 写生产文件被拒 | 状态机还没到 `business-development`，或还没原子领取 | 先推进阶段、先领取 |
+| 改着改着范围越来越大 | 动了并行写集之外的文件 | 停下，回到写集，或让主 Agent 调整写集 |
+| 功能勾了 `[x]`，页面却打不开 | 只做了后端，页面或权限没接 | reopen，补齐缺失交付面 |
+| 同一段代码被 Review 三次 | 每完成一层就 Review 一次 | 全部交付面收敛后只做一次 |
+| 技术选型写着"复用现有技术" | 把采用方式当成了选型结论 | 点名具体技术，再标 `reuse-existing` |
+| 依赖已经 `[x]` 却领不到下一项 | 本地 `[x]` 还没 push | 先完成 push 并核验 upstream |
+| 每次开发都新起一套中间件 | 没先探测已有实例 | 先探测本地容器 / 进程 / 可达远程，能复用就复用 |
+| Review 通过了但 AC 说不清 | 把"没发现代码问题"当成了验收通过 | 逐条给 `AC -> evidence`，缺的标 `unverified` |
+
+## 常见问题
+
+### Q1: 分不清算 CRUD 还是通用功能，怎么选？
+
+看主体，不看细节。功能的核心是"对一张表做增删改查，配上列表 / 表单 / 详情页"就走 `crud-development`，哪怕里面有一两处特殊校验。核心是状态流转、外部集成、导出、异步任务、报表这类东西，即使顺带也要写点增删改查，也走 `dev`。
+
+### Q2: 实现到一半，发现需求跟 TODO 不一样了？
+
+停止生产编辑，别顺手按新需求改下去。先走 `change-impact-analysis` 定向识别受影响的功能、契约、数据、权限和交付面，把 TODO 原位更新，然后再继续。如果变化让当前 `[~]` 的依赖或写集边界失效，会先阻塞或释放这一项，再重新计算 Ready。
+
+### Q3: 能不能把一个功能拆成"先做后端"和"后做前端"两项？
+
+不能。数据、API、后端、Web/App、权限、联调、Review、Git 是同一个 Feature 的内部完成面，不拆成独立 checkbox。拆开的直接后果是：后端那半会被勾成完成，而用户其实什么也用不了。
+
+内部确实缺步骤时，在这个 Feature 下补一句说明就够了。
+
+### Q4: 能同时做两个功能吗？
+
+可以，但要同时满足：不同的执行实例、各自的依赖都已完成并推送、并行写集两两互斥、端口 / 账号 / 数据库这类独占资源不冲突。契约、迁移、集成、Review、TODO 和 Git 由主 Agent 串行收口。
+
+真实启动验证也可以和另一个资源不冲突的功能并行；但只要验证失败，就先暂停后续工作，回到失败的那一项修好、重启、复测。
+
+### Q5: 用户说"少验证、先出代码"，还要走这些步骤吗？
+
+减少的是重复回读、状态流水和重复命令，不是交付面和证据。全部前后端与数据代码写完后，每个受影响构建根仍要跑一个最有判别力的命令、一次 `git diff --check`、一次完整 Review，以及这个功能的真实入口验证。当前会话里已有成功结果的命令直接复用，不重复跑。
+
+## 下一步
+
+- [TODO 管理](/skills/usage/todo-management/) - 状态标记、四个 Skill 的分工和常见错误
+- [代码审查流程](/skills/usage/code-review/) - 一次 Review 怎么做完、怎么关闭
+- [Git 操作指南](/skills/usage/git-workflow/) - 提交、推送、分支和冲突
+- [dev](/skills/skills-reference/high/dev/) - 通用纵向功能实施
+- [crud-development](/skills/skills-reference/high/crud-development/) - CRUD 纵向业务交付
+- [tech-decision](/skills/skills-reference/high/tech-decision/) - 逐 Feature 技术选型
+- [code-review](/skills/skills-reference/high/code-review/) - 缺陷优先的完整 Review
+- [项目记忆](/skills/core-concepts/project-memory/) - 稳定事实与复用地图
+- [最佳实践](/skills/best-practices/) - 跨流程的经验总结
+- [问题排查](/skills/troubleshooting/) - 卡住时先看这里
+
+
+
+
+
+
+
+
+

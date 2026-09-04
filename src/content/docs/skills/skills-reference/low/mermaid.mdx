@@ -1,0 +1,113 @@
+---
+title: Mermaid 技术图（mermaid）
+description: 把流程、结构、时序、状态和数据关系整理成能真正渲染的 Mermaid 代码块
+order: 26
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Mermaid 的价值在于图是文本：能进仓库、能 diff、能在 review 里被逐行讨论。`mermaid` 负责把材料整理成这种文本图，而它替你做的第一个决定往往最有用——**先判断该用哪种图**。默认所有东西都画成流程图是最常见的失败方式：讲调用顺序的画成流程图、讲状态切换的画成流程图，图能渲染，但表达不出真正的结构。
+
+它做的第二组决定是可读性和可渲染性：节点数量控制在能扫读的范围内，超出上限时压缩、分组或建议拆图；节点文案短；交付前自查括号、连线、缩进和子图闭合。它不定义架构、不做数据可视化、不做"好看的成品配图"，也不维护任务状态。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "画个流程图" | 步骤与分支 |
+| "画个时序图" | 服务或角色之间的调用顺序 |
+| "这个状态怎么流转，画一下" | 状态切换 |
+| "画个 ER 图" | 实体与关系 |
+| "把这份 PRD / 会议纪要变成图" | 从长文本提炼节点、关系和顺序 |
+| "排期画个甘特图" | 任务、时间与依赖 |
+| "画个技术图放进文档" | 需要能进仓库、能 diff 的文本图 |
+
+触发词概括起来是三组：Mermaid 图、流程图、技术图。它认识的图类型不止流程图和时序图，还覆盖状态图、ER 图、甘特图、用户旅程、类图和分支图，选型由表达目标决定。
+
+## 什么时候不要用
+
+- **要一张精美、可交互、可导出的架构图** → [archify](/skills/skills-reference/medium/archify/)。边界在两边的元数据里都写明了：mermaid 负责简单 Mermaid 图表，archify 负责复杂的交互式架构图。archify 还能接受**粘贴进去的 Mermaid** 做转换与美化，所以"先用 mermaid 出结构、再交给 archify 出成品"是正常链路，不是重复工作。
+- **要决定架构本身** → [architecture-design](/skills/skills-reference/high/architecture-design/)。Mermaid 只画已经确定的事实，不产生架构决策。
+- **要业务图表、看板、指标可视化** → 由目标项目已有的图表栈承担。数据可视化明确被排除，Mermaid 不是图表库。
+- **要 ER 图背后的字段、索引、逻辑外键契约** → [database-design](/skills/skills-reference/high/database-design/)。
+- **要设计规格** → [frontend-design](/skills/skills-reference/high/frontend-design/)。Mermaid 图不能替代设计规格。
+- **要产品定义或代码实现** → [product-manager](/skills/skills-reference/critical/product-manager/)、[universal-development](/skills/skills-reference/low/universal-development/)。
+
+不适用范围概括为四条：架构图美化、数据可视化、产品定义、代码实现。
+
+## 前置条件
+
+它没有声明 `gates`，真实的输入条件来自正文：
+
+1. **材料能提炼成"节点 + 关系 + 顺序或层级"**。文章、方案、PRD、会议纪要或口头描述都行。材料很少时它会先基于现有信息出一个合理初稿，而不是反复追问。
+2. **事实来源受限**。涉及架构、数据库、流程、UI/UX 或权限时，只能用你的材料或目标仓库已确认的事实；未知项用"待确认"节点或说明，不拿示例内容补事实。
+3. **写入仓库前先确认目标文件、图的用途和覆盖边界**。只读生成或对话内的代码块不需要额外状态。
+4. **渲染环境需要确认**。Mermaid 语法和支持的图类型取决于目标渲染器、版本和 Markdown 平台；无法确认时它会把渲染兼容性列为未验证边界。
+
+<Aside type="caution">
+不要一上来就指定流程图。你说清"我想表达什么"，让它判断该用哪种图，比你先挑一种图更容易得到对的结果。你已经明确指定图类型时它会优先尊重，只在明显不合适时说明替代建议。
+</Aside>
+
+## 怎么用
+
+### 1. 说清表达目标
+
+先判断你要表达的核心属于哪一类：流程推进、结构分层、交互时序、状态变化、数据关系、项目安排，还是用户体验路径。这一步决定图类型，比后面的语法细节重要得多。
+
+### 2. 它抽取节点与关系
+
+它会列出关键节点、明确主关系（顺序、包含、依赖、调用、状态转移、拥有），保留主线删掉修饰语，节点命名用短中文或稳定英文术语。核心节点过多时优先压缩、分组，或直接建议拆成多张图——一张图只表达一个核心问题。
+
+### 3. 生成代码并自查
+
+生成规则的取向是：节点 ID 短而稳定、文案面向阅读、默认纵向排列，复杂调用链或系统边界适合横向阅读时才换方向；判断分支用菱形，系统边界用子图。交付前它会逐项自查图类型声明、节点 ID 重复、连线与子图闭合、文案长度、多余交叉线，以及中文能否在目标渲染器里稳定显示。
+
+<Aside type="tip">
+Mermaid 最常见的语法坑是节点文本里带了斜杠开头的路径或命令，会被解析成语法结构。它会主动把这类显示文本包进引号——你自己手写图时遇到"看起来没错但渲染失败"，先检查这一类文本。
+</Aside>
+
+### 4. 复杂图先保证能渲染
+
+图较复杂时，它先保证"能渲染 + 看得懂"，再追求细节丰富。这也是你验收时的顺序。
+
+<Aside type="danger">
+架构、时序、ER 或权限图不会直接暴露未经确认可公开的密码、Token、密钥、真实内网地址、个人身份或敏感权限细节。必须保留这些结构时用业务化占位，并说明脱敏边界。
+</Aside>
+
+### 5. 交付
+
+默认给三样：Mermaid 代码块、一句说明这张图表达了什么、图较复杂时再加一句可选迭代方向。同时会交代图类型、事实来源、渲染是否真的验证过（没跑过就写"未验证"）和脱敏边界。你要求"只给代码"时它就只给代码块——除非存在未脱敏的敏感信息或明显的语法不兼容，这时会先说明阻断原因。
+
+## 与其他 Skill 的关系
+
+它的相关列表是平铺的：[archify](/skills/skills-reference/medium/archify/)、[architecture-design](/skills/skills-reference/high/architecture-design/)。正文另有一份协作边界说明，各方提供的事实不同：
+
+- [architecture-design](/skills/skills-reference/high/architecture-design/)：架构图、模块图、依赖图的事实来源与边界；
+- [database-design](/skills/skills-reference/high/database-design/)：ER 图涉及的实体、字段、逻辑外键、索引和注释契约；
+- [workflow-engine](/skills/skills-reference/low/workflow-engine/)：审批流、状态图、命令、办理人和事件语义；
+- [frontend-design](/skills/skills-reference/high/frontend-design/)：用户旅程、页面跳转和设计规格事实；
+- [code-review](/skills/skills-reference/high/code-review/)：审查 Mermaid 文档改动的语法、事实来源、敏感信息和交付证据；
+- [git-commit](/skills/skills-reference/high/git-commit/)：写入仓库时精确暂存，任务文档与图改动同提交。
+
+```text
+architecture-design / database-design / workflow-engine（提供事实）
+        ↓
+mermaid（选图类型 → 抽节点 → 生成 → 自查）
+        ↓                        ↓
+git-commit（写入仓库）     archify（需要交互式成品图时接手）
+        ↓
+code-review（审查改动）
+```
+
+## 产出与验收
+
+产出通常只是一个可复制的 Mermaid 代码块加一句说明；写进仓库时才有文件改动，并由 [git-commit](/skills/skills-reference/high/git-commit/) 精确暂存、与相关任务文档同提交。
+
+判断真的完成了：
+
+- 图类型和表达目标匹配，不是所有东西都画成流程图；
+- 节点 ID 不重复、连线闭合、子图闭合，代码在目标渲染器里真的渲染出来了；
+- 节点数量控制得住，文案短到能扫读，没有无意义的交叉线；
+- 未知事实以"待确认"呈现，没有用示例内容假冒事实；
+- 密码、Token、密钥、内网地址、个人身份和敏感权限已脱敏，并说明了脱敏边界；
+- 渲染验证要么写明在哪个渲染器或平台跑过，要么明确写"未验证"。

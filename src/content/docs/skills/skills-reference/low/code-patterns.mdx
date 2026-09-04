@@ -1,0 +1,208 @@
+---
+title: 代码模式提取（code-patterns）
+description: 只读整理目标仓库已经存在且仍然有效的后端约定，产出一张带证据和例外的速查表
+order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"这个项目的写法是什么样"——翻一个文件回答不了这个问题。你可能翻到的是三年前的遗留写法，也可能翻到一个定义完整但没有任何人调用的基类。照着这两种任意一种去写新代码，都会在 Review 时被打回来。
+
+这个 Skill 的判据是调用链：一条约定要成立，得同时找到当前在用的定义、真正在调它的地方、以及一个同类的相邻实现。只有定义、没有消费者，说明这个东西已经废了，不能当模式传播下去。
+
+它是纯只读的，产出只有一张速查表。它不审 diff，不按规范判合格，不负责找文件在哪，也不往项目记忆里写东西。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "这个项目的后端规范是什么" | 一张分类速查表，每条带来源文件和调用方 |
+| "参考现有写法" | 同类功能的相邻实现，以及它遵循的约定 |
+| "命名和分层是怎么定的" | 包结构、依赖方向、命名风格的现状，附反例 |
+| "这个仓库有什么不能写的" | 在本仓库属于违规的写法，及其证据出处 |
+| "这段旧代码还能照抄吗" | 判断它是现行做法还是遗留写法 |
+| "两个模块写法不一样，哪个对" | 两边各自的证据，以及哪一边是新代码在跟随的 |
+
+## 什么时候不要用
+
+- 规范已经清楚，只想核对某段实现合不合 → [check](/skills/skills-reference/medium/check/)。它拿规范去比对，这里负责先把规范挖出来。
+- 要审一整份 diff 的缺陷和交付质量 → [code-review](/skills/skills-reference/high/code-review/)。这里不构成第二次审查。
+- 只是想知道某个模块的入口在哪个文件 → [project-navigator](/skills/skills-reference/medium/project-navigator/)。它负责定位，这里负责从定位到的代码里提炼约定。
+- 要把稳定事实写进项目记忆 → [project-details](/skills/skills-reference/high/project-details/)。这里的结论只服务当前这一轮。
+- 要写实现代码 → [dev](/skills/skills-reference/high/dev/) 或对口的专业 Skill。
+- 要划系统边界和模块归属 → [architecture-design](/skills/skills-reference/high/architecture-design/)。
+
+## 前置条件
+
+得有可读的源码，而且调用链能翻得到——没有源码就只能凭经验编一套约定出来，那张速查表会把后面每一个实现者都带偏。这一轮还得是只读的：一旦掺进编辑动作，"现状"这个前提就不成立了。开工前先看一眼项目记忆里已经记下的复用边界，免得把已有结论重新推导一遍，或者推出一个跟它相矛盾的结论。
+
+<Aside type="caution">
+读完记忆之后，只核对当前功能真正会碰到的调用链和相邻实现。全仓扫描既慢又会把上下文塞满，而且得出的大部分结论跟手上这件事无关。
+</Aside>
+
+## 使用示例
+
+### 示例 1：接手一个陌生仓库，准备加一个模块
+
+你说："我要在这个项目里加一个结算模块，先看看这里的写法。"
+
+取证过程是先找文件，再顺着调用链读：
+
+```bash
+# 规则、构建、生成器配置
+rg --files -g 'AGENTS.md' -g 'CLAUDE.md' -g 'pom.xml' -g 'build.gradle*' -g '.editorconfig'
+# 分层入口：哪些注解真的在用
+rg -n --stats '@RestController|@Service|@Mapper|@Repository' src/main/java | tail -5
+# 统一响应有没有真的被返回
+rg -n 'R<|Result<|ResponseEntity<' src/main/java --type java -g '*Controller.java' | head
+# 查询是怎么拼的
+rg -n 'LambdaQueryWrapper|QueryWrapper|@Select|selectPage' src/main/java | head
+```
+
+产出是一张表，每条都写清了在哪看到的、谁在用：
+
+| 约定 | 结论 | 证据 | 备注 |
+| --- | --- | --- | --- |
+| 分层 | Controller → Service → Mapper，无独立 Manager 层 | `order/`、`user/`、`dict/` 三个模块一致 | 适用 |
+| 统一响应 | Controller 返回 `R<T>`，异常由 `GlobalExceptionHandler` 兜 | `OrderController:34`，处理器在 `common/handler` | 适用 |
+| 查询构造 | MyBatis-Plus Lambda 链式，禁字符串列名 | `OrderServiceImpl:88`，`.eq(Order::getStatus, …)` | 适用 |
+| 复杂查询 | 带 join 的进 Mapper XML，方法具名 | `OrderMapper.xml#selectVisiblePage` | 适用 |
+| 主键 | 雪花，`@TableId(type = ASSIGN_ID)` | `Order.java:21`，全部实体一致 | 适用 |
+| 外键 | 库里没有物理外键，归属校验在 Service | `V003__order.sql` 无 FK；`OrderService:52` 校验 | 适用 |
+| 对象转换 | MapStruct，`*Converter` 接口 | `OrderConverter`，被 Service 注入 | 适用 |
+| 缓存 | 只有字典模块在用 `@Cacheable` | `DictService:41`，其余模块无 | 待确认，是否只限字典 |
+| 分页参数 | 两处写法不同（`pageNum` 与 `current`） | `OrderQuery` vs `UserQuery` | 冲突，见示例 4 |
+
+拿着这张表去写结算模块的人，不需要再回头翻源码确认命名和分层。
+
+### 示例 2：一条约定的取证过程长什么样
+
+以"统一响应"为例，三个证据分别是：
+
+```java
+// 证据一：当前生产定义 —— common/domain/R.java
+public class R<T> {
+    private int code; private String msg; private T data;
+    public static <T> R<T> ok(T data) { ... }
+    public static <T> R<T> fail(String msg) { ... }
+}
+```
+
+```java
+// 证据二：真正在用它的地方 —— order/OrderController.java:34
+@PostMapping("/page")
+public R<PageResult<OrderVO>> page(@RequestBody @Valid OrderQuery query) {
+    return R.ok(orderService.page(query));
+}
+```
+
+```java
+// 证据三：另一个模块的同类写法 —— dict/DictController.java:28
+@PostMapping("/list")
+public R<List<DictVO>> list(@RequestBody DictQuery query) {
+    return R.ok(dictService.list(query));
+}
+```
+
+三条齐了，这条才写进"适用"。少了第二条就只能写"待确认"。
+
+### 示例 3：定义完整，但没人调用
+
+```bash
+rg -n 'class BaseServiceImpl' src/main/java
+# src/main/java/com/acme/common/base/BaseServiceImpl.java:14
+
+rg -n 'extends BaseServiceImpl' src/main/java
+# （无结果）
+```
+
+结论写成这样，而不是"本项目 Service 继承 BaseServiceImpl"：
+
+```text
+BaseServiceImpl   不适用
+  定义在 common/base/BaseServiceImpl.java，但全仓无任何类继承它
+  order/user/dict 三个模块的 Service 均直接实现接口
+  → 新模块跟随现有三个模块，不要引用这个基类
+```
+
+<Aside type="danger">
+没有证据的时候，速查表里就不该出现"应该用什么包名""必须分几层""要有一个统一的基类"这类要求。凭经验硬塞一条进去，后面每个实现者都会照着造一套这个仓库里并不存在的结构，而且他们会以为这是仓库的规定。
+</Aside>
+
+### 示例 4：两处写法不一致
+
+```java
+// order/OrderQuery.java —— 2024 年写的
+public class OrderQuery { private int pageNum = 1; private int pageSize = 20; }
+
+// user/UserQuery.java —— 2026 年写的，前端也按这个传
+public class UserQuery { private int current = 1; private int size = 20; }
+```
+
+不要挑一个说成"本仓库标准"。标出冲突，并写清判断依据和该由谁处理：
+
+```text
+分页参数命名   冲突
+  order 用 pageNum/pageSize（OrderQuery，2024-03 起未改）
+  user、dict 用 current/size（UserQuery，与前端 ProTable 默认字段一致）
+  近半年新增的三个接口都跟随后者
+  → 新模块跟随 current/size
+  → 是否统一改造 order，属于契约变更，交 api-development 决定
+```
+
+### 示例 5：结论要交出去
+
+这个 Skill 只提炼，不实施。速查表里的每一类结论都有对应的下一站：
+
+| 提取到的 | 交给 |
+| --- | --- |
+| 表结构、索引、迁移目录的现状 | 数据库相关 Skill 去设计和落地 |
+| 接口协议、错误码、分页契约的分歧 | 接口相关 Skill 去收口 |
+| 权限注解、租户字段的使用方式 | 安全与租户相关 Skill |
+| 已确认且稳定的写法要固化成模板 | [code-generator](/skills/skills-reference/low/code-generator/) |
+| 有哪些工具方法可以直接复用 | [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) |
+| 值得长期记住的复用边界 | [project-details](/skills/skills-reference/high/project-details/) |
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [project-navigator](/skills/skills-reference/medium/project-navigator/) | 先定位入口和相邻实现 |
+| 后续 | [check](/skills/skills-reference/medium/check/) | 拿提取出的规范核对实现 |
+| 后续 | [project-details](/skills/skills-reference/high/project-details/) | 稳定事实归并进项目记忆 |
+| 协作 | [code-generator](/skills/skills-reference/low/code-generator/) | 把已确认写法做成模板 |
+| 协作 | [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) | 避免重复封装工具方法 |
+| 替代 | [check](/skills/skills-reference/medium/check/) | 规范已明确、只需核对时改用它 |
+
+```text
+project-navigator（定位结构与入口）
+  → code-patterns（提炼约定，输出速查表）
+      ├→ check          （按提取结果核对实现）
+      ├→ code-generator （固化成模板）
+      └→ project-details（稳定事实进记忆）
+  → dev / 专业 Skill（实现）
+  → code-review（一次完整审查）
+```
+
+## 常见坑
+
+**把遗留写法当推荐做法。**  一段代码存在，不代表它是现在该跟随的写法。判断依据是"最近新增的代码跟随的是哪一边"。
+
+**从一个实现推出全仓规则。**  只看了 `order` 模块就写下"本项目怎么怎么样"，等新人照着做完，才发现另外两个模块完全不是这样。
+
+**把猜测混进速查表。**  表里每一条都会被当成事实使用。没证据的写"待确认"并说明还缺哪一个证据，比写一条听起来合理的推测有用得多。
+
+**用仓库例外去降低通用底线。**  某个模块有历史原因绕过了校验，这是例外，不是许可。功能、权限、数据、迁移这些边界不会因为仓库里有个先例就放宽。
+
+**顺手扫全仓。**  速查表越长越没人读。只覆盖当前功能会碰到的那些约定，通常十行以内。
+
+## 下一步
+
+- [check](/skills/skills-reference/medium/check/) — 按提取出的规范核对实现
+- [project-navigator](/skills/skills-reference/medium/project-navigator/) — 先定位结构与入口
+- [project-details](/skills/skills-reference/high/project-details/) — 稳定事实进项目记忆
+- [code-generator](/skills/skills-reference/low/code-generator/) — 把写法固化成模板
+- [code-review](/skills/skills-reference/high/code-review/) — 完整审查
+
+
+

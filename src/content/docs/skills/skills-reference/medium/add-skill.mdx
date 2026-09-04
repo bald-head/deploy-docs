@@ -1,0 +1,241 @@
+---
+title: Skill 注册与同步（add-skill）
+description: 把已经写好的 Skill 放进目标 CLI 真正会扫描的位置，同步索引，并强制确保 Runtime Hook 与 Penpot MCP 可用
+order: 22
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+Skill 写完了不等于能用。`add-skill` 负责最后那一段路：确认目录和 frontmatter 合法、把它放进目标 CLI 真的会扫描的位置、同步仓库索引，然后验证一件事——**这一轮模型真的看得见它**。
+
+它顺手把两件最容易被跳过的基础设施钉死：Runtime Hook，以及当前客户端的远端 Penpot MCP。缺哪个它就调既有安装器补上，没有"先跳过，回头再说"这条路。
+
+它不设计 Skill 内容。只有想法还没有目录的时候先去 [skill-creator](/skills/skills-reference/medium/skill-creator/)；已有 Skill 要改行为找 [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "把这个 Skill 注册一下" | 新目录写完了，要让 CLI 发现它 |
+| "同步一下 Skill" | 改了名字或描述、增删了目录，索引得跟上 |
+| "Codex 里怎么看不到这个 Skill" | 发现失败排查：位置、软链、frontmatter 不一致 |
+| "帮我装到 Claude Code" | 点名某个客户端，要建入口并验证 |
+| "把这一整套 Skill 接进来" | 从共享仓库接入某个客户端 |
+| "装完了怎么确认真的能调起来" | 需要可核对的发现证据，而不是"已完成" |
+
+## 什么时候不要用
+
+- **只有想法，还没有 Skill 内容** → [skill-creator](/skills/skills-reference/medium/skill-creator/)。
+- **要改现有 Skill 的规则或流程** → [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)。改内容和同步注册是两件事，注册流程不会替你改正文。
+- **同一个毛病反复出现，需要跨 Skill 治理** → [skill-evolution](/skills/skills-reference/low/skill-evolution/)。
+- **想审多个 Skill 和 Agent 的整体关系** → [agent-optimizer](/skills/skills-reference/low/agent-optimizer/)。
+- **不知道该用哪个 Skill，想从外部生态找现成的** → [find-skills](/skills/skills-reference/medium/find-skills/)。
+- **只改了正文或某份 reference 里的一段文字** → 什么都不用做。这种改动不该触发一遍安装检查。
+
+## 前置条件
+
+**目录得是完整的。** 至少有一份合法的 `SKILL.md`，加上它真正会用到的 `references/`、`scripts/`、`assets/` 或 `agents/`，以及明确的目标范围（项目级还是全局）。只有空壳的话，CLI 能发现它但调起来什么也做不了。
+
+**得真的有清单变化。** 名字、描述变了，或者增删了目录，才需要走这一趟。否则每改一个字都要跑一遍安装检查。
+
+**Runtime Hook 和 Penpot MCP 得可用。** 这一条不是"请你先自己装好"——它是流程第一段会强制确保的事，谁都绕不过去。两项都正常时它保持安静，不重复安装也不来问你；缺哪个就直接装，装完复检。
+
+<Aside type="danger">
+每个 `<skill-name>/` 都是能单独装进 Codex 或 Claude Code 的独立单元。运行时真的要读的规则、模板、脚本和参考资料**必须**待在这个目录里面。把共享仓库根目录的文件、或者隔壁 Skill 的相对路径当成依赖，装到别人机器上就断了——跨 Skill 协作只按能力名称声明，并写清协作者缺席时怎么降级或停下。
+</Aside>
+
+## 使用示例
+
+### 场景 1：新写的 Skill 注册进来
+
+**你的输入**：
+
+```text
+skill-creator 刚建好的 log-forensics，注册一下。
+```
+
+**它会跑的命令**（在共享 Skill 仓库根目录执行）：
+
+```bash
+# 有 name / description / 目录增删时：同步并检查 SKILLS.md
+node add-skill/scripts/validate-skill-catalog.mjs --write
+
+# 没有清单变化时：只检查，不写
+node add-skill/scripts/validate-skill-catalog.mjs
+```
+
+**你会拿到的产出**：
+
+```text
+## Skill 路径
+<skills-root>/log-forensics/
+  SKILL.md
+  references/log-patterns.md
+  scripts/collect.mjs
+
+## 索引
+SKILLS.md  +1 行（表格已按名称排序）
+
+## 基础设施
+runtimeHooks.installed : true   （已装，未重复安装）
+penpotMcp.configured   : true   （已注册，未重复注册）
+
+## validator 输出
+{ "skills": 96, "integrations": { "runtimeHooks": "ok", "penpotMcp": "ok" },
+  "requiredDiscovery": [], "errors": [] }
+
+## 未执行
+未提交、未推送、未安装到任何具体客户端（你没点名客户端）
+```
+
+`errors` 是空数组、两项基础设施都是 `true`，这一趟才算成过。
+
+### 场景 2：客户端里就是看不到它
+
+**你的输入**：
+
+```text
+文件我已经放进去了，Codex 里 $ 补全就是出不来这个 Skill。
+```
+
+**它会做的探测**：
+
+```bash
+# 单独看两项基础设施（只读）
+node runtime-hooks/scripts/install.mjs --check --json
+node project-manager/scripts/penpot-mcp-setup.mjs --check --json
+
+# 让某个客户端真的走一遍发现
+node add-skill/scripts/validate-skill-catalog.mjs --require-discovery=codex
+```
+
+**你会拿到的产出**：
+
+```text
+## 结论：目录名与 frontmatter 的 name 不一致
+
+发现目录  ~/.agents/skills/  存在，且软链指向共享仓库 → 位置没问题
+实际读到  目录 log_forensics/ ，frontmatter name: log-forensics
+影响      客户端按目录名建索引，两边不一致时这一条被跳过
+
+## 修复
+目录改名为 log-forensics/（保持与 name 一致），再跑一次 --require-discovery
+
+## 顺带确认
+软链是有效的。验证发现时用的是跟随软链的扫描方式；
+如果你自己排查，注意不跟随软链的目录扫描会漏掉整个共享仓库。
+```
+
+其他常见原因它也会一并核对：目录不在当前客户端真正扫描的位置、`description` 不合法、`name` 与别的 Skill 撞了。目录名和字段的合法性由 validator 判定，不过的那一条会直接打印出来，你不需要背规则。
+
+<Aside type="caution">
+Penpot 的远端地址只从既有客户端配置、`PENPOT_MCP_URL` 或本机密钥文件读取。读不到、几处冲突、或者判断不出当前是哪个客户端时，它会**停下来**，不猜地址也不回显 Token。脚本说判断不出客户端时，设一下 `AGENT_WORKFLOW_CLIENT` 再重试。
+</Aside>
+
+### 场景 3：装到指定客户端并验证
+
+**你的输入**：
+
+```text
+把整套装到 Claude Code，装完确认能调起来。
+```
+
+```bash
+# 建立发现入口（会先备份已有目录再建软链），并要求验证发现
+node add-skill/scripts/validate-skill-catalog.mjs \
+  --install-discovery --require-discovery=claude-code
+```
+
+**你会拿到的产出**：
+
+```text
+## 各客户端状态
+claude-code   ~/.claude/skills → 共享仓库（软链已建，原目录已备份）  已验证
+codex         ~/.agents/skills                                      已验证
+gemini        未安装                                                未验证
+opencode      未安装                                                未验证
+
+## 已验证的调用形式
+Claude Code   /log-forensics        可调起
+Codex         $log-forensics        可调起（/skills 也能浏览到）
+隐式触发      描述匹配时由客户端自行选择                            未单独验证
+
+## 未执行
+未提交、未推送
+```
+
+支持的客户端名：`codex`、`claude-code`、`gemini`、`opencode`、`zcode`、`kimicode`。没装的客户端标"未验证"，不算失败。
+
+### 场景 4：什么都不用做
+
+```text
+你：我把 check 的 references 里一段话改通顺了，要注册吗？
+
+它：不用。这次没有目录增删，name 和 description 也没变，索引不需要动。
+    要不要顺手跑一次只读检查确认没弄坏什么？
+    node add-skill/scripts/validate-skill-catalog.mjs
+```
+
+## 调用语法
+
+装好之后怎么叫它，各客户端不一样：
+
+| 客户端 | 显式入口 | 说明 |
+| --- | --- | --- |
+| Codex | `$skill-name` | 输入 `$` 触发补全；`/skills` 打开浏览界面。`/skill-name` **不是** Codex 的语法 |
+| Claude Code | `/skill-name` | 想让某个工作流只显式调用、不进模型常驻清单，用 `disable-model-invocation: true` |
+| 两者 | 隐式触发 | 你的话匹配上 `description` 时由客户端自己选 |
+
+<Aside type="caution">
+Codex 装完 Hook 之后要你自己跑一次 `/hooks`，审查并信任新增的 Hook。这一步不能替你绕过——客户端的信任机制就是给你留的最后一道确认。想把自动修复改成只提示，设 `AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0`。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游**：[skill-creator](/skills/skills-reference/medium/skill-creator/)
+
+**下游**：没有。注册成功就是终点，它不会自动把你带进别的流程。
+
+**协作**：[skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)、[find-skills](/skills/skills-reference/medium/find-skills/)
+
+```text
+skill-creator（写内容）    ┐
+skill-optimizer（改内容）  ├→ add-skill  校验 → 注册 → 同步索引 → 验证发现
+find-skills（找现成的）    ┘
+                              ↑
+      skill-evolution / agent-optimizer（治理完成后可能触发一次同步）
+```
+
+## 常见坑
+
+**把"文件已复制"当成"已验证可发现"。** 复制成功和客户端真的能索引到是两件事。中间可能卡在目录名、字段、软链跟随方式、甚至客户端根本不扫这个位置。要的是那一句"用约定语法真的调起来了"。
+
+**多个客户端各复制一份。** 几个客户端通过软链或共享仓库指向同一份来源时，只该写真实源目录。复制成 N 份之后，你改了一份，另外几份还是旧的，排查起来非常费时间。
+
+**因为目录存在就判定它有效。** 已有 `.codex/skills` 或自定义 `CODEX_HOME` 时，得用当前版本或配置证明它真的是发现目录，光看目录在不在不够。
+
+**每改一个字都注册一遍。** 正文修改不需要同步索引，多跑的每一遍都是白等。
+
+**把跨 Skill 的相对路径当依赖。** 在共享仓库里跑得通，装到别人机器上就断——因为对方只装了你这一个目录。
+
+## 最佳实践
+
+- **验证时点名客户端。** 不点名它就不做发现验证，你拿到的只是"文件已就位"。
+- **命令只跑一次。** 有清单变化就直接用 `--write`，不要先跑一遍无参预检再跑一遍。
+- **看 `errors` 而不是看话术。** validator 打印的那份 JSON 就是证据，`errors: []` 才算过。
+- **准备多机同步或对外发布时再跑 doctor。** 根目录 `node scripts/workflow-doctor.mjs`，对外发布加 `--release`。它是只读核对，不替代注册，也不会自动删改你的发现入口。
+
+<Aside type="note">
+怎么算真的完成了：validator 的 `errors` 是空的，两项基础设施都是 `true`，并且在你点名的那个客户端里用约定语法真的把这个 Skill 调起来了一次。
+</Aside>
+
+## 下一步
+
+- [skill-creator](/skills/skills-reference/medium/skill-creator/) - 先把 Skill 内容写出来
+- [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) - 注册之后要改行为
+- [find-skills](/skills/skills-reference/medium/find-skills/) - 从外部生态找现成的
+- [skill-evolution](/skills/skills-reference/low/skill-evolution/) - 跨 Skill 的长期规则
+- [agent-optimizer](/skills/skills-reference/low/agent-optimizer/) - 审多 Agent 编排的整体形状
+

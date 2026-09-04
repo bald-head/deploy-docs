@@ -1,0 +1,163 @@
+---
+title: Penpot 原型（penpot-prototype）
+description: 通过远程 MCP 把产品意图画成可实施、可回读、可交互的 Penpot 原型，并用回读和导出证明它真的画出来了
+order: 25
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+"原型做好了"有很多种假完成：MCP 握手通了、写了一份设计说明、摆了几张静态占位图、或者在本地 mock 里看着挺像。这个 Skill 只承认一种——画完之后再回头读一遍，读到的东西对得上。
+
+所以你拿到手的不是"已完成"三个字，而是一串能自己核对的 ID 加一张导出图：文件是哪个、页面是哪个、主画板多大、里面有多少图形、建了哪些组件和 token、交互流从哪块画板起跳。主画板会被真的导出成图片，然后再走一次独立复审。四样齐了，状态才允许写成"可交付客户评审"。
+
+视觉方向上它会主动替你收窄。Apple-inspired 在这里说的是行为——清楚、即时、克制、可中断、内容优先，不是紫蓝渐变加霓虹光晕那一套外观；交付前还会专门筛一遍 AI 味的套路。
+
+它不写代码、不定义产品、不做静态平面设计，TODO、验收、Git 和归档都不经它的手。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "在 Penpot 里把这个画出来" | 明确要求在设计工具里实际绘制 |
+| "做个可视化原型" | 要能点的原型，不是文字规格 |
+| "画个驾驶舱 / 大屏" | 数据密集页面，会触发额外一组检查 |
+| "把这几个页面连成流程" | 关键路径要连成交互流和浮层 |
+| "原型要能给客户看" | 需要回读、导出和复审三重证据 |
+
+## 什么时候不要用
+
+它对自己的适用面卡得很死，宁可判"不适用"也不硬画。以下情况请直接换人：
+
+- **只是要把 MCP 连上、或者只读地取一下设计** → [penpot](/skills/skills-reference/low/penpot/)。连接、注册、故障分层、小步读写是那一页的事。
+- **要写前端代码、把设计还原成组件** → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/)。
+- **只要一份文字版的界面规格** → [frontend-design](/skills/skills-reference/high/frontend-design/)。没点名设计工具的界面需求默认走这条。
+- **产品定义和验收标准还没有** → [product-manager](/skills/skills-reference/critical/product-manager/)。原型画得再准，方向错了也白画。
+- **海报、封面这类静态视觉物料** → [canvas-design](/skills/skills-reference/low/canvas-design/)。
+- **只想审一遍现有动效** → [review-animations](/skills/skills-reference/low/review-animations/)。
+- **纯后端任务，或者没有写入授权的只读复审** → 它会直接返回"不适用"，不会顺手改点什么。
+
+<Aside type="caution">
+你没有点名 Penpot 的时候，它连环境变量、客户端注册和 MCP 都不会去探——先判不适用。这是故意的：避免因为一句"帮我设计个页面"就把远端设计文件写花。
+</Aside>
+
+## 开始之前它会挡你几次
+
+绘制前有一串顺序检查，任何一环不过就停在那里，不会带着半截状态往下画。你可能撞上的是这几道：
+
+**没有明确的 Penpot 请求。** 返回不适用。想画就把"在 Penpot 里画"说出来。
+
+**远端地址取不到。** 它只从环境变量、本机固定的密钥文件、或者当前客户端里已有的正确注册去读地址，不猜、不回显 Token。都读不到就停下来告诉你缺什么。
+
+**当前客户端还没注册远端连接。** 它会调共享仓库里既有的 setup 能力走一遍"查 → 注册 → 复查"，写下的只是一行连接配置——不会在你机器上装或跑任何 MCP Server。这一步没有"先跳过"的选项。
+
+**握手没真的过。** 客户端界面上显示 enabled 不算。要真的连上、认出身份、读到当前文件和页面，并且证明最小写入能力可用，才进绘制。
+
+## 使用示例
+
+**你的输入**（brief 越具体，返工越少）：
+
+```text
+在 Penpot 里画一版仓库作业驾驶舱，给库区班长看，他最常做的事是发现异常库位并派人处理。
+挂墙大屏，白天光照强。数据规模：约 40 个库位、每小时刷新、异常率通常低于 5%。
+品牌偏冷静克制的工业风，不要花哨。
+```
+
+**你会拿到的产出**：
+
+```text
+状态：ReadyForCustomerReview
+
+连接      claude-code → penpot 远端（host 已脱敏），URL 来源：环境变量
+产物      file 7f3a…   page "WMS 驾驶舱"   board 1920×1080   shapes 218
+          components 9（KPI 卡 / 库位格 / 告警行，各含变体）
+          tokens 12（surface·text·primary·focus·success·warning·error·spacing·radius·motion）
+          flow "异常处置"  startingBoard = 驾驶舱主画板
+
+交互      库位格 hover 出数据态，Enter 进异常详情画板；告警行点击进处置 Modal
+          八态矩阵：9 组件 × 8 态；库位格的 disabled 标为不适用（附理由）
+工程映射  组件库对应表已写进图层命名；图表栈标为候选，未确认为已装依赖
+验证      回读 ✓   文本边界 ✓   export_shape 主画板 PNG ✓   独立复审 ✓
+去 AI 风  删除：首屏大图 + 等宽卡片阵列、蓝紫渐变背景
+          保留：告警红（有语义，不是装饰）
+未验证    真实数据接入、大屏实机色彩表现、客户确认
+```
+
+那串 ID 和数字就是交付物本体。你可以拿着 board ID 自己去 Penpot 里对一眼——这是"已完成"三个字给不了的东西。
+
+## 画的过程你会看到什么
+
+它先把你的意图和项目已有的东西对齐：仓库或设计文件里已经有 token、组件、字体、网格和命名约定的话，直接复用，不另起一套。驾驶舱、大屏和给客户过稿的主图默认出 `1920 × 1080`；你已经给了具体 viewport、设备分辨率，或者这页要嵌在别人的容器里，就按项目实际尺寸来。响应式产品该有的断点和小屏行为还是会设计——默认主图尺寸不等于把所有客户端锁死。
+
+然后按固定顺序推进：建页面和主画板 → 铺最小 token 集 → 先做可复用组件和变体 → 用实例拼页面 → 用真实内容填布局、表格、图表、筛选和状态 → 给关键路径建画板或浮层并连成交互流。每个写入动作带稳定标识，中途失败时下一次只清理它自己留下的半成品，不碰你的东西。
+
+图层和组件命名有固定约定。这不是洁癖：工程还原时要能从图层名一路映射回代码里的组件、变体和状态，命名乱了这条路就断了。
+
+<Aside type="note">
+图表不属于组件库。项目已经有图表栈就沿用；没有的话它只在设计交接里标一个候选，不会写成已装好的依赖——最终选型交给 [tech-decision](/skills/skills-reference/high/tech-decision/)。
+</Aside>
+
+### 数据密集页面会被多问几句
+
+驾驶舱、大屏这类页面额外有一组检查，围绕两件事：这个数字能不能被信任，看到异常之后能不能动手。
+
+- 每个 KPI 得说清它算的是什么、单位、看的哪段时间、什么时候更新的、异常长什么样。
+- 图表不能只有一根曲线：图例、带单位的坐标轴、数据覆盖范围、没数据的样子、拉不到数据的样子。纯装饰的图会被打回。
+- 热力格、图表上的点、任务行、告警——至少有一条路能看详情，而且键盘走得通，不能只有鼠标悬停这一个入口。
+- 点进去之后要能点回来，回来时筛选条件、时间范围和所在层级都还在。一个指向空气的箭头不算下钻。
+- 告警和任务详情要能回答四个问题：现在什么状态、谁在处理、发生过什么、我能做什么。查不到的字段标"待接入"，不编。
+
+### 状态覆盖
+
+常规、悬停、键盘焦点、按下、禁用、加载、空、结果（成功或失败）——逐个组件过一遍，用不上的要写清为什么用不上。悬停能看到的信息必须也能用键盘或点击拿到。项目内不用抽屉式浮层。动效要能被打断，并且给"减少动态效果"一个等价体验。
+
+<Aside type="danger">
+完成判定只看四样：写入、回读、导出、独立复审。服务端导出失败时它会记真实的 HTTP 状态或超时证据；可以用备用渲染做视觉诊断，但**不会把备用路径写成官方导出通过**。连上了、写了文档、摆了占位图、本地看着像，一个都不算。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游**：[frontend-design](/skills/skills-reference/high/frontend-design/)（意图与方向）、[penpot](/skills/skills-reference/low/penpot/)（远端连接可用）
+
+**下游**：[ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)（工程还原）
+
+**协作**：[project-manager](/skills/skills-reference/high/project-manager/)（远端 setup 能力）、[tech-decision](/skills/skills-reference/high/tech-decision/)（图表栈选型）、[animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)（把动效说准）
+
+```text
+frontend-design（意图与方向）
+        ↓
+penpot（远端 MCP 可用）—— project-manager（查 → 注册 → 复查）
+        ↓
+penpot-prototype（绘制 → 回读 → 导出 → 复审）
+        ↓
+ui-pc / ui-app（工程还原）—— tech-decision（图表栈等选型）
+```
+
+## 常见坑
+
+**把连上当成画完。** 握手只是能开始。没有回读到的 ID 和导出图，交付物是空的。
+
+**brief 只有一句"画个后台页面"。** 它会照通用假设画，然后你花更多时间解释哪里不对。给用户、给场景、给数据量，这是最省成本的三句话。
+
+**沿用上一个项目的画布尺寸。** 大屏和驾驶舱有默认尺寸；随手继承一个奇怪的画布宽度，后面所有间距和字号都得重排。
+
+**图层名里写"玻璃"就当材质做完了。** 半透明、模糊、内外描边、景深，回读的时候是一项项对的。
+
+**以为原型确认了就等于客户确认了。** 状态到"可交付客户评审"是设计负责人的活儿；客户那一句确认由上层工作流记录，它不代签。
+
+## 最佳实践
+
+- **点名 Penpot。** 不点名它就不进设计工具，你等半天只会拿到一份文字规格。
+- **先让 [frontend-design](/skills/skills-reference/high/frontend-design/) 把方向定下来。** 方向和原型分开做，返工只返一层。
+- **真实数据形状给到。** 40 行和 4000 行的表格根本不是同一个设计。
+- **拿 ID 复核。** board ID、shape 数、component 数都是可核对的，值得花两分钟自己看一眼。
+- **导出失败别放过。** 记下来的 HTTP 或超时证据往往指向服务端配置问题，比原型本身更该先修。
+
+## 下一步
+
+- [penpot](/skills/skills-reference/low/penpot/) - 连接、注册与只读取设计
+- [frontend-design](/skills/skills-reference/high/frontend-design/) - 先定 UI/UX 方向与契约
+- [ui-pc](/skills/skills-reference/high/ui-pc/) - 把原型还原成 PC 端实现
+- [ui-app](/skills/skills-reference/high/ui-app/) - 跨端界面实现
+- [tech-decision](/skills/skills-reference/high/tech-decision/) - 图表栈等技术选型

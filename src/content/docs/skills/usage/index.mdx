@@ -21,7 +21,7 @@ import { Aside } from '@astrojs/starlight/components'
 - 搭建项目基础架构
 - 建立开发规范
 
-👉 [新项目开始](/skills/usage/new-project)
+👉 [新项目开始](/skills/usage/new-project/)
 
 ### 功能开发
 
@@ -32,7 +32,7 @@ import { Aside } from '@astrojs/starlight/components'
 - 添加新的 API 接口
 - 开发新的页面
 
-👉 [功能开发流程](/skills/usage/feature-development)
+👉 [功能开发流程](/skills/usage/feature-development/)
 
 ### 代码审查
 
@@ -43,7 +43,7 @@ import { Aside } from '@astrojs/starlight/components'
 - Pull Request 审查
 - 代码质量检查
 
-👉 [代码审查流程](/skills/usage/code-review)
+👉 [代码审查流程](/skills/usage/code-review/)
 
 ### Git 工作流
 
@@ -54,7 +54,7 @@ import { Aside } from '@astrojs/starlight/components'
 - 提交和推送代码
 - 解决合并冲突
 
-👉 [Git 操作指南](/skills/usage/git-workflow)
+👉 [Git 操作指南](/skills/usage/git-workflow/)
 
 ### TODO 管理
 
@@ -65,7 +65,7 @@ import { Aside } from '@astrojs/starlight/components'
 - 任务依赖管理
 - 进度追踪
 
-👉 [TODO 管理](/skills/usage/todo-management)
+👉 [TODO 管理](/skills/usage/todo-management/)
 
 ## 快速参考
 
@@ -107,24 +107,16 @@ cat docs/PROJECT-MEMORY.md
 新功能开发会经过以下阶段：
 
 ```
-intake（需求录入）
-→ requirements-analysis（需求分析）
-→ requirements-confirmation（需求确认 ⚠️需 --confirmed）
-→ technical-plan（技术方案）
-→ technical-confirmation（方案确认 ⚠️需 --confirmed）
-→ task-breakdown（任务拆分）
-→ code-generation（代码生成阶段）
-→ business-development（业务开发 ✅可修改生产代码）
-→ code-review（代码审查）
-→ test-generation（测试生成阶段）
-→ test-run（测试运行）
-→ user-acceptance（用户验收）
-→ git-delivery（Git 交付）
-→ complete（完成）
+需求录入 → 需求分析 → 需求确认 ⚠️
+→ 技术方案 → 方案确认 ⚠️
+→ 任务拆分 → 代码生成
+→ 业务开发 ✅ → 代码审查
+→ 测试生成 → 测试运行
+→ 用户验收 → Git 交付 → 完成
 ```
 
 <Aside type="caution">
-在 `business-development` 阶段前，不允许修改生产代码，只能进行只读调查和规划文档编写。
+业务开发阶段前，不允许修改生产代码，只能进行只读调查和规划文档编写。
 </Aside>
 
 ## 工作流选择指南
@@ -349,11 +341,10 @@ Alice 和 Bob 同时修改 src/router/index.ts:
 
 ```bash
 # 完成当前任务
-"完成 USER-LOGIN"  # 触发 Stop Hook
+"完成 USER-LOGIN"
 
 # 或标记为阻塞
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --block USER-LOGIN --instance <instance-id> --result "等待设计稿"
+"USER-LOGIN 卡住了,等设计稿"
 
 # 然后领取新任务
 "开始实现 USER-PROFILE"
@@ -406,8 +397,8 @@ bug-detective → 排查 → universal-development → 修复 → code-review �
 
 选择适合你当前场景的指南开始：
 
-- 🆕 [新项目开始](/skills/usage/new-project) - 从零开始
-- 🔧 [功能开发流程](/skills/usage/feature-development) - 开发新功能
-- 🔍 [代码审查流程](/skills/usage/code-review) - Review 代码
-- 📝 [Git 操作指南](/skills/usage/git-workflow) - Git 工作流
-- ✅ [TODO 管理](/skills/usage/todo-management) - 任务管理
+- 🆕 [新项目开始](/skills/usage/new-project/) - 从零开始
+- 🔧 [功能开发流程](/skills/usage/feature-development/) - 开发新功能
+- 🔍 [代码审查流程](/skills/usage/code-review/) - Review 代码
+- 📝 [Git 操作指南](/skills/usage/git-workflow/) - Git 工作流
+- ✅ [TODO 管理](/skills/usage/todo-management/) - 任务管理

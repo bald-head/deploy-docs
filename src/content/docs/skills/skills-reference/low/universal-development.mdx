@@ -1,0 +1,138 @@
+---
+title: 通用实施 - universal-development
+description: 通用开发 - 最低优先级兜底，仅在没有适用专业 Skill 时使用
+order: 38
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+这个 Skill 存在的理由是：总会有一小块代码路径，没有任何专业 Skill 覆盖它。一个工具函数的空指针、一个日志级别、一个不改变任何用户结果的边缘修复。为这些去动 [api-development](/skills/skills-reference/high/api-development/) 或 [database-design](/skills/skills-reference/high/database-design/) 没有意义，硬套 [dev](/skills/skills-reference/high/dev/) 的纵向流程也不合身。
+
+`universal-development` 就是那个兜底：最小改动、遵循相邻代码风格、不做无关重构、复用已有工具服务和错误处理机制。它读的生产规则不是自己的第二套——它按需消费 `code-review` 那边的通用规则层，所以类型、命名、注释、契约闭环这些门禁不会因为走了兜底而降低。
+
+关键在于它的定位是**最低优先级**，不是"更轻量的选项"。实施过程中一旦冒出接口契约、持久化、前端页面或安全权限的路径，它立刻交回对应 Skill，不在兜底身份里继续维护那个领域的规则。
+
+## 优先级：它排在最后
+
+```text
+专业 Skill（api-development、database-design、database-ops、
+            ui-pc、ui-app、security-guard、satoken-core…）
+      ↓  只要任务落在这些交付面上，就用它们
+dev / crud-development   ← 已批准 TODO 里的纵向功能
+      ↓  扫完整个 Skill 清单，确认没有任何一个适用
+universal-development    ← 才轮到它
+```
+
+选它之前的判断是从上往下的：有没有专业 Skill 覆盖？是不是 `dev` 能编排的通用纵向功能，或者标准 CRUD？两个都不是，才落到这里。反过来说——只要 `dev` 适用，就选 `dev`，两者不是等价的两条路。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "改一下这个小工具" | 工具函数、辅助方法的最小改动 |
+| "这个边缘情况会崩" | 不改变已批准行为的边缘修复 |
+| "把日志级别调一下" | 不涉及任何专业交付面的配置调整 |
+| "这块没有对应的能力覆盖" | 清单扫完确实没有更窄的 Skill |
+| "路由已经定了，剩这一小段" | 已冻结路由后剩余的最小代码路径 |
+
+触发面覆盖"没有专业能力覆盖的最小改动"这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。在 Claude Code 里可以直接按名字调用（`/universal-development`）；Codex 走自己的原生发现。实践中更常见的是别的 Skill 判断自己不适用之后路由到这里，而不是你主动点名它。
+
+## 什么时候不要用
+
+这一节几乎就是它的全部边界，所以写得比别的页长一些：
+
+- **通用纵向功能** → [dev](/skills/skills-reference/high/dev/)。这是最常见的误选。功能要跨数据、接口、后端、客户端，就该走 `dev`，它管纵向编排和收口。
+- **标准增删改查** → [crud-development](/skills/skills-reference/high/crud-development/)。
+- **接口契约、参数校验、错误语义、接口文档** → [api-development](/skills/skills-reference/high/api-development/)。本 Skill 不定义 API 契约。
+- **表结构、索引、迁移** → [database-design](/skills/skills-reference/high/database-design/)、[database-ops](/skills/skills-reference/high/database-ops/)。本 Skill 不设计数据模型。
+- **业务页面实现** → [ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)。
+- **授权、数据安全、认证会话** → [security-guard](/skills/skills-reference/high/security-guard/)、[satoken-core](/skills/skills-reference/medium/satoken-core/)。本 Skill 不实现安全能力。
+- **选型还没定** → [tech-decision](/skills/skills-reference/high/tech-decision/) 必须在实现之前完成。
+- **需求本身是新的** → [product-manager](/skills/skills-reference/critical/product-manager/)。它只实现已有产品定义。
+- **还不知道根因** → [bug-detective](/skills/skills-reference/high/bug-detective/) 先诊断，它再实现修复。
+- **审查已写好的代码 / 跑仓库专项规范** → [code-review](/skills/skills-reference/high/code-review/)、[check](/skills/skills-reference/medium/check/)。
+- **找现成的工具类** → [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) 负责查找和复用，本 Skill 负责实现逻辑。
+- **设计测试方案** → [test-strategy](/skills/skills-reference/medium/test-strategy/)，而且只在你本轮明确要求时。
+
+## 前置条件
+
+**整个 Skill 清单已经扫过，确认没有任何专业 Skill 或 `dev` 覆盖当前场景。** 这条门槛是它自己的定义。跳过这一步选它，等于主动放弃了对应领域已经沉淀好的门禁和检查。
+
+**改动不落在接口契约、数据模型、页面实现、安全权限这些专业交付面上。** 落上去了就该换 Skill——不是"注意一点也能做"，而是那些领域的规则不在这里维护。
+
+**要么已经有当前开发者 TODO 里领取到的事项，要么这就是一个不改变用户结果的纯 bug 或技术维护。** 业务需求无论多局部都必须有 TODO；恢复既有批准行为、不改变用户结果和业务契约的 bug 修复和纯技术维护可以跳过这一条，直接推进。执行中途出现业务变化就立刻停止。
+
+## 怎么用
+
+**1. 确认适用，并只处理剩余那部分。** 从 Harness 原生 Skill 清单和目标源码里发现有没有更窄的专业能力；只处理没有被覆盖、且位于声明写集内的剩余生产路径。
+
+**2. 发现仓库事实。** 从包清单、构建配置、脚本和 CI 里确认语言、框架、模块边界和可用的验证命令。安全只读检查之后仍然确定不了、而且不同选择会实质改变结果时，才问你。
+
+**3. 建立任务基线。** 这是它最重要的一步，因为兜底任务经常落在别人正在改的文件里。开始编辑前记下：每个目标路径的真实 Git 根和当前 HEAD、初始的 `git status --short`、目标路径是否已修改或已暂存或未跟踪、这次允许改和排除的路径，以及目标路径最初的文件模式、index 状态和工作区内容。已经 dirty、已暂存或未跟踪时，保留一份能重新算出差异的精确初始快照。
+
+目标文件在任务开始前就带着别人的改动时：先确认当前任务能不能在不覆盖旧改动的前提下继续；用初始快照到当前内容的差异形成任务 patch，把旧 hunk 和本任务的新 hunk 分开核对——不能只看 `HEAD -> 当前工作区`，也不能把编辑后的整文件 diff 都算成自己的；实现、验证和 Review 只声明本任务拥有的那部分。形不成任务专属 patch 时停下来报 Git barrier，不用整文件暂存去夹带旧改动。
+
+快照可以放在执行上下文、系统临时目录或已批准的隔离 worktree 里，不能写进生产路径，任务结束后清理。上下文丢失、初始快照不可恢复，或者别的 Git 操作改变了 HEAD、index、目标路径基线时，必须先重新建立可证明的任务边界再 Review。
+
+**4. 搜相邻实现再动手。** 找相同功能、相邻实现、接口、表和配置，避免覆盖、重复开发或夹带无关文件。确认了要改哪些文件、初始有哪些 dirty hunk、影响范围到哪之后才开始编辑；写集每扩大一次，任务 patch 的边界就跟着更新一次，一旦扩到高影响的契约边界就停下来重新确认。
+
+**5. 最小实现。** 遵循相邻代码风格，保持最小变更，不做无关重构，优先复用已有的工具、服务、组件和错误处理机制。普通小修直接选最小实现路径，不为它单独走一遍选型——只有范围扩大、能力删除、公共行为、安全、数据或成本路径出现实质变化时，才比较方案并请你决定。
+
+**6. 验证。** 跑项目已有的最小有效验证：先跑现有的 formatter 或 format-check（`git diff --check` 不能代替它），再复用类型检查、编译、构建，或者跑一次真实主路径。只有你本轮明确要求写或补测试代码时才路由 [test-development](/skills/skills-reference/medium/test-development/)。命令跑不起来或证据不足时，如实报告剩余风险或阻塞。
+
+**7. 一次 Review。** 把完整任务 diff、任务自己的未跟踪文件，以及没纳入范围的初始旧改动一起交给 [code-review](/skills/skills-reference/high/code-review/) 检查一次；修复后只核对 findings、受影响的命令和新增范围。
+
+<Aside type="danger">
+实施中一旦出现接口、持久化、前端、安全或其他专业路径，立刻交回对应 Skill——它不会把那些领域的 ORM、框架或交付规则复制一份到兜底里继续做。同理，`code-review` 或适用的生产规则读不到时，它报告能力缺口，而不是自己降级一套规则接着写。
+</Aside>
+
+<Aside type="caution">
+几条硬性禁止：不猜项目的包名、模块名、表前缀或业务约定；不把某个项目的目录和版本当成通用默认值；不改任务范围外的文件，不覆盖或清理你已有的改动；不把任务开始前就存在的同文件 hunk 算进本次实现、Review 或精确暂存；没有你明确要求时不执行 `git commit` 或 `git push`。涉及环境配置时要发现全部实际环境的配置文件，在每个环境补齐适用的键，不能只改当前那一个 profile。
+</Aside>
+
+<Aside type="note">
+配置、部署和认证接入文件里出现的服务凭据——用户名、密码、Token——不区分内外网，也不区分是不是明文，都不需要脱敏也不报泄密。你已经要求写入配置，或者已经要求提交推送且文件在精确范围内时，视为授权原样交付：不会再问一次、不阻断、不脱敏、不删除、不排除文件，也不强制迁移。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游（before）**：[find-skills](/skills/skills-reference/medium/find-skills/)——先确认真的没有适用的专业 Skill；[project-navigator](/skills/skills-reference/medium/project-navigator/)——先确认真实结构和精确文件。
+
+**下游（after）**：[code-review](/skills/skills-reference/high/code-review/)——兜底实现同样只做一次完整 Review；[update-status](/skills/skills-reference/medium/update-status/)——实现之后回写唯一 TODO 的状态。
+
+**协作（complement）**：[code-patterns](/skills/skills-reference/low/code-patterns/)（复用仓库既有模式）、[utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)（复用已有工具类，避免重复封装）。
+
+**替代（alternative）**：[dev](/skills/skills-reference/high/dev/)、[crud-development](/skills/skills-reference/high/crud-development/)、[api-development](/skills/skills-reference/high/api-development/)——属于它们的范围时优先用它们。
+
+```text
+任务到手
+   ↓
+find-skills / Skill 清单扫描
+   ├─ 命中专业 Skill → 用它（api-development / database-design / ui-pc / security-guard…）
+   ├─ 是通用纵向功能或标准 CRUD → dev / crud-development
+   └─ 都没有
+         ↓
+   project-navigator（确认真实结构与精确文件）
+         ↓
+   universal-development（任务基线 → 最小实现 → 已有验证）
+         ├─ 中途发现专业路径 → 立即交回对应 Skill
+         └─ 收敛
+               ↓
+         code-review（一次完整 Review）
+               ↓
+         update-status（回写唯一 TODO）
+```
+
+它自己不创建也不更新 TODO、不改状态、不操作 Git。产出是交回给功能 Owner 的执行证据：路由顺序、改了什么或只读结论、跑过的验证、以及没覆盖到的边界。
+
+## 产出与验收
+
+输出只有完成结果、关键文件、实际验证和剩余风险。它把大约 95% 的执行与上下文预算花在代码读取、实现、排障、验证和一次 Review 上，TODO 和辅助文档合计不超过 5%，不生成过程报告或平行状态。任务基线也不落成一份基线报告或临时证据提交——持久 TODO 里只保存恢复所必需的最小身份和阻塞条件，不复制完整 patch。
+
+有一条边界值得单独记：业务功能带菜单或按钮入口时，数据与迁移、后端接口与鉴权、菜单记录与按钮权限、角色授权、前端页面拿真实接口数据渲染，这些必须一起完成。只写了菜单、只有权限 SQL、只有孤立接口、只有静态页面或 mock，都不能标记功能完成——不过这种规模的功能通常本来就该走 `dev`，不该落到兜底这一层。
+
+判断真的完成了：改动确实只落在允许的路径上、任务开始前的旧改动被完整分离出去、跑过的验证是项目已有的而不是新造的、一次 Review 的严重与重要 findings 全部关闭，而且整个过程里没有一次为了继续做下去而把专业领域的规则搬进兜底。
+
+复杂业务、事务、并发、权限、安全、兼容、迁移、异步和公共契约，只要是新增或改动的，都要留有效的源码注释；自解释的简单表达式不逐行注释。除此之外的过程文档只在你明确要求时才写。

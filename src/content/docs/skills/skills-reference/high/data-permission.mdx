@@ -1,0 +1,263 @@
+---
+title: 数据权限（data-permission）
+description: 设计并排查行级、字段级数据权限与租户边界，让同一个接口对不同用户返回不同的数据
+order: 21
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+功能权限回答"这个人能不能调这个接口"，数据权限回答"调进来之后他能看到哪些行"。`data-permission` 只负责后者。
+
+它做的第一个决定是**默认拒绝**：策略缺失时不会意外放宽成"全部数据"。第二个决定是**同一条不变量覆盖全部出口**——列表、详情、导出、统计、批量更新删除、异步任务用同一套过滤，而不是只把列表接口保护起来，然后被导出接口一把绕过。
+
+它不做认证，不做按钮和菜单显隐，也不设计表结构。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "加一下数据权限" | 现有查询要按部门、本人或自定义范围过滤 |
+| "他为什么能看到别人部门的数据" | 排查越权可见 |
+| "只能看自己创建的" / "本部门及以下" | 范围类型与组合语义设计 |
+| "租户隔离没生效" | 跨租户数据串了，核对上下文与拦截路径 |
+| "这几个字段不能给所有人看" | 字段级权限与脱敏范围 |
+| "导出接口绕过了权限" | 非列表出口的覆盖缺口 |
+
+## 什么时候不要用
+
+- **认证、Token、接口级授权、注入防护** → [security-guard](/skills/skills-reference/high/security-guard/)。它管"能不能进来"，这里管"进来后看见什么"。
+- **租户的创建、开通、配置、生命周期** → [tenant-management](/skills/skills-reference/medium/tenant-management/)
+- **表结构、字段、索引本身** → [database-design](/skills/skills-reference/high/database-design/)；索引与迁移落地 → [database-ops](/skills/skills-reference/high/database-ops/)
+- **菜单和按钮显隐** → 接口权限归 [security-guard](/skills/skills-reference/high/security-guard/)，前端显隐归 [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)
+- **接口契约与实现** → [api-development](/skills/skills-reference/high/api-development/)
+- **加了权限之后查询变慢** → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)
+
+<Aside type="danger">
+前端权限只是体验，不是防线。隐藏按钮、置灰菜单、在前端过滤列表——这三样都不构成数据权限。同样，请求里带来的 `userId`、`deptId`、`tenantId` 只能当查询筛选条件，不能当权限依据；主体必须来自服务端可信上下文。
+</Aside>
+
+## 前置条件
+
+三条都在避免同一个结局：写了注解，但策略从来没真正生效过。
+
+**数据归谁已经说清。** 不知道一条记录的所有者是谁，就无法定义"越权"，测试也测不出问题。
+
+**策略从哪来已经确认。** 角色配置、部门树、资源规则、数据库策略还是代码里写死的组合。搞错了会生成指向不存在机制的调用。
+
+**条件注入点已经找到。** ORM wrapper、拦截器、Repository、数据库行级策略还是服务层。落点决定改哪个文件；改错了就会出现"服务层加了一套、拦截器另有一套"的双写冲突。
+
+## 使用示例
+
+### 示例 1："只能看本部门及以下"
+
+你说：`订单列表要按部门过滤，主管能看本部门和下级部门`
+
+先拿到主体和范围类型的定义，主体一律来自服务端上下文：
+
+```java
+public record Principal(Long userId, Long tenantId, Long deptId,
+                        Set<String> roles, ScopeType scope) {}
+
+public enum ScopeType { SELF, DEPT, DEPT_AND_CHILD, CUSTOM, ALL }
+```
+
+然后是落在已确认执行器上的条件注入，不新造一层平行机制：
+
+```java
+public LambdaQueryWrapper<Order> scoped(LambdaQueryWrapper<Order> w, Principal p) {
+    w.eq(Order::getTenantId, p.tenantId());          // 租户永远第一个条件
+    switch (p.scope()) {
+        case SELF           -> w.eq(Order::getCreateBy, p.userId());
+        case DEPT           -> w.eq(Order::getDeptId, p.deptId());
+        case DEPT_AND_CHILD -> w.in(Order::getDeptId, deptTreeIds(p.deptId()));
+        case CUSTOM         -> w.in(Order::getDeptId, customDeptIds(p.userId()));
+        case ALL            -> requireExplicitOverride(p);   // 见示例 5
+    }
+    return w;
+}
+```
+
+部门树用物化路径而不是递归查询，索引才用得上：
+
+```sql
+SELECT o.id, o.order_no, o.amount
+FROM   t_order o
+JOIN   sys_dept d ON d.id = o.dept_id
+WHERE  o.tenant_id = ?
+  AND  o.del_flag = 0
+  AND  d.ancestors_path LIKE CONCAT(?, '%')     -- '/1/3/' 这种形态
+ORDER BY o.create_time DESC
+LIMIT ?, ?;
+```
+
+```text
+请求 → 接口授权（security-guard）→ 执行器注入条件（data-permission）→ 数据库
+                                            ↑
+                        主体 / 租户 / 部门上下文（服务端可信来源）
+```
+
+### 示例 2："他为什么能看到别人部门的数据"
+
+这类排查的产出是找到条件被绕过的确切位置。两种最常见的形态：
+
+```sql
+-- 缺陷一：OR 把权限条件吞掉了，任何人搜关键词都能看到全表
+WHERE dept_id IN (3, 7) AND del_flag = 0
+  AND title LIKE '%采购%' OR remark LIKE '%采购%'
+
+-- 修复：业务筛选整体括起来，权限条件留在括号之外
+WHERE dept_id IN (3, 7) AND del_flag = 0
+  AND (title LIKE '%采购%' OR remark LIKE '%采购%')
+```
+
+```sql
+-- 缺陷二：条件只落在主表，明细表整张暴露
+FROM t_order o JOIN t_order_item i ON i.order_id = o.id
+WHERE o.tenant_id = 1
+-- 修复：每张参与返回的表都要有自己的租户与范围条件
+WHERE o.tenant_id = 1 AND i.tenant_id = 1
+```
+
+<Aside type="caution">
+判断过滤是否生效要看**数据库真实返回的行**，不能只看拼出来的 SQL 字符串。条件落在错误的表上、被 `OR` 分支吞掉、被子查询隔离在外——这三种在 SQL 文本里都看着挺正常。
+</Aside>
+
+### 示例 3：导出接口绕过了权限
+
+你说：`列表里看不到的单子，导出的 Excel 里全都有`
+
+产出是一张出口清单，逐个确认走的是哪条查询路径：
+
+```text
+出口        实际调用                        是否已注入
+列表        orderMapper.selectPage          ✓
+详情        getVisible(id, principal)       ✓
+导出        exportService.buildRows         ✗ 直连 Mapper，绕过 wrapper
+统计        countGroupByDept                ✗ 自定义 XML，无范围条件
+批量删除    removeByIds                     ✗ 只校验了 id 是否存在
+异步任务    nightlySettle                   n/a 系统身份，需显式全量 + 审计
+```
+
+修法是让所有出口共用同一个入口，而不是在每处各写一遍条件：
+
+```java
+// 所有出口都从这里拿基础条件，新增出口时漏不掉
+public interface OrderScopedQuery {
+    LambdaQueryWrapper<Order> base(Principal p);
+}
+```
+
+### 示例 4：租户隔离
+
+你说：`两个租户的数据串了`
+
+排查会先确认上下文是从哪来的——绝大多数串号事故的根因都在这一行：
+
+```java
+// 错：请求参数可以随便改
+Long tenantId = req.getTenantId();
+
+// 对：从已验证身份派生
+Long tenantId = SecurityContexts.current().tenantId();
+```
+
+然后是覆盖面核对：定时任务、MQ 消费者、内部 RPC 这三处最容易没有上下文。
+
+```text
+入口                上下文来源            结论
+HTTP 接口           Token 解析            ✓
+MQ 消费者           消息头 tenantId       ✓ 但需校验发送方有权写该租户
+定时任务            无                    ✗ 需显式遍历租户，逐个建立上下文
+内部 RPC            调用方传递            ✗ 当前直接信任入参，需改为签名传递
+```
+
+### 示例 5：管理员绕过
+
+全量访问是一个显式命令，而不是"角色叫 admin 就自动放开"：
+
+```java
+@AdminOverride(reason = "季度审计导出", resource = "t_order", ttl = "PT2H")
+@PostMapping("/api/v1/admin/orders/export-all")
+public R<String> exportAll(@RequestBody @Valid OverrideReq req) { ... }
+```
+
+```json
+{
+  "operator": 10086,
+  "action": "EXPORT_ALL",
+  "resource": "t_order",
+  "reason": "季度审计导出",
+  "rows": 184203,
+  "grantedBy": 10001,
+  "expiresAt": "2026-09-04T14:30:00+08:00",
+  "traceId": "b7f2c1a9"
+}
+```
+
+### 示例 6：负例测试
+
+断言的是数据库返回的行，不是 SQL 文本：
+
+```java
+@Test void 跨部门不可见() {
+    login(userInDept(7));
+    assertThat(api.get("/api/v1/orders/" + orderInDept(3)))
+            .hasStatus(404);          // 用 404，不用 403 泄露存在性
+}
+
+@Test void 导出与列表可见范围一致() {
+    login(userInDept(7));
+    var listIds = api.page("/api/v1/orders").ids();
+    var csvIds  = api.export("/api/v1/orders/export").ids();
+    assertThat(csvIds).containsExactlyInAnyOrderElementsOf(listIds);
+}
+```
+
+## 与其他 Skill 的关系
+
+**先做**：[architecture-design](/skills/skills-reference/high/architecture-design/) 定数据所有权，[database-design](/skills/skills-reference/high/database-design/) 给出字段与索引，[security-guard](/skills/skills-reference/high/security-guard/) 立起接口授权。
+
+**后做**：[code-review](/skills/skills-reference/high/code-review/) 对本次改动做一次完整 Review。
+
+**配合**：[tenant-management](/skills/skills-reference/medium/tenant-management/)（租户生命周期）、[crud-development](/skills/skills-reference/high/crud-development/)（业务侧查询）、[backend-annotations](/skills/skills-reference/low/backend-annotations/)（权限注解的接入与代理边界）、[database-ops](/skills/skills-reference/high/database-ops/)（支撑条件的索引）。
+
+```text
+architecture-design → database-design → security-guard → data-permission → code-review
+                                                              ↕
+                        tenant-management / crud-development / backend-annotations
+```
+
+顺序是有意义的：接口授权先放行，行级过滤才在其上生效；两层都通过才允许返回或修改数据。
+
+## 常见坑
+
+**信任请求里的部门或租户 id。** 它可以被随意改写。请求参数只能当筛选条件。
+
+**用 403 表示"不是你的数据"。** 这等于确认了这条记录存在。归属类拒绝统一走 404。
+
+**只保护了列表接口。** 导出、统计、批量操作、异步任务各走一条查询路径，每条都要单独确认。
+
+**条件拼在字符串里。** 动态字段、排序列、表名一律白名单或参数化；把用户输入拼进 SQL，等于在权限层开了个注入口。
+
+**为了性能把权限关掉。** 慢的原因通常是索引没覆盖权限条件的列，该改的是索引，不是策略。
+
+**测试只比对 SQL 字符串。** SQL 看着对但条件落在错误的表上，这类缺陷只能靠断言真实返回行发现。
+
+**策略变更后缓存没失效。** 部门调整、角色回收之后，旧的可见范围还在缓存里活着。
+
+<Aside type="note">
+只有 SQL 单测通过时，不能声称真实业务接口和批量写操作是安全的。最终交付会说清：策略来源与组合语义（并集、交集、优先拒绝还是按优先级覆盖）、上下文取得方式、真实执行器的具体文件路径、出口覆盖清单、绕过操作的审计设计、索引取舍、验证命令与结果，以及哪些查询类型还没覆盖。
+</Aside>
+
+## 下一步
+
+- [security-guard](/skills/skills-reference/high/security-guard/) - 接口授权与认证
+- [tenant-management](/skills/skills-reference/medium/tenant-management/) - 租户开通与生命周期
+- [database-design](/skills/skills-reference/high/database-design/) - 支撑权限条件的字段与索引
+- [backend-annotations](/skills/skills-reference/low/backend-annotations/) - 权限注解为什么没生效
+- [performance-doctor](/skills/skills-reference/medium/performance-doctor/) - 加了权限之后的查询优化
+- [code-review](/skills/skills-reference/high/code-review/) - 权限改动的一次完整 Review
+
+
+
+

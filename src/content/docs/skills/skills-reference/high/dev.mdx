@@ -1,386 +1,138 @@
 ---
-title: dev
+title: 通用开发 - dev
 description: 通用功能开发 - 实施已批准 TODO 的纵向功能并统一验证
 order: 6
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+import { Aside } from '@astrojs/starlight/components';
 
 ## 概述
 
-`dev` 是 **High 优先级** Skill，负责实施已批准 TODO 中的通用纵向功能。统一协调数据、API、后端、前端、权限等专业 Skill，完成完整的功能交付。
+一个功能分层写完再各层分别验证，最后会得到一堆能编译、但连不起来的东西：接口没有调用方、页面拿的是 mock、菜单出现了但权限没配、迁移脚本躺在那里没人跑。`dev` 是纵向编排 Skill——把一个功能的数据、接口、后端、客户端、权限和集成在同一遍实现里做完，共用一次验证和一次 Review。
 
-**适用场景**：
-- 唯一 TODO 中明确的通用纵向功能
-- 非纯 CRUD、非专业领域（如认证/权限/缓存）的业务功能
+它只消费已经批准的 TODO 当前项，而且必须是当前实例原子领取到的那一项：Owner、功能点、菜单入口、来源锚点、用户结果、依赖、并行写集、交付面、稳定验收和验证档位都从这里读。开工前它会做来源复核——回到锚点指向的 PRD、设计、架构和技术决策章节，输出"某章节 → 一致 / 已变化"。发现用户结果、范围、契约、权限、数据边界、验收或交付面变了，它返回范围变化并停下，而不是顺手把新需求做进去。
 
-**不适用场景**：
-- 纯 CRUD 业务 → 使用 `crud-development`
-- 专业领域（认证/权限/缓存）→ 使用对应专业 Skill
-- 代码生成器开发 → 使用 `code-generator`
+它不替代专业能力。数据库、接口契约、认证权限、缓存这些有专门 Skill 的部分，`dev` 负责编排和收口，不负责重写它们的规则。
 
-## 快速开始
+## 优先级：dev 在哪一层
 
-### 开发新功能的完整流程
+这套 Skill 的实现层有明确的三级优先级，不是三个平级选项：
 
-```bash
-# 1. 确认已有规划
-# 检查 docs/<developer-id>/tasks/todo/*.md 是否有待开发功能
-
-# 2. 领取功能
-# Runtime 会自动领取下一个 Ready 功能
-
-# 3. 实施功能
-"开始实现 USER-LOGIN 功能"
-
-# 4. 验证功能
-npm run dev
-# 访问 http://localhost:3000/login 测试
-
-# 5. Review 代码
-/code-review
-
-# 6. 提交代码（授权后）
-/git-commit
+```text
+专业 Skill（crud-development、api-development、database-design、
+            ui-pc、ui-app、satoken-core、data-permission…）
+      ↓  任务落在这些交付面上时，优先用它们
+dev   ← 已批准 TODO 里的通用纵向功能（非 CRUD、非单一专业领域）
+      ↓  只有扫完整个 Skill 清单仍然没有任何一个适用
+universal-development   ← 最低优先级兜底
 ```
 
-### 三种运行模式
+所以判断顺序是从上往下：先看有没有专业 Skill 覆盖，再看是不是 `dev` 能编排的纵向功能，最后才轮到兜底。`dev` 和 [universal-development](/skills/skills-reference/low/universal-development/) 不是"两种风格"——只要 `dev` 适用，就不该选兜底。
 
-| 模式 | 适用场景 | 说明 |
-|------|---------|------|
-| **existing** | 已有仓库 | 保护现有改动、复用生产模式 |
-| **bootstrap** | 新项目骨架 | 实施 SHARED-BOOTSTRAP 技术项 |
-| **greenfield** | 首个业务功能 | 共享骨架完成后的首个纵向功能 |
+## 什么时候用
 
-## 使用示例
+| 你会这样说 | 场景 |
+| --- | --- |
+| "开始做这个功能" | 实施已领取的通用纵向功能 |
+| "接着上次的做" | 续作同一个进行中项，先重做来源复核 |
+| "这个要前后端都通" | 跨数据、接口、后端、客户端和权限的纵向交付 |
+| "先把项目骨架搭起来" | 实施 TODO 里的共享骨架技术项 |
+| "骨架好了，做第一个功能" | 全新项目里的首个纵向功能 |
+| "顺手修个 bug" | 不改变已批准行为的纯技术维护，走快速路径 |
 
-### 场景 1：实施用户登录功能
+触发面覆盖纵向开发、完整功能实现、跨层交付和继续开发这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。在 Claude Code 里可以直接按名字调用（`/dev`）；Codex 走自己的原生发现。
 
-**TODO 中的功能**：
-```markdown
-- [ ] `USER-LOGIN` 用户登录；Owner: alice-chen
-  - 来源: PRD#用户登录
-  - 来源锚点: `docs/prd.md#用户登录`
-  - 目标: 用户可以通过邮箱密码登录
-  - 验收: AC-001, AC-002, AC-003
-  - 依赖: 无
-  - 交付面: data / api / backend / web
-```
+## 什么时候不要用
 
-**执行步骤**：
+- **标准增删改查** → [crud-development](/skills/skills-reference/high/crud-development/)。任务本来就是 CRUD 时它更直接。
+- **接口契约、校验、错误语义、文档** → [api-development](/skills/skills-reference/high/api-development/)。`dev` 会调用它，但不代替它定契约。
+- **认证会话、数据权限、缓存这类专业领域** → [satoken-core](/skills/skills-reference/medium/satoken-core/)、[data-permission](/skills/skills-reference/high/data-permission/)、[redis-cache](/skills/skills-reference/medium/redis-cache/)。
+- **规划、写 TODO、定产品** → [project-manager](/skills/skills-reference/high/project-manager/)、[product-manager](/skills/skills-reference/critical/product-manager/)。`dev` 只消费已批准的 TODO，不自行启动新需求。
+- **回写状态、统计进度** → [update-status](/skills/skills-reference/medium/update-status/)、[progress](/skills/skills-reference/medium/progress/)。它只把执行事实交回去。
+- **审查已写好的代码** → [code-review](/skills/skills-reference/high/code-review/)。
+- **远程服务器部署** → [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/)。`dev` 管本地开发环境。
+- **连 dev 都不适用的最小路径** → [universal-development](/skills/skills-reference/low/universal-development/)。
 
-1. **明确目标**（自动完成）：
-   ```markdown
-   来源复核: docs/prd.md#用户登录 -> 锚点一致
-   来源复核: docs/architecture.md#认证模块 -> 锚点一致
-   来源复核: docs/tech-decision.md#JWT认证 -> 锚点一致
-   ```
+## 前置条件
 
-2. **复用检查**（调用 project-navigator）：
-   ```markdown
-   Reuse map:
-   - 数据库: MySQL 8.0 (复用)
-   - ORM: MyBatis (复用)
-   - 认证框架: Spring Security + JWT (复用)
-   - 前端框架: Vue 3 (复用)
-   ```
+**唯一 TODO 里有当前实例原子领取到的进行中项。** 没有领取成功就不写生产代码。一个功能只能有一个执行实例，一个实例同时只能有一个进行中项；B 依赖 A 时，A 必须已经完成才能领 B——A 正在做不算依赖满足。这套约束存在的原因很实际：共享 checkout 里两个实例改同一片路径，最后谁也说不清哪个改动属于哪个功能。
 
-3. **协调专业 Skill**：
-   ```text
-   交付面: data / api / backend / web
-   
-   → database-design: 设计 users 表
-   → database-ops: 创建表和迁移脚本
-   → api-development: 设计 POST /api/v1/auth/login
-   → backend: 实现 AuthController.login()
-   → ui-pc: 实现登录页面 src/pages/login.vue
-   → security-guard: 实现 JWT Token 生成
-   ```
+**这个功能已经完成技术选型，流程阶段是 `business-development`。** 需求、方案、确认、任务拆分和代码生成阶段只能补齐各自的阶段产物，不能提前写业务生产代码。选型没冻结就动手，等于让实现去替你做技术决策。
 
-4. **实施代码**：
-   ```java
-   // backend/src/main/java/controller/AuthController.java
-   @RestController
-   @RequestMapping("/api/v1/auth")
-   public class AuthController {
-       @PostMapping("/login")
-       public Result<LoginResponse> login(@RequestBody LoginRequest req) {
-           // 实现登录逻辑
-       }
-   }
-   ```
+**任务不属于明确的 CRUD 或某个专业领域。** 属于的话上面那张优先级图已经给出答案。
 
-5. **验证功能**：
-   ```bash
-   # 启动后端
-   cd backend && mvn spring-boot:run
-   
-   # 启动前端
-   cd frontend && npm run dev
-   
-   # 访问 http://localhost:5173/login
-   # 测试登录功能
-   ```
+## 怎么用
 
-6. **记录证据**：
-   ```markdown
-   验收证据:
-   - AC-001: 用户可以输入邮箱密码 → 手工测试通过
-   - AC-002: 登录成功返回 Token → DevTools 验证
-   - AC-003: Token 存储在 localStorage → 验证通过
-   ```
+**1. 明确目标。** 读当前项的全部字段，确认 runtime instance 和它的执行实例一致，消费项目记忆摘要，再按锚点回读需求、设计、架构和技术决策的相关章节，输出来源复核结论。首次领取、继续做、换了 runtime 或设备、上下文压缩恢复、交接之后，这一步都不能省。范围限定在当前功能、它的直接调用链和相邻模块之内，逐项检查：真实 Owner、可复用入口、字段与接口与 ORM、权限与租户、UI 与 i18n、部署与配置、领域不变量，并把每一条落成复用、扩展或不适用的实现决策。已经有 Owner 的东西不允许静默新建一个平行实现。
 
-7. **Code Review**：
-   ```bash
-   /code-review
-   # Review 结果: pass
-   ```
+**2. 发现仓库事实。** 从包清单、构建配置、脚本和 CI 里确认语言、框架、模块边界、源码根、数据存储、接口风格、权限模型、错误处理和可用的验证命令。共享 checkout 里其他实例的改动视为受保护现场——只按自己的写集过滤和核对，不覆盖、不格式化、不暂存、不夹带别人的文件。发现必须越界时先阻塞，由主 Agent 调整写集或改成串行。
 
-8. **提交代码**：
-   ```bash
-   /git-commit
-   # 提交消息: feat: implement user login
-   ```
+**3. 局部复用检查。** 默认只搜当前功能的写集、直接调用链、同模块相邻实现，以及目标文件已经 import 或调用的公共组件；出现 import 关系、重复签名或相同契约，而且都指向同一个共享 Owner 时，才扩到那个公共目录。业务职责、输入输出、错误语义和未来变化方向都稳定一致时优先复用；只是语法相似、业务规则不同、还没有第二个真实消费者，或者抽取会引入跨域依赖时，保持局部实现。不为每个功能扫全仓，也不为了形式上去重而扩大抽象。
 
-### 场景 2：范围变化检测
+**4. 设计最小变更。** 已有映射到本功能的确认技术结论时直接复用；只有泛化的技术栈名称、根本没有映射，或者新证据改变了适配性时，先回到技术选型。现有技术胜出也要先写下具体选择，再标记为复用现有——"复用现有"本身不是一个选型结论。
 
-**原 TODO**：
-```markdown
-- [~] `ORDER-QUERY` 订单查询；Owner: alice-chen
-  - 验收: AC-001: 查询自己的订单
-```
+**5. 实施顺序。** 先改最小的数据与契约层，再实现核心业务逻辑和错误处理，接上权限、事务、幂等和观测。然后是关键的一步：当前功能的后端真实接口做完之后，立刻实现它的入口层和全部批准客户端——页面、真实接口接入、权限，以及加载、空、错、成功四种状态。禁止先批量做完多个功能的后端再集中补前端。功能带菜单或按钮入口时，菜单记录、按钮权限、默认角色授权和回滚必须和业务数据迁移在同一个功能里完成。
 
-**实施中发现**：
-```
-PRD 更新: 管理员可以查询所有订单
-→ scope-change-detected
-```
+**6. 按验证档位自验。** `Evidence-only` 优先复用现有定向检查、类型或编译或构建，或者跑一次真实主路径，同时跑目标仓库已有的 formatter（`git diff --check` 不能代替它）。`Test-first` 只在你本轮明确授权写测试时才路由 [test-development](/skills/skills-reference/medium/test-development/)。`Regression-required` 先留下可复现的失败或等价基线，再取修复后证据。风险档位本身不构成写测试代码的授权，证据不足时对应验收只能标成未验证。
 
-**处理流程**：
-```bash
-# 1. 停止生产编辑
-# 2. 调用 change-impact-analysis
-# 3. 更新 TODO:
-#    - AC-001: 查询自己的订单
-#    - AC-002: 管理员查询所有订单 (新增)
-# 4. 更新实现
-# 5. 继续验证和 Review
-```
+**7. 真实运行验证。** 基础框架完成之后，每个功能交付都要另外跑一次真实运行：先读项目的 compose、部署和环境配置，探测已有的本地容器、进程和可达的远程中间件，有可用实例就复用，不再起同类新实例。用仓库已有命令启动前后端，等到实际健康检查或端口就绪，保留脱敏日志。只编译不启动不能关闭这一步。然后通过 [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/) 或仓库已有的等价真实调用，覆盖这个功能的新入口、真实接口、权限和至少一条主路径的四种状态。
 
-### 场景 3：Bootstrap 共享骨架
+**8. 一次 Review 收口。** 先核对本实例的实际改动全部落在声明的写集内，再对当前完整功能的 diff 执行一次 [code-review](/skills/skills-reference/high/code-review/)，关闭严重和重要 findings。共享 checkout 里其他实例的改动不算进本次自验和 Review。
 
-**TODO 中的技术项**：
-```markdown
-- [ ] `SHARED-BOOTSTRAP` 共享框架骨架；Owner: alice-chen
-  - 架构: 单体分层架构
-  - 技术: Spring Boot 2.7 + Vue 3
-  - 环境: local, test, prod
-  - 仓库: 单仓
-  - 验收: 
-    - 后端可启动
-    - 前端可访问
-    - 数据库连接成功
-```
-
-**实施步骤**：
-
-1. **后端骨架**：
-   ```bash
-   # 创建 Spring Boot 项目
-   spring init --dependencies=web,mysql,mybatis backend
-   
-   # 配置 application.yml
-   # 配置数据库连接
-   ```
-
-2. **前端骨架**：
-   ```bash
-   # 创建 Vue 3 项目
-   npm create vite@latest frontend -- --template vue
-   
-   # 安装依赖
-   cd frontend && npm install
-   ```
-
-3. **数据库迁移基线**：
-   ```sql
-   -- migrations/V001__init.sql
-   CREATE DATABASE IF NOT EXISTS user_system;
-   ```
-
-4. **环境配置**：
-   ```yaml
-   # application-local.yml
-   spring:
-     datasource:
-       url: jdbc:mysql://localhost:3306/user_system
-   ```
-
-5. **验证**：
-   ```bash
-   # 启动后端
-   cd backend && mvn spring-boot:run
-   # → 成功启动
-   
-   # 启动前端
-   cd frontend && npm run dev
-   # → 访问 http://localhost:5173 成功
-   
-   # 数据库连接
-   mysql -u root -p -e "SHOW DATABASES;"
-   # → user_system 存在
-   ```
-
-## 关键规则
-
-### 1. 只消费已领取的 `[~]` 功能
-
-```markdown
-<!-- 正确 -->
-当前 runtime instance: abc123
-当前 TODO:
-- [~] `USER-LOGIN` (执行实例: abc123) ← 只实施这个
-
-<!-- 错误 -->
-- [~] `ORDER-QUERY` (执行实例: def456) ← 不能实施
-```
-
-### 2. 依赖必须完成才能开始
-
-```markdown
-<!-- 正确 -->
-- [x] `USER-INFO-API` (依赖已完成)
-- [ ] `USER-INFO-PAGE` (依赖: USER-INFO-API) ← 可以领取
-
-<!-- 错误 -->
-- [~] `USER-INFO-API` (正在进行)
-- [ ] `USER-INFO-PAGE` (依赖: USER-INFO-API) ← 不能领取
-```
-
-### 3. 纵向完整交付
-
-```markdown
-<!-- 正确: 纵向完整 -->
-交付面: data / api / backend / web
-→ 数据库表 + API + Service + 页面
-
-<!-- 错误: 只完成一层 -->
-交付面: api
-→ 只写 API，不写数据库和前端
-```
-
-### 4. 代码优先原则
-
-- ✅ 95% 时间用于代码实现、验证、Review
-- ❌ 5% 时间用于 TODO、报告等辅助文档
-- 默认不生成过程报告或 Context JSON
-
-### 5. 阶段门禁
-
-```markdown
-当前阶段: technical-plan
-→ 不能写生产代码
-
-当前阶段: business-development
-→ 可以写生产代码
-
-当前阶段: code-review
-→ 只能 Review，不能新增功能
-```
-
-## Skill 协调
-
-`dev` 统一协调以下专业 Skill：
-
-| 交付面 | 调用 Skill |
-|--------|-----------|
-| data | database-design, database-ops |
-| api | api-development |
-| backend | 后端业务逻辑 |
-| web | ui-pc |
-| app | ui-app |
-| permission | security-guard, data-permission |
-| integration | 外部集成相关 Skill |
-
-<Aside type="note">
-一个功能只做一次验证和 Review，所有专业 Skill 在同一实现遍中统一应用。
+<Aside type="caution">
+排障时同一个方法最多试三次，每次都必须带来新观察、扩大有效事实范围，或者改变一个可证伪的假设。反复跑同一条命令没有信息增量，不算换了方法。连续同根因失败、依赖或写集冲突、验收漂移、越界、或者达不到所需证据等级时，立刻交回主 Agent，由它决定调整写集、串行化、重分配还是向你升级。
 </Aside>
+
+<Aside type="danger">
+它不预设三层架构、纯后端形态、固定的模块划分、包名、表前缀、字典、菜单或管理后台路径——这些都要从相邻源码确认之后才启用。未授权时不建表、不改生产数据、不装依赖、不提交、不推送。不把字段名后缀直接当成业务语义。声称代码生成成功之前，必须已经审查过实际生成的文件并跑过验证。
+</Aside>
+
+## 三种运行模式
+
+| 模式 | 什么时候是它 |
+| --- | --- |
+| existing | 已有仓库里保护现有改动、复用生产模式，完成一个纵向功能 |
+| bootstrap | 实施 TODO 里的共享骨架技术项，按其中的架构、技术、环境、仓库和验收完成共享骨架 |
+| greenfield | 共享骨架完成之后，做 TODO 指定的第一个纵向功能；构建与锁文件、源码入口、环境配置骨架和迁移基线都直接消费已有的 |
+
+greenfield 有一条容易忽略的边界：编码阶段不重新选栈。它消费的是已经定下来的技术绑定；没有源码事实时读批准需求、设计、架构基线、部署目标和组织标准，而不是从 Skill 示例里挑一套。共享骨架也要作为技术项写进唯一 TODO，把它的架构结论、技术选择、环境、仓库形态、真实调用方和验收都写清——它不创建假菜单，也不冒充业务功能。
 
 ## 与其他 Skill 的关系
 
-### 选择决策
+**上游（before）**：[tech-decision](/skills/skills-reference/high/tech-decision/)（选型先冻结）、[project-manager](/skills/skills-reference/high/project-manager/)（规划与 TODO 先落盘）。
+
+**下游（after）**：[code-review](/skills/skills-reference/high/code-review/)（同一 diff 一次完整 Review）、[update-status](/skills/skills-reference/medium/update-status/)（Review 通过后按事实回写）。
+
+**协作（complement）**：[api-development](/skills/skills-reference/high/api-development/)、[database-ops](/skills/skills-reference/high/database-ops/)、[ui-pc](/skills/skills-reference/high/ui-pc/)、[project-details](/skills/skills-reference/high/project-details/)。
+
+**替代（alternative）**：[crud-development](/skills/skills-reference/high/crud-development/)（明确是标准 CRUD 时）、[universal-development](/skills/skills-reference/low/universal-development/)（确实没有任何适用专业 Skill 时）。
 
 ```text
-优先级: 专业 Skill > dev > universal-development
-
-例子:
-- 纯 CRUD → crud-development
-- API 开发 → api-development  
-- 通用功能 → dev
-- 无适用专业 Skill → universal-development
+product-manager → architecture-design → tech-decision → project-manager
+                                                              ↓ 已批准 TODO
+                                          update-status（原子领取 → 进行中）
+                                                              ↓
+   dev（来源复核 → 仓库事实 → 复用检查 → 最小变更 → 纵向实施 → 自验 → 真实运行）
+        ├─ api-development / database-ops / ui-pc / satoken-core…（专业交付面）
+        └─ 发现范围变化 → 停止 → change-impact-analysis
+                                                              ↓ 完整功能 diff
+                                                    code-review（一次）
+                                                              ↓
+                                        update-status（完成摘要 → 写完成）
+                                                              ↓
+                                        git-commit（授权后提交推送并核验）
 ```
 
-### Related Skills
+它是流程状态机里 `business-development` 阶段的 Owner。批准范围内的生产面全部收敛之后，把开发产物和完成边界写回流程，推进到 `code-review`；流程走到 `test-run` 时只跑已批准的现有检查、测试和真实路径，把每条验收的证据记下来再推进到 `user-acceptance`——编译成功不能当成用户验收。
 
-**协作 Skill**:
-- `crud-development` - CRUD 业务
-- `api-development` - API 实现
-- `code-review` - 代码审查
-- `universal-development` - 兜底开发
+## 产出与验收
 
-## 最佳实践
+最终回复只讲四件事：完成结果、来源复核与关键文件、实际跑过的验证、剩余风险。数据迁移与回滚、公共接口与 Schema、发布运维步骤、外部交接，这些本身就是交付物——随实现同步维护，和生产代码进同一个功能提交，不是"之后再补的文档"。
 
-### 1. 先复用，后新建
+它把大约 95% 的执行与上下文预算花在代码读取、实现、排障、验证和一次 Review 上，TODO 和辅助文档合计不超过 5%。默认不生成过程报告，也不生成大型上下文 JSON。复杂业务、事务、并发、权限、安全、兼容、迁移、异步和公共契约，只要是新增或改动的，都要留有效的源码注释；自解释的简单表达式不逐行注释。
 
-```markdown
-<!-- 正确 -->
-检查 Reuse map:
-- 认证框架: Spring Security (复用)
-→ 使用 Spring Security
+判断一个功能真的做完了：批准范围里的生产者、数据、后端和全部客户端一一对应且用的是真实契约；页面调用真实后端接口并把真实响应呈现在查询、详情或操作状态里；带入口的功能，菜单记录、按钮权限和默认角色授权都到位；每条验收都有匹配声明档位的新鲜证据；真实启动与主路径验证留下了证据；一次 Review 的严重与重要 findings 全部关闭。
 
-<!-- 错误 -->
-不检查 Reuse map
-→ 新建自己的认证实现
-```
-
-### 2. 来源锚点必须复核
-
-```bash
-# 每次开始前
-来源复核: docs/prd.md#用户登录 -> 锚点一致
-
-# 如果不一致
-来源复核: docs/prd.md#用户登录 -> 已发现变化
-→ 调用 change-impact-analysis
-```
-
-### 3. 完整验证闭环
-
-```bash
-# 每个功能必须
-1. 启动后端
-2. 启动前端
-3. 访问真实入口
-4. 验证所有 AC
-5. 记录证据
-```
-
-### 4. 一次 Review
-
-```markdown
-<!-- 正确 -->
-完成全部交付面 → 一次 code-review
-
-<!-- 错误 -->
-完成数据库 → code-review
-完成 API → code-review
-完成前端 → code-review
-```
-
-## 下一步
-
-- [crud-development](/skills/skills-reference/high/crud-development) - CRUD 业务开发
-- [api-development](/skills/skills-reference/high/api-development) - API 开发
-- [code-review](/skills/skills-reference/high/code-review) - 代码审查
-- [universal-development](/skills/skills-reference/high/universal-development) - 通用开发
-- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
+<Aside type="note">
+以下几种东西单独存在都不能关闭功能：静态页面、mock 与 fixture、孤立的 Controller、只注册了菜单权限、只完成了单端构建。"前端菜单已经出现了"也不算权限交付。
+</Aside>

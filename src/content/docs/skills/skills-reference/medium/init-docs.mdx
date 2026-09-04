@@ -1,0 +1,121 @@
+---
+title: 文档初始化 - init-docs
+description: 项目文档初始化 - 按真实交付需要创建最少团队共享文档
+order: 21
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+新项目最容易犯的文档错误不是没写，是一上手就铺一整棵目录树：`architecture/`、`decisions/`、`reports/`、`handoffs/`，加一个空的 CHANGELOG。半年后这些文件大部分还是空的，剩下几个内容已经和代码对不上——没人敢删，也没人真信。
+
+`init-docs` 的立场是反过来的：**只有缺了会挡住人干活的东西才写。** 挡住开发、挡住部署、挡住数据迁移、挡住使用者上手、挡住一次真实的人工交接——这五种才算。除此之外优先复用已有的 README、OpenAPI/Schema、迁移工具、部署说明、Issue、PR 和团队文档。
+
+它还有第二个身份：项目记忆的引导者。每次请求入口都会确保目标仓库有一份 `PROJECT-MEMORY.md`，但刚创建出来的那份是空的。这时它负责做一次初始事实采集——去读仓库真实存在的东西，把核对过的稳定事实交给 [project-details](/skills/skills-reference/high/project-details/) 归并进那一份文件。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这个项目记忆是空的，补一下" | 记忆文件刚建或主要章节为空，做一次初始采集 |
+| "新项目，把文档搭起来" | 判断真正缺哪几份，只补那几份 |
+| "前端要接口契约，但我们没有 Swagger" | 项目确实有对外契约却没有可读描述 |
+| "这套东西怎么部署，得写下来" | 环境键、注入方式、监控和恢复步骤要交给别人 |
+| "这次迁移要留下回滚说明" | 数据迁移与回滚，实施时真的需要 |
+| "新人跑不起来这个项目" | 启动、构建命令缺失或已经和代码不一致 |
+
+触发面覆盖文档初始化、项目记忆采集与补齐这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。
+
+## 什么时候不要用
+
+- **记忆已经有内容了，只是要更新或补一条约定** → [project-details](/skills/skills-reference/high/project-details/)。它负责长期维护那一份文件；本 Skill 只管第一次把它填起来。
+- **想先看懂一个陌生仓库** → [start](/skills/skills-reference/high/start/)。它给可验证的仓库概览，不写文档。
+- **要找入口、模块、参考实现在哪** → [project-navigator](/skills/skills-reference/medium/project-navigator/)。
+- **要产品定义、需求与验收** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **要建任务队列、管状态** → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。本 Skill 不碰 TODO，也不改任何完成状态。
+- **要记录这一次交付的过程** → [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/)。一份是长期共享文档，一份是单次过程记录。
+- **要打磨一篇具体文档的内容和措辞** → [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)；**要交对外的 Word 文件** → [docx](/skills/skills-reference/low/docx/)。本 Skill 只写仓库里的 Markdown。
+- **要写代码** → [dev](/skills/skills-reference/high/dev/) 或对应专业 Skill。
+
+## 前置条件
+
+两条里满足一条就够，但两条都不满足时不要硬用。
+
+**一、项目记忆是空的。** 记忆文件刚被创建，或者主要章节还没有内容。这时候需要一次初始采集，否则后续每一轮都在缺事实的状态下工作——技术栈靠猜、复用入口靠猜、边界靠猜。
+
+**二、真实交付确实缺一份团队共享文档。** 判断标准不是"以后可能有用"，而是现在有人被卡住：接口契约、数据迁移与回滚、部署与配置、启动命令，或者一次确实需要文字说明的人工交接。
+
+<Aside type="caution">
+新项目、空仓库、步骤多、流程复杂——这些都不构成创建文档的理由。默认不生成 CHANGELOG、ARCHITECTURE、DEVELOPMENT、接口占位文件，也不生成 `reports/`、`decisions/`、`handoffs/`、`completed/` 这类目录或任何空目录。个人 TODO 更不在范围内。
+</Aside>
+
+Greenfield 项目还有一条顺序要求：先由 [architecture-design](/skills/skills-reference/high/architecture-design/)、[tech-decision](/skills/skills-reference/high/tech-decision/) 和 [dev](/skills/skills-reference/high/dev/) 把真实仓库、技术基线和能跑起来的入口建出来，再写文档。文档描述的必须是已经存在或已经选定的事实，不能反过来用一份模板把技术栈、仓库拓扑和模块提前锁死。
+
+## 怎么用
+
+### 记忆引导模式
+
+请求入口标记记忆需要引导时，先完成一次事实采集，再处理本轮其他事情：
+
+1. **定向读，不批量扫。** 读目标仓库已有的 `AGENTS.md`、`CLAUDE.md`（包括 `/init` 的产物）、README、构建与锁文件、配置入口，以及少量真实源码入口。不通读整个仓库。
+2. **只留核对过的稳定事实**：项目用途、技术栈、模块与入口、构建与启动命令、公共 Owner、复用入口，以及不能越过的边界。
+3. **交给 project-details 归并。** 它把结果写进那一份 `PROJECT-MEMORY.md` 的固定章节。本 Skill 不建第二份记忆、不建 Context JSON、不建报告或执行日志，也不为同一个主题按日期或按功能生成副本。
+4. **已经有内容就不再进这个模式。** 直接读相关摘要，只有发现事实失真或确实缺失才定向补一条。
+
+事实不足的时候，保留明确的待确认项并写清来源，不用模型常识填空——也不因为确认不了就转头去建一棵文档树。
+
+### 判断真正缺哪几份
+
+| 文档 | 只有这种情况才建 |
+| --- | --- |
+| 根 README | 缺项目目标、真实启动/构建命令或必要环境入口 |
+| 接口契约描述 | 项目确实有对外契约，且没有可读的现成描述 |
+| 数据迁移与回滚 | 这次实施真的需要脚本和说明 |
+| 配置 / 部署 / 运行手册 | 要交给别人执行，需覆盖全部实际环境的键、注入、监控与恢复 |
+| 外部人工交接 | 设备、账号、现场或监管步骤确实需要文字说明 |
+
+### 写入时的五条规则
+
+1. 先确认真实 Git 根、仓库已有的文档约定、目标文件，以及哪些内容不能覆盖。
+2. 要覆盖现有文件时先展示差异；没有明确授权不覆盖。
+3. 命令、版本、模块、接口和配置都要能从仓库或已选定的技术结论取证。
+4. 配置文档覆盖全部实际环境，环境变量和配置中心各自注入，**本机值不能写成团队默认**——把你那台机器的 home 目录绝对路径写死进去，换个人就失效。
+5. 只写使用者继续执行所需要的内容，不记命令流水、阶段日志、完成收据或审计报告。
+
+<Aside type="danger">
+本 Skill 不读 Git 用户名、不创建开发者个人目录，也不记录机器名、本机路径、host、Token 或任何个人运行配置。文档和代码冲突时以代码和仓库规则为准，改文档——而不是在另一个地方复制第二份事实源。
+</Aside>
+
+## 与其他 Skill 的关系
+
+它通常处在项目最前端，没有固定上游。往后交给 [project-details](/skills/skills-reference/high/project-details/) 长期维护记忆，记忆有内容之后 [project-navigator](/skills/skills-reference/medium/project-navigator/) 才能高效定位代码。协作方是 [architecture-design](/skills/skills-reference/high/architecture-design/) 和 [tech-decision](/skills/skills-reference/high/tech-decision/)——架构结论和技术选择是文档内容的来源，不是本 Skill 自己产出的。
+
+```text
+（新项目 / 记忆为空）
+        ↓
+init-docs（定向采集事实 + 只补真正缺的那几份文档）
+        ↓                            ↖ architecture-design · tech-decision
+project-details（原位归并并长期维护记忆）    （提供要写进文档的结论）
+        ↓
+project-navigator（按记忆快速定位代码与参考实现）
+```
+
+分工里最容易走错的一步是把它当成 `project-details` 用：记忆里已经有内容了却又跑一遍初始采集，结果是把已经核对过的事实重新覆盖一遍。第一次填由这里，之后每一次更新都归 `project-details`。
+
+## 产出与验收
+
+产出就是一份清单：创建了哪些文件、更新了哪些、跳过了哪些以及跳过的理由，加上做过的验证。
+
+四条验收标准：
+
+- 路径与仓库既有约定一致，文档里引用的东西真实存在；
+- 文档里的命令、技术、接口和环境契约都能回读验证；
+- 没有创建平行 TODO、开发者个人工作区或空占位文档；
+- 待确认项明确标出来了，没有用推测填空。
+
+判断真的完成了：拿着这份文档，一个没接触过这个项目的人能把它跑起来；而你能对每一句话说出它是从仓库哪个文件核对来的。做不到第二点，这份文档就还只是一份看起来像文档的东西。
+
+<Aside type="note">
+它不维护 TODO、不改任何完成状态、不拥有工程脚手架，也不操作 Git。跳过一份文档和创建一份文档同样是有效结论——"这份不用建，因为 README 里已经有了"就是一个完整的产出。
+</Aside>

@@ -1,0 +1,223 @@
+---
+title: Skill 优化（skill-optimizer）
+description: 直接审查或修改用户点名的现有 Skill，必要时用配对 A/B 评测把退步的改动自动回滚
+order: 26
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+你手上有一个已经在用的 Skill，它有毛病：该出手的时候没反应，不该出手的时候抢活干，或者每次都要绕三圈才开始干正事。把它的名字连同你观察到的现象一起说出来，`skill-optimizer` 会去改它。
+
+改的是那个 Skill 目录里的内容，改完直接落盘，不会先递一份提案等你签字。它同时会看一眼相邻位置有没有同一条规则的副本，免得改了一处、另一处还照老规矩办。
+
+作用范围就是**一个** Skill。跨 Skill 的长期治理、从零新建、以及"这次到底算不算 Skill 的问题"，三件事各有归属，见下面的不适用清单。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "优化一下 xxx 这个 Skill" | 点名了目标，要求改进 |
+| "这个 Skill 太啰嗦了，精简一下" | 回合多、绕路多、产出一堆没人看的中间文书 |
+| "我只是想问问题，它怎么直接开始改代码了" | 触发边界过宽，抢了别的场景的活 |
+| "该它出手的时候它没反应" | 描述写的和真实用法脱节 |
+| "先别动，帮我看看这个 Skill 有什么问题" | 只要结论，不要改动 |
+| "这两个 Skill 老是打架" | 职责重叠，需要划清归属 |
+| "自优化" | 已经指出了具体毛病，要求就地修好 |
+
+<Aside type="caution">
+"看看"和"改一下"是两件事，措辞决定它做哪件。想要只读结论，说清"只看不改"；想要它直接动手，说"改""优化""精简"就够了，不必再补一句授权。要它顺带提交或推送，那是另一件事，得单独说。
+</Aside>
+
+## 什么时候不要用
+
+- **本地还没有这个 Skill，要从零建一个** → [skill-creator](/skills/skills-reference/medium/skill-creator/)。
+- **同一个毛病在好几个 Skill 上都犯过，想一次断根** → [skill-evolution](/skills/skills-reference/low/skill-evolution/)。一个 Skill 的直接修改在这里，一类 Skill 的长期规则在那边。
+- **刚被纠正一次，还没想清是规则问题还是这一次的偶发偏差** → [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) 先判断再分流。
+- **Skill 内容没问题，是装不上、CLI 里看不见它** → [add-skill](/skills/skills-reference/medium/add-skill/)。
+- **要审的是多个 Agent 怎么分工、上下文怎么切** → [agent-optimizer](/skills/skills-reference/low/agent-optimizer/)。
+- **要写业务代码或定产品** → 对应业务 Skill。本 Skill 不碰业务实现。
+
+## 前置条件
+
+两个条件，缺一个就该换入口：
+
+- **目标 Skill 已经存在**。要改的是一个已有目录，不是一个想法。只有名字没有内容时，该走创建流程。
+- **这一轮你确实提了要求**。Skill 规则是所有会话共用的行为约定；没人开口就去动它，等于让所有人的行为在不知情的情况下变了一次。
+
+再往上还有一层判断：如果同一个根因已经在别的 Skill 上出现过，单点修改只能挡住这一个入口，下次换个 Skill 进来照样犯。这种情况先看 [skill-evolution](/skills/skills-reference/low/skill-evolution/)。
+
+## 使用示例
+
+### 场景 1：它在不该出手的时候出手了
+
+**你的输入**：
+
+```text
+grilling 这个 Skill 有问题。我昨天只是想问"这个接口现在返回哪些字段"，
+它上来就一条一条追问我业务目标，问了五轮才回答。
+```
+
+**你会拿到的产出**：
+
+```text
+## 改了什么
+- grilling/SKILL.md
+  · 适用描述：从「需求或决策」收窄为「会实质改变结果的需求或决策」
+  · 新增不适用场景：能直接从源码、接口定义或配置读到答案的事实性提问
+  · 澄清节奏：事实类问题自行取证，不占用追问轮次
+
+## 行为变化
+问「返回哪些字段」这类可查事实 → 直接读代码回答，不进入追问
+问「这个功能要做成什么样」      → 仍然逐个澄清
+
+## 验证
+git diff --check                                   → 无空白错误
+node add-skill/scripts/validate-skill-catalog.mjs  → errors: []
+
+## 剩余风险
+「会实质改变结果」仍需模型现场判断，边界案例可能偏保守
+```
+
+### 场景 2：只要一份体检报告，先别动手
+
+**你的输入**：
+
+```text
+先别改。帮我看下 check 这个 Skill 现在有哪些问题，我自己决定改不改。
+```
+
+**你会拿到的产出**（只读，工作区干净）：
+
+```text
+findings（3 条，未做任何修改）
+
+[1] 描述与真实用法不一致
+    check/SKILL.md — 描述里承诺「完整审查」，实际只覆盖仓库已写明的规范
+    影响：用户按描述期待缺陷清单，拿到的是规范清单
+    最小修复：描述改为「已证明的仓库规范 + 最小编译验证」
+
+[2] 与 code-review 存在重叠区
+    两者都会读同一份 diff，但没有写清谁先谁后
+    影响：同一份 diff 被审两遍，第二遍复述第一遍的结论
+    最小修复：写明复用关系，后手只核对未关闭项
+
+[3] 一个没有消费者的脚本
+    check/scripts/legacy-scan.mjs — 全仓无引用，最近一次改动在半年前
+    最小修复：删除脚本并清掉文档里的引用
+
+未验证边界：未运行任何检查命令；未确认 [3] 是否有仓库外调用方
+```
+
+### 场景 3：把一个越用越慢的 Skill 瘦下来
+
+**你的输入**：
+
+```text
+这个 Skill 每次都要先生成三个中间文件再开始干活，最后那三个文件谁都不看。删掉。
+```
+
+**你会拿到的产出**：
+
+```text
+## 删除
+- xxx/scripts/plan-renderer.mjs        （无运行时消费者）
+- xxx/templates/evidence-digest.md     （只被自己引用）
+- xxx/SKILL.md 中生成上述产物的两个步骤
+
+## 同步清理引用
+- xxx/SKILL.md         2 处
+- xxx/references/*.md  1 处
+- SKILLS.md            无需改动（frontmatter 未变）
+
+## 保留（明确没动）
+迁移与回滚要求、权限与租户边界、一次完整 Review
+
+## 验证
+git diff --stat  → 4 files changed, 6 insertions(+), 118 deletions(-)
+```
+
+### 场景 4：大改之后想看效果对比
+
+小修不做对比，直接改完给结论。但如果你要求评分、前后对比，或者这次动的是触发语义、主流程、授权与安全边界这类会影响所有调用方的东西，它会额外跑一遍改前 / 改后对照，并且**在判定退步时把这一轮改动撤回去**。
+
+**你的输入**：
+
+```text
+把这个 Skill 的主流程整个重排一遍，改完给我看效果对比。
+```
+
+**你会拿到的产出**：
+
+```text
+## 对比方式
+2 个研发任务 Prompt（1 个主路径 + 1 个失败路径），改前 / 改后匿名对照
+
+## 裁决
+keep —— 改后版在两个任务上都更早给出可执行动作，未观察到退步
+
+## 检查过的三个面
+失败处理    缺输入、依赖失败、权限不足三条分支已显式覆盖
+指令具体性  「视情况」「灵活处理」两处已改成可执行条件
+危险动作    递归删除与强制推送仍在禁止范围内，未被精简掉
+
+## 未验证边界
+只覆盖了 2 个任务；未在真实多人协作场景下运行
+```
+
+如果裁决是退步，你拿到的会是回退结果而不是保留结果——包括撤回的路径清单，以及撤回后与改前状态的逐路径核对。撤回条件不成立时它会停下来报明原因，而不是用覆盖工作区之类的手段硬来。
+
+<Aside type="danger">
+一次"改规则"的授权不覆盖 commit、push、发布和改客户端配置。这些动作它会停下来问你。同理，如果改动会外溢到你没提过的安全、数据、凭据或成本边界，它也会先停。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游**：[auto-optimizer](/skills/skills-reference/low/auto-optimizer/)（先判断这次纠正是不是规则问题，再分流过来）
+
+**下游**：[add-skill](/skills/skills-reference/medium/add-skill/)（只有 `name` / `description` 变了才需要跑一次同步）
+
+**协作**：[skill-evolution](/skills/skills-reference/low/skill-evolution/)、[code-review](/skills/skills-reference/high/code-review/)
+
+```text
+一次纠正
+  → auto-optimizer        判断范围
+      ├→ 范围在一个 Skill 内 → skill-optimizer（本页）
+      ├→ 跨多个 Skill        → skill-evolution
+      └→ 本地没有承接者      → skill-creator
+                                    ↓
+                        add-skill（仅 frontmatter 变化时同步一次）
+```
+
+同一个根因既要单点修好、又要变成长期规则时，两边**共用同一次修改面**，不要先改一遍再重新走一遍治理流程。
+
+## 常见坑
+
+**把"流程轻量"当成"交付轻量"。** 该删的是重复回合和没人消费的中间产物；不该删的是迁移回滚、权限与租户边界、并发隔离这类风险约束。这两者删起来手感一样，但后者删掉的后果是几周后某个 Skill 静默漏掉一次回滚检查，而且没人会立刻发现。
+
+**只说"这个 Skill 不好用"。** 缺少可观察现象，它只能凭猜。给出"哪一步、它做了什么、你期望什么"这三点，定位就是一次性的。
+
+**指望它把改动一起提交。** 它交给你的是改完的文件和一次验证结果，提交要你另外开口。
+
+**在一个 Skill 里补一条只对你当前项目成立的规则。** 那是项目事实，落点是目标仓库的 `PROJECT-MEMORY.md`，由 [project-details](/skills/skills-reference/high/project-details/) 归并；写进共享 Skill 会让所有项目都被这条规则影响。
+
+## 最佳实践
+
+- **一次只报一个现象。** 一句话里塞三个不满，改出来的东西会互相牵扯，你也没法判断哪一处生效了。
+- **想只读时明说。** "先看不改"是最省事的一句话，能省掉一次回退。
+- **动完主流程或触发语义就要对比结果。** 这类改动影响所有调用方，前后对照的成本远低于事后排查。
+- **检查它有没有把风险约束一起精简掉。** 拿到 diff 之后扫一眼删除行，重点看有没有误删安全、权限、迁移相关的条目。
+
+<Aside type="note">
+怎么算真的改好了：你最初描述的那个失败行为，在新规则下不会再发生；同时正确性、安全、权限、并发、迁移回滚这些约束一条都没被顺手删掉。
+</Aside>
+
+## 下一步
+
+- [skill-creator](/skills/skills-reference/medium/skill-creator/) - 从零创建一个新 Skill
+- [skill-evolution](/skills/skills-reference/low/skill-evolution/) - 把重复根因沉淀成跨 Skill 的长期规则
+- [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) - 判断一次纠正该往哪走
+- [add-skill](/skills/skills-reference/medium/add-skill/) - 注册与同步，确认 CLI 真的看得见
+- [code-review](/skills/skills-reference/high/code-review/) - 改完之后的那一次审查
+

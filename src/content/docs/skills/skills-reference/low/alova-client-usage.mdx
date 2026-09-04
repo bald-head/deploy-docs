@@ -1,0 +1,282 @@
+---
+title: Alova 客户端用法（alova-client-usage）
+description: 在浏览器、跨端框架和 SSR 里按项目请求基线使用 alova 发起请求、消费统一响应并管理缓存与刷新
+order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+前端发请求，麻烦的从来不是"怎么调一个接口"，而是"这个项目约定用哪个方法、参数放哪、响应怎么解包、缓存什么时候失效"。同一个仓库里三种写法并存的时候，联调阶段每次都要先猜一遍。
+
+这个 Skill 处理的就是把这套约定固定下来，然后在具体框架里落地。这个仓库的基线是：业务 JSON 请求统一走 `alovaInstance.post` 或 `postWithMsg`，参数收成一个具名请求体，响应从 HTTP body 里取已经解包好的业务数据。基线定了，再谈在 Vue、React 还是小程序里怎么写。
+
+它只管客户端这一层。服务端和 BFF 侧的用法在 [alova-server-usage](/skills/skills-reference/low/alova-server-usage/)，从 OpenAPI 批量生成请求函数在 [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/)，接口本身该有哪些字段、错误怎么定义则是 [api-development](/skills/skills-reference/high/api-development/) 的事。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "这个列表的数据怎么请求" | 按基线写好的请求方法与类型 |
+| "帮我配一下 alova" | 实例、适配器、拦截器的初始化代码 |
+| "提交完让另一个页面自动刷新" | 跨组件触发重新请求的接线 |
+| "这个接口能不能缓存一下" | 缓存与去重配置，含失效时机 |
+| "小程序端请求报错了" | 对应平台适配器的接法 |
+| "SSR 里这个请求怎么写" | 服务端渲染下的调用与数据传递 |
+| "上传头像用哪个方法" | 文件上传这一类输入的写法 |
+
+## 什么时候不要用
+
+- 要写服务端或 BFF 里的 alova → [alova-server-usage](/skills/skills-reference/low/alova-server-usage/)。
+- 想从 OpenAPI 批量生成请求函数和类型，而不是一个个手写 → [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/)；已经换成新生成器的项目走 [worma-guidelines](/skills/skills-reference/low/worma-guidelines/)。
+- 项目其实没在用 alova → 不要把这套写法套到别的请求封装上；请求库归属还没定就先过 [tech-decision](/skills/skills-reference/high/tech-decision/)。
+- 要定接口契约、字段和错误码 → [api-development](/skills/skills-reference/high/api-development/)。
+- 页面视觉和交互 → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/)。这里只碰请求层。
+- 需求和验收还没定 → [product-manager](/skills/skills-reference/critical/product-manager/)。
+
+## 前置条件
+
+要改的这个调用得有明确的功能归属，能说出它服务哪一条验收、改哪几个文件。还有一条容易被忽略：服务端这一侧这轮能不能一起改。基线要求同一个契约两边同时到位——客户端方法、服务端的 HTTP 方法、请求类型、路径、错误与响应处理。服务端本轮动不了，这个调用就先别动，否则联调时两边都是半成品。
+
+## 使用示例
+
+### 示例 1：一个列表查询
+
+你说："订单列表的请求帮我写一下。"
+
+```ts
+// src/api/order.ts
+export interface OrderQueryReq {
+  pageNum: number
+  pageSize: number
+  keyword?: string
+  status?: OrderStatus
+  createTimeRange?: [string, string]
+}
+
+export interface OrderPageResp {
+  total: number
+  rows: OrderVO[]
+}
+
+// 参数收成一个具名请求体，响应类型指向已解包的业务数据
+export const queryOrderPage = (body: OrderQueryReq) =>
+  alovaInstance.post<OrderPageResp>('/order/page', body)
+```
+
+和常见写法的差别在参数怎么走：
+
+```ts
+// 不按基线：查询串、路径参数、config.params 三种混在一个项目里
+alovaInstance.get('/order/page?pageNum=1&pageSize=20')
+alovaInstance.get(`/order/${id}`)
+alovaInstance.get('/order/page', { params: { pageNum: 1 } })
+
+// 按基线：只有一种形状，加字段不用改调用方式
+queryOrderPage({ pageNum: 1, pageSize: 20 })
+```
+
+<Aside type="caution">
+这不是风格偏好。参数形状统一之后，加一个筛选字段只是往请求体里多一个键；混着用的时候，加字段要先决定它该放查询串还是请求体，而这个决定每个人的答案都不一样。
+</Aside>
+
+### 示例 2：详情、状态变更、批量操作
+
+ID 也走请求体，路径保持稳定：
+
+```ts
+export const getOrderDetail = (body: { orderId: string }) =>
+  alovaInstance.post<OrderDetailVO>('/order/detail', body)
+
+// postWithMsg 会在成功后走统一提示，适合写操作
+export const closeOrder = (body: { orderId: string; reason: string }) =>
+  alovaInstance.postWithMsg<void>('/order/close', body)
+
+export const batchExport = (body: { orderIds: string[]; columns: string[] }) =>
+  alovaInstance.post<{ taskId: string }>('/order/export', body)
+```
+
+雪花 ID 在这里一律按字符串处理——JavaScript 的数字精度装不下 19 位整数，直接用 number 会在末位悄悄改掉一个数字。
+
+### 示例 3：文件上传
+
+上传是这条基线里唯一的输入例外——方法不变，载荷换成 `FormData`：
+
+```ts
+export const uploadAvatar = (file: File, userId: string) => {
+  const form = new FormData()
+  form.append('file', file)          // 字段名要和服务端 multipart 契约对上
+  form.append('userId', userId)
+  return alovaInstance.post<{ url: string }>('/user/avatar', form)
+}
+```
+
+### 示例 4：在组件里用
+
+```vue
+<script setup lang="ts">
+import { useRequest, usePagination } from 'alova/client'
+import { queryOrderPage, closeOrder } from '@/api/order'
+
+const filter = reactive<Partial<OrderQueryReq>>({ keyword: '', status: undefined })
+
+const { data, page, pageSize, total, loading, reload } = usePagination(
+  (pageNum, size) => queryOrderPage({ pageNum, pageSize: size, ...filter }),
+  { initialPage: 1, initialPageSize: 20, watchingStates: [filter], debounce: [300] },
+)
+
+const { send: doClose, loading: closing } = useRequest(closeOrder, { immediate: false })
+
+async function onClose(row: OrderVO) {
+  await doClose({ orderId: row.orderId, reason: '客服代关' })
+  await reload()
+}
+</script>
+```
+
+### 示例 5：提交完让另一个页面刷新
+
+两个页面互不知道彼此存在，但一边提交后另一边要更新。用委托加访问：
+
+```ts
+// 列表页：把自己的请求注册成一个可被外部触发的动作
+const { reload } = usePagination(fetchOrderPage, {
+  middleware: actionDelegationMiddleware('order-list'),
+})
+```
+
+```ts
+// 详情抽屉里保存成功之后
+import { accessAction } from 'alova/client'
+
+await saveOrder(payload)
+accessAction('order-list', ({ reload }) => reload())
+```
+
+好处是列表页不需要暴露任何方法出去，抽屉也不用拿到列表的实例引用。
+
+### 示例 6：缓存与去重
+
+```ts
+// 字典这类不常变的，缓存住并共享同一次在途请求
+export const getDictItems = (body: { dictType: string }) =>
+  alovaInstance.post<DictItem[]>('/system/dict/items', body, {
+    cacheFor: 5 * 60 * 1000,
+    hitSource: ['dict-changed'],   // 字典维护页改完后失效
+  })
+
+// 写操作用同一个名字通知失效
+export const saveDict = (body: SaveDictReq) =>
+  alovaInstance.postWithMsg<void>('/system/dict/save', body, { name: 'dict-changed' })
+```
+
+### 示例 7：实例与拦截器
+
+```ts
+// src/utils/http.ts
+import { createAlova } from 'alova'
+import adapterFetch from 'alova/fetch'
+import VueHook from 'alova/vue'
+
+export const alovaInstance = createAlova({
+  baseURL: import.meta.env.VITE_API_BASE,
+  statesHook: VueHook,
+  requestAdapter: adapterFetch(),
+
+  beforeRequest(method) {
+    const token = getToken()
+    if (token) method.config.headers.Authorization = `Bearer ${token}`
+  },
+
+  responded: {
+    async onSuccess(response, method) {
+      const body = await response.json()
+      if (body.code === 401) { redirectToLogin(); throw new Error('未登录') }
+      if (body.code !== 200) throw new BizError(body.msg, body.code)
+      return body.data              // 这里解包，业务层拿到的就是 data
+    },
+    onError(err) {
+      showToast(err instanceof BizError ? err.message : '网络异常，请稍后重试')
+      throw err
+    },
+  },
+})
+```
+
+不同运行环境换的是 `statesHook` 和 `requestAdapter` 这两项，业务侧的 `api/*.ts` 一行都不用改：
+
+| 环境 | statesHook | 请求适配器 |
+| --- | --- | --- |
+| Vue 3 | `alova/vue` | `alova/fetch` |
+| React / React Native | `alova/react` | `alova/fetch` |
+| Svelte | `alova/svelte` | `alova/fetch` |
+| Solid | `alova/solid` | `alova/fetch` |
+| Uniapp | 对应框架 hook | uniapp 适配器 |
+| Taro | 对应框架 hook | taro 适配器 |
+
+<Aside type="tip">
+安装、跨端适配器、鉴权拦截器的完整写法在 Skill 目录的 `references/SETUP.md` 里，按需要读那一节就行。已经被项目和相邻成功调用验证过的写法直接抄相邻代码，不必为每个功能重新翻一遍文档。
+</Aside>
+
+### 示例 8：收尾时你会看到的回复
+
+```text
+改动文件
+  src/api/order.ts        queryOrderPage / getOrderDetail / closeOrder 三个方法
+  src/views/order/index.vue  接上 usePagination，筛选变化防抖 300ms
+  服务端 OrderController  三个接口改为 POST，入参改为 Request 对象
+
+对应验收
+  AC-014 列表可按关键词与状态筛选 → queryOrderPage 的 keyword/status
+  AC-017 关单需填原因           → closeOrder 的 reason 必填
+
+故意没动的
+  src/api/legacy-report.ts 里 6 个 GET 调用 —— 本轮没有对应功能，
+  服务端也不在这次范围里，批量改会留下没人验证的接口
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [api-development](/skills/skills-reference/high/api-development/) | 接口契约先定 |
+| 前置 | [tech-decision](/skills/skills-reference/high/tech-decision/) | 请求库归属未定时 |
+| 同族 | [alova-server-usage](/skills/skills-reference/low/alova-server-usage/) | 同一契约的服务端一侧 |
+| 同族 | [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) | 从 OpenAPI 生成请求函数 |
+| 同族 | [worma-guidelines](/skills/skills-reference/low/worma-guidelines/) | 换成新生成器之后 |
+| 后续 | [code-review](/skills/skills-reference/high/code-review/) | 改完走一次完整审查 |
+
+```text
+api-development（定契约）
+      ↓
+alova-wormhole-usage / worma-guidelines（生成请求函数，可选）
+      ↓
+alova-client-usage（调用、缓存、跨组件刷新）
+      ↕ 同一契约两侧
+alova-server-usage（服务端 / BFF）
+      ↓
+code-review
+```
+
+## 常见坑
+
+**顺手做批量迁移。**  看到十几个老写法就想一起改掉。但没有对应功能，这些改动谁去验？改完没人测的接口，等于把风险从"写法不统一"换成了"不知道哪个坏了"。
+
+**从 Header 或 URL 里猜业务结果。**  联调时看着能跑，换一个错误分支就崩。响应类型参数指向真实的业务数据结构，是为了让类型检查提前发现这件事。
+
+**只改客户端。**  客户端换成 POST 了，服务端还是 GET，本地跑通是因为网关兼容，上线换环境就 404。
+
+**长整型 ID 用 number 接。**  末位悄悄变了，不报错，等到有人反馈"查不到这个订单"才发现。
+
+**给所有请求都开缓存。**  字典该缓存，订单列表不该。缓存的前提是你能说清它什么时候失效。
+
+## 下一步
+
+- [alova-server-usage](/skills/skills-reference/low/alova-server-usage/) — 服务端与 BFF
+- [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) — 从 OpenAPI 生成
+- [api-development](/skills/skills-reference/high/api-development/) — 接口契约
+- [ui-pc](/skills/skills-reference/high/ui-pc/) — 页面实现
+- [code-review](/skills/skills-reference/high/code-review/) — 完整审查
+
+
+
+

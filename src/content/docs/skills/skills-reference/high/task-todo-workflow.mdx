@@ -1,627 +1,154 @@
 ---
-title: task-todo-workflow
+title: 任务流程 - task-todo-workflow
 description: TODO 工作流 - 新项目或新功能的强制第一入口，建立阶段状态机并维护唯一 TODO
 order: 3
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+import { Aside } from '@astrojs/starlight/components';
 
 ## 概述
 
-`task-todo-workflow` 是 **High 优先级** Skill，是新项目或新功能的**强制第一入口**。负责建立阶段状态机，并维护当前开发者覆盖完整纵向交付面的唯一 TODO 文件。
+一个功能做了三天，中间换过一台机器、被压缩过一次上下文。第四天回来，怎么知道上次停在哪、当时为什么把范围定成那样？
 
-**核心职责**：
-- 新项目/新功能的第一入口（--plan-start）
-- 12 阶段状态机管理（intake → complete）
-- 开发者身份解析与 TODO 路径规则
-- Feature 来源锚点与上下文恢复
-- 轻量上下文与项目记忆集成
-- 阻止生产代码过早编辑（PreToolUse 门禁）
+`task-todo-workflow` 就是管这件事的。它为当前开发者维护一份 Markdown 文件，规划、执行状态和完成结果全部原位写在里面，不另开第二个状态源。这份文件里只有两样东西：一段固定顺序的阶段记录（从接需求一直到交付），和一份功能队列——队列里每个能开工的条目都带着一小段指回原始文档的"来源锚点"。
+
+新项目、还没规划过的新功能，必须先经过它把阶段记录建起来，再进入产品、设计或实现环节。反过来做的代价很具体：方案还没定就写了两千行，然后方案改了。
 
 <Aside type="caution">
-新项目/新功能必须先命中本 Skill 建立状态机，再进入任何产品、设计或实现 Owner。不能等全部方案完成后才建立状态。
+状态机是先建起来、再往里填内容的，不是等方案都写完了回头补一份。原因很实际：换设备、上下文被压缩、或者隔三天回来，没有它就只能靠回忆重建"上次到哪了"。
 </Aside>
 
-## 触发条件
+## 什么时候用
 
-### Triggers（触发词）
+| 你会这样说 | 场景 |
+| --- | --- |
+| "我要做一个用户权限系统" | 第一次入口：建文件、定 Owner、开阶段记录 |
+| "接着上次那个订单导出做" | 读出停在哪个阶段、哪一项还在做、锚点指向哪一节 |
+| "这个需求确认了，往下走" | 阶段推进并留下确认证据，不是一句"已确认" |
+| "等 DBA 开数据库账号" | 阶段挂上阻塞原因和恢复条件，恢复时不用重新解释 |
+| "我们项目没有代码生成器" | 该阶段标成不适用并写明事实原因，不静默跳过 |
+| "换了台机器接着做" | 同一 Git 身份指向同一份文件，按锚点回读原文再往下 |
 
-**中文**：
-- TODO管理
-- 工作流
-- 任务状态
-- 任务管理
-- TODO
-- 管理任务
+触发面覆盖 TODO 维护、阶段推进、跨会话续作这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。
 
-**English**：
-- TODO management
-- workflow
-- task management
-- task state
+## 什么时候不要用
 
-### Gates（前置条件）
+- **要定义产品做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。它产出需求与验收；本 Skill 只管这些结论落进哪一份文件、现在处在哪个阶段。
+- **要划模块边界与数据归属** → [architecture-design](/skills/skills-reference/high/architecture-design/)；**要选技术** → [tech-decision](/skills/skills-reference/high/tech-decision/)。
+- **上游结论已经齐了，要一次把功能条目写进去** → [project-manager](/skills/skills-reference/high/project-manager/)。分工是"谁拿笔"：这边管文件在哪、现在能不能开工，那边管往里写什么内容。
+- **已经在做了，只想再加一个功能** → [add-todo](/skills/skills-reference/medium/add-todo/)。它会先查重，不重建整份计划。
+- **只想按事实回写某一项的状态** → [update-status](/skills/skills-reference/medium/update-status/)；**只想统计整体做到了多少** → [progress](/skills/skills-reference/medium/progress/)（只读）；**只想知道该做哪一项** → [next](/skills/skills-reference/medium/next/)。
+- **要写代码** → [dev](/skills/skills-reference/high/dev/) 或 [universal-development](/skills/skills-reference/low/universal-development/)。
+- **一句话问答、看一眼日志、跑一条命令** → 直接做。不跨会话的事不需要持久状态，硬套一套阶段只会让流程变重。
 
-1. **新项目或尚未规划的新功能**（首次入口）
-2. **或需要维护当前开发者唯一 TODO**
-3. **已明确开发者身份**（Git user.name 或系统用户）
+## 前置条件
 
-### Not For（不适用场景）
+两条门槛。
 
-- 产品定义
-- 架构设计
-- 代码实现
-- 需求分析
-- 普通问答、只读诊断、单条命令或无需持久状态的低风险维护
+**一、这件事值得有持久状态。** 要么是新项目、尚未规划的新功能第一次进来，要么是当前开发者已有的那份 TODO 需要维护。都不满足还硬开阶段记录，得到的是一份没人会回来看的文件。
 
-## 使用场景
+**二、开发者身份能解析出来。** 文件路径是按身份分的，身份定不下来就不知道往哪写，也没法判断哪些条目不属于你。解析顺序是：当前仓库的 Git `user.name`，规范化成小写、目录安全的 `<developer-id>`；Git identity 不可用时退到系统登录用户名；仍不可用才要求显式设置 `AGENT_DEVELOPER_NAME`。任何示例用户名都不是默认值。
 
-### 场景 1：新项目启动
-
-**用户输入**：
-```
-我要做一个用户管理系统
-```
-
-**Skill 行为**：
-
-1. **解析开发者身份**：
-   ```bash
-   # 优先级 1: Git user.name
-   git config --get user.name  # → alice-chen
-   
-   # 规范化为目录安全 ID
-   developer-id: alice-chen
-   ```
-
-2. **确定唯一 TODO 路径**：
-   ```
-   docs/alice-chen/tasks/todo/user-system.md
-   ```
-
-3. **执行 --plan-start**：
-   ```bash
-   node runtime-hooks/scripts/todo-continuation.cjs \
-     --plan-start \
-     --title "用户管理系统"
-   ```
-
-4. **创建 TODO 文件并初始化阶段状态机**：
-   ```markdown
-   # 用户管理系统 TODO
-   
-   Owner: alice-chen
-   项目: 用户管理系统
-   仓库: /path/to/user-system
-   
-   ## 阶段状态机
-   
-   **当前阶段**: intake
-   **阶段状态**: in-progress
-   **阶段 Owner**: task-todo-workflow
-   **阶段门禁**: 记录项目入口信息
-   **阶段产物**: 待生成
-   **已完成阶段**: (无)
-   **阶段结果**: 待生成
-   **下一步**: 需求分析
-   **阻塞/恢复**: (无)
-   
-   ---
-   
-   ## 持久阶段记录
-   
-   ### intake (进行中)
-   - 开始时间: 2026-09-03 10:00
-   - Owner: task-todo-workflow
-   - 产物: 待生成
-   - 结果: 待生成
-   ```
-
-5. **推进到 requirements-analysis**：
-   ```bash
-   node runtime-hooks/scripts/todo-continuation.cjs \
-     --plan-advance \
-     --stage intake \
-     --next-stage requirements-analysis \
-     --artifact "项目入口已记录" \
-     --result "开发者: alice-chen, 项目: 用户管理系统"
-   ```
-
-6. **路由到 product-manager**：
-   ```
-   现在进入需求分析阶段，请完成产品定义
-   ```
-
-### 场景 2：阶段推进（需求确认）
-
-**当前阶段**: requirements-analysis
-
-**product-manager 完成产品定义后**：
-
-```bash
-# 等待用户确认
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-await \
-  --stage requirements-analysis \
-  --result "等待用户确认产品定义"
-```
-
-**用户确认后**：
-
-```bash
-# 推进到技术方案阶段
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-advance \
-  --stage requirements-analysis \
-  --next-stage technical-plan \
-  --confirmed \
-  --artifact "docs/prd.md" \
-  --result "产品定义已确认：3个角色、5个核心能力、用户确认通过"
-```
-
-### 场景 3：PreToolUse 门禁阻止过早编码
-
-**当前阶段**: technical-plan
-
-**用户错误输入**：
-```
-开始写代码
-```
-
-**PreToolUse Hook 拦截**：
-
-```
-❌ 阻止操作
-
-当前阶段: technical-plan
-当前阶段状态: in-progress
-
-不允许在 business-development 之前编辑生产代码。
-
-当前阶段必须完成:
-- technical-plan: 技术方案设计
-- technical-confirmation: 技术方案确认
-- task-breakdown: 任务拆分生成 TODO
-
-请先完成上述阶段，再进入代码实施。
-```
-
-### 场景 4：阻塞与恢复
-
-**阻塞场景**：
-
-```bash
-# 等待外部依赖
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-block \
-  --stage technical-plan \
-  --result "等待数据库账号开通，预计 2 天"
-```
-
-**TODO 更新**：
-```markdown
-**当前阶段**: technical-plan
-**阶段状态**: blocked
-**阻塞/恢复**: 等待数据库账号开通，预计 2 天；恢复条件：收到 DBA 开通邮件
-```
-
-**恢复操作**：
-
-```bash
-# 数据库账号已开通
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-resume \
-  --stage technical-plan \
-  --result "数据库账号已开通，连接测试通过"
-```
-
-### 场景 5：跳过不适用阶段
-
-**场景**: 项目不使用代码生成器
-
-```bash
-# 标记 code-generation 不适用
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-advance \
-  --stage task-breakdown \
-  --next-stage code-generation \
-  --artifact "不适用：项目采用手写代码，无代码生成器" \
-  --result "任务拆分完成，直接进入业务开发"
-
-# 立即推进到 business-development
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-advance \
-  --stage code-generation \
-  --next-stage business-development \
-  --artifact "不适用" \
-  --result "跳过代码生成，进入业务开发"
-```
-
-<Aside type="note">
-`code-generation`、`test-generation` 和 `user-acceptance` 不适用时必须写事实原因，不能静默跳过。
-</Aside>
-
-## 工作原理
-
-### 开发者身份与唯一路径
-
-#### 身份解析优先级
+身份定下来，路径也就定了：
 
 ```text
-优先级 1: Git user.name
-  git config --get user.name
-  → alice-chen
-
-优先级 2: 系统登录用户名
-  whoami / $USER
-  → alice
-
-优先级 3: 环境变量
-  $AGENT_DEVELOPER_NAME
-  → alice-chen
+docs/<developer-id>/tasks/todo/<原文件名>.md    ← 你的唯一活动 TODO，可写
+docs/<别人的 id>/tasks/todo/*.md                ← 只读：看得到进度，不勾、不合、不接管
 ```
 
-#### TODO 路径规则
+迁移已有文件时保留原文件名里的日期或业务前缀，不要改成通用的 `TODO.md`——前缀往往是"这份计划属于哪件事"的唯一线索。你自己的目录里只允许有一份活动 `.md`：出现第二份时先停下来合并，而不是接着往其中一份写。两份并存的时候，"这个功能到底做完没有"就有了两个答案，而两个答案等于没有答案。
+
+<Aside type="caution">
+仓库里可能还留着老位置的文件：`docs/tasks/todo/`、`tasks/todo/`、写成单数的 `docs/<developer-id>/task/todo/`，或者更早的 Workflow / Context 目录。这些只作只读的历史兼容——发现后把内容迁进你自己的复数 `tasks/todo/` 主目录，不能继续当活动状态源用。
+</Aside>
+
+## 怎么用
+
+说清你要做什么就行——"做一个 XX 系统"、"接着上次那个功能做"、"这个方案定了"。阶段顺序是固定的，每一段的 Owner 也是固定的：
 
 ```text
-当前开发者: alice-chen
-唯一 TODO 路径: docs/alice-chen/tasks/todo/<原文件名>.md
-
-其他开发者: bob-zhang
-其他 TODO 路径: docs/bob-zhang/tasks/todo/<原文件名>.md (只读)
+需求录入        记录入口信息，定 Owner 与文件路径
+需求分析        product-manager：需求与完整产品定义
+需求确认        必须拿到真实确认才能过
+技术方案        architecture-design / frontend-design / tech-decision
+方案确认        同样必须拿到真实确认才能过
+任务拆分        project-manager：把结论写成功能队列
+代码生成        code-generator：仅在确有生成器时；否则写明不适用
+业务开发        dev：纵向实现与自验（生产写入从这里才解锁）
+代码审查        一次完整 Review
+测试阶段        test-development：仅在本轮授权或仓库强制要求时
+用户验收        real-browser-automation：适用时的真实验收
+Git 交付        git-commit：授权后的交付
+完成
 ```
 
-**路径规则**：
-- 当前开发者目录内只能有一个活动 `.md` TODO
-- 发现第二份时立即阻断并合并
-- 其他 `<developer-id>` 目录只读
-- 迁移时保留原文件名的日期或业务前缀
-- 同一 Git identity 下的主 Agent 与 subagent 共用该 TODO
+推进、等待确认、阻塞和恢复都是原子操作，不靠手工编辑那一行状态。重点不在命令长什么样，而在每次推进都要留下四样东西：这一段的产物路径、过关证据、下一段是谁，以及阻塞时的恢复条件。"阶段结果"那一行放的是证据而不是结论：写"产品定义已确认：3 个角色、5 个能力、用户点头通过"，和写"已完成"，三天后的价值差得远。
 
-<Aside type="caution">
-`docs/tasks/todo/`、`tasks/todo/`、`docs/<developer-id>/task/todo/` 和 Workflow/Context 目录只读兼容。发现后迁入当前开发者的 `docs/<developer-id>/tasks/todo/` 主目录。
-</Aside>
+三件事没有商量余地：
 
-### 12 阶段状态机
+- **两个确认段必须来自真实确认。** 自己替用户点头往下推，等于把没批过的方案变成下游的既定事实。
+- **用不上的段要写清为什么用不上。** 代码生成、测试生成、用户验收经常不适用；写"不适用：项目手写代码，无生成器"和留一片空白，半年后是两回事。
+- **推到业务开发、且当前实例真的领到一项之前，生产文件写不进去。** 这期间读仓库、推进状态、写规划文档都不受限；被拦下来时看一眼拒绝消息里的段名，把缺的几步走完即可。换成 shell 重定向或 `sed -i` 这类等价写入同样会被识别。
 
-固定阶段顺序：
+### 来源锚点：跨会话恢复靠的是它
+
+队列里每个能开工的条目都带一段短锚点：来源文档与章节、用户结果与菜单入口、必须实现与明确不做的范围、数据与权限边界、稳定的验收编号、设计约束、选定的技术结论。它只放摘要——把上游正文抄一份进来，等于在 TODO 里维护第二份需求文档，两份很快就会不一致。
+
+它在四个时刻被回读：第一次领这一项、继续一个还在做的 `[~]`、换 runtime 或换设备恢复之后、上下文被压缩之后。回读的结果要落成一行：
 
 ```text
-intake
-  ↓
-requirements-analysis
-  ↓
-requirements-confirmation
-  ↓
-technical-plan
-  ↓
-technical-confirmation
-  ↓
-task-breakdown
-  ↓
-code-generation
-  ↓
-business-development
-  ↓
-code-review
-  ↓
-test-generation
-  ↓
-test-run
-  ↓
-user-acceptance
-  ↓
-git-delivery
-  ↓
-complete
-```
-
-#### 阶段 Owner 与职责
-
-| 阶段 | Owner | 职责 |
-|------|-------|------|
-| intake | task-todo-workflow | 记录项目入口信息 |
-| requirements-analysis | product-manager | 需求分析与完整产品定义 |
-| requirements-confirmation | product-manager | 等待用户确认产品定义 |
-| technical-plan | architecture-design, frontend-design, tech-decision | 技术方案设计 |
-| technical-confirmation | 技术 Owner | 等待技术方案确认 |
-| task-breakdown | project-manager | 任务拆分与唯一 TODO 生成 |
-| code-generation | code-generator | 仅在确有生成器时执行 |
-| business-development | dev | 纵向开发和验证 |
-| code-review | code-review | 一次完整 Review |
-| test-generation | test-development | 仅在本轮授权或仓库强制要求时进入 |
-| test-run | test-development | 运行测试并验证 |
-| user-acceptance | real-browser-automation | 适用的真实用户验收 |
-| git-delivery | git-commit | 授权后的交付 |
-| complete | - | 项目完成 |
-
-#### 阶段字段
-
-每个阶段必须记录：
-
-```markdown
-**当前阶段**: <stage-name>
-**阶段状态**: in-progress / blocked / completed
-**阶段 Owner**: <skill-name>
-**阶段门禁**: <门禁条件>
-**阶段产物**: <产物路径或"待生成">
-**已完成阶段**: <逗号分隔的已完成阶段>
-**阶段结果**: <门禁证据或"待生成">
-**下一步**: <下一阶段名称>
-**阻塞/恢复**: <阻塞原因与恢复条件>
-```
-
-#### 阶段推进命令
-
-```bash
-# 1. 启动新项目/功能
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-start \
-  --title "功能名称"
-
-# 2. 推进到下一阶段
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-advance \
-  --stage <current> \
-  --next-stage <next> \
-  --artifact "路径或不适用原因" \
-  --result "门禁证据"
-
-# 3. 等待确认（requirements-confirmation 或 technical-confirmation）
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-await \
-  --stage <current> \
-  --result "等待用户/Owner确认"
-
-# 4. 确认后推进（必须添加 --confirmed）
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-advance \
-  --stage requirements-confirmation \
-  --next-stage technical-plan \
-  --confirmed \
-  --artifact "docs/prd.md" \
-  --result "用户确认通过"
-
-# 5. 阻塞
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-block \
-  --stage <current> \
-  --result "阻塞原因与恢复条件"
-
-# 6. 恢复
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-resume \
-  --stage <current> \
-  --result "恢复依据"
+来源复核：docs/product-spec.md#批量导出 -> 锚点一致
+来源复核：docs/ui-design.md#导出弹窗   -> 已发现变化（新增了脱敏字段）
 ```
 
 <Aside type="caution">
-`requirements-confirmation` 与 `technical-confirmation` 必须在明确确认后追加 `--confirmed` 才能推进。
+原文、锚点、TODO 和代码之间只要有一处对不上，正确动作是先停手：交 [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 把受影响的范围和验收算清、原位更新 TODO，再继续写。带着一个已知的不一致往下写，后面要返工两次——一次改代码，一次改文档。
 </Aside>
 
-### Feature 来源锚点与上下文恢复
+### 状态与项目记忆的分工
 
-每个可执行 Feature 都必须在唯一 TODO 中保存**来源锚点**：
+TODO 只记"现在做到哪、卡在什么条件上"。项目上长期成立的那些约定——分页从 0 开始、异步只有一个入口、导出不落本地盘——归 `PROJECT-MEMORY.md`，由 [project-details](/skills/skills-reference/high/project-details/) 原位维护。启动、第一次领项、续作或恢复时，先读记忆里的 `Quick facts`、`Reuse map`、`Boundaries` 拿到全局约束，再按当前这一项定向翻相关章节，而不是把整份记忆贴进提示词。
 
-```markdown
-来源锚点：
-- 来源文档: `docs/prd.md#用户注册`, `docs/ui-design.md#注册页面`
-- 用户结果: 用户可以通过邮箱注册账号
-- 范围边界: 必须实现邮箱+密码注册；不支持第三方登录；禁止替代为手机号注册
-- 数据/权限边界: 用户表；默认分配"普通用户"角色；无特殊权限要求
-- 关键状态/验收: AC-001: 用户可以注册；AC-002: 邮箱唯一性验证
-- 设计约束: Element Plus Form + 响应式布局
-- 技术结论: Spring Boot + BCrypt 密码加密 + Vue 3
-```
-
-**锚点作用**：
-- **导航记忆**: 首次领取或恢复 Feature 时回读原始章节
-- **冲突检测**: 原文与锚点冲突时触发 change-impact-analysis
-- **上下文恢复**: 压缩、换 runtime、换设备、交接时的恢复点
-
-**使用时机**：
-- 首次领取 Feature
-- 继续一个 `[~]` Feature
-- 新 runtime/换设备恢复
-- 上下文压缩后
-- 任何可能改变范围的编码前
-
-**复核输出**：
-```markdown
-来源复核: docs/prd.md#用户注册 -> 锚点一致
-来源复核: docs/ui-design.md#注册页面 -> 已发现变化（增加了手机号字段）
-```
-
-<Aside type="caution">
-若原文与锚点、TODO 或代码事实冲突，先停止生产编辑，调用 `change-impact-analysis` 定向复核并更新 TODO，再继续。
-</Aside>
-
-### 轻量上下文与项目记忆
-
-**项目记忆文件**：
-- 统一使用根目录 `PROJECT-MEMORY.md`
-- 已有 `docs/PROJECT-MEMORY.md` 或 `docs/project-memory.md` 时沿用
-- 是稳定事实与复用地图的唯一入口，不是任务状态源
-
-**禁止生成**：
-- 日常流程不生成或持续追加大型 `context.json`、`context.jsonb`
-- 不生成 Context/Evidence/Execution 日志
-- WorkflowContext 只在当前执行上下文中按需组装
-
-**使用规则**：
-- 启动、首次领取、续作、换 runtime 或上下文压缩恢复时，先读取记忆文件的 `Quick facts`、`Reuse map`、`Boundaries`
-- 再按当前 Feature 定向读取相关章节
-- 不得将全文注入提示词
-- 收口时仅把已验证、会被后续 Feature 复用的公共 Owner、组件、工具、契约和禁止重复实现边界原位写入 `Reuse map`
-
-### PreToolUse 门禁
-
-Runtime `PreToolUse` 在状态机推进到 `business-development` 且当前实例原子领取 Feature 前，只允许：
-- ✅ 读取仓库
-- ✅ 原子推进状态
-- ✅ 写入规划文档
-
-**拒绝操作**：
-- ❌ 对生产文件的 `Write`
-- ❌ 对生产文件的 `Edit`
-- ❌ `apply_patch`
-- ❌ 等价 Shell 写入（`echo >`, `cat >`, `sed -i`, `awk` 等）
-
-**拒绝消息示例**：
-```
-❌ 阻止写入生产代码
-
-当前阶段: technical-plan
-当前阶段状态: in-progress
-
-不允许在 business-development 之前编辑生产代码。
-
-请先完成:
-1. technical-plan: 技术方案设计
-2. technical-confirmation: 技术方案确认
-3. task-breakdown: 任务拆分生成 TODO
-
-然后推进到 business-development 阶段。
-```
+仓库里不会长出第三种上下文文件：没有越写越大的 `context.json`，没有按次追加的执行日志或证据文件。代价是每次恢复要重新读一点东西，收益是不会出现一个谁都不敢删、又谁都不完全相信的巨型状态文件。
 
 ## 与其他 Skill 的关系
 
-### Conflicts（职责边界）
+上游是结论的产出方：[product-manager](/skills/skills-reference/critical/product-manager/) 给需求与验收，[architecture-design](/skills/skills-reference/high/architecture-design/)、[frontend-design](/skills/skills-reference/high/frontend-design/) 和 [tech-decision](/skills/skills-reference/high/tech-decision/) 给设计与技术结论。下游是 [project-manager](/skills/skills-reference/high/project-manager/) 把这些结论写成条目，再由 [dev](/skills/skills-reference/high/dev/) 逐项实施。日常协作固定是三个：[add-todo](/skills/skills-reference/medium/add-todo/)、[update-status](/skills/skills-reference/medium/update-status/)、[progress](/skills/skills-reference/medium/progress/)。
 
-| Skill | 边界说明 |
-|-------|---------|
-| `add-todo` | `add-todo` 负责向 TODO 追加新功能；`task-todo-workflow` 负责创建和维护 TODO |
-| `update-status` | `update-status` 负责更新已有功能状态；`task-todo-workflow` 负责完整 TODO 生命周期 |
-| `project-manager` | `project-manager` 负责产出功能列表；`task-todo-workflow` 负责维护 TODO 文件 |
-
-### Related Skills
-
-**前置依赖** (before):
-- `product-manager` - 提供产品定义
-- `architecture-design` - 提供架构设计
-
-**后续推荐** (after):
-- `project-manager` - 生成功能 TODO
-- `universal-development` - 实施功能
-
-**协作 Skill** (complement):
-- `add-todo` - 追加 TODO 项
-- `update-status` - 更新 TODO 状态
-- `progress` - 进度统计
-
-## 最佳实践
-
-### 1. 必须先建立状态机
-
-```markdown
-<!-- 错误: 直接开始产品定义 -->
-用户: 做一个用户管理系统
-→ 直接调用 product-manager
-
-<!-- 正确: 先建立状态机 -->
-用户: 做一个用户管理系统
-→ task-todo-workflow: --plan-start
-→ 推进到 requirements-analysis
-→ 调用 product-manager
+```text
+product-manager · architecture-design / frontend-design / tech-decision
+        ↓
+task-todo-workflow（阶段记录 + 唯一 TODO）
+        ↓
+project-manager（写入条目）→ dev（实施）→ code-review → git-commit
+        ↕
+add-todo（追加）· update-status（回写状态）· progress（只读统计）· next（挑一项）
+        ↕
+project-details（长期约定）· change-impact-analysis（已批准范围真的变了）
 ```
 
-### 2. 确认阶段必须等待用户
+四个都会碰这份文件的 Skill 最容易叫错。区别在于你手上有什么、想让文件发生什么变化：
 
-```bash
-# 错误: 直接推进
---plan-advance --stage requirements-confirmation --next-stage technical-plan
+| 你的处境 | 该叫谁 | 对文件做什么 |
+| --- | --- | --- |
+| 什么都还没有，只有一句话的想法 | `task-todo-workflow` | 从零建文件和阶段记录，定 Owner 与路径 |
+| 产品、设计、架构、技术结论都齐了 | [project-manager](/skills/skills-reference/high/project-manager/) | 一次性写入覆盖全部交付面的功能+菜单条目 |
+| 已经在做了，临时加一个功能或一步 | [add-todo](/skills/skills-reference/medium/add-todo/) | 追加，并先查一遍重复 |
+| 某一项做完了、状态变了 | [update-status](/skills/skills-reference/medium/update-status/) | 按代码与 Review 事实回写状态，不新增条目 |
 
-# 正确: 先等待
---plan-await --stage requirements-confirmation --result "等待用户确认"
+最常见的错法是拿 `add-todo` 去开新项目：它会老实地往一份还没有阶段记录的文件里追加，结果 Owner、路径、阶段全是空的。反方向也常见——整个项目的功能一条条用 `add-todo` 加进去，比一次规划慢得多，还容易漏掉菜单和权限这类交付面。
 
-# 用户确认后再推进
---plan-advance --stage requirements-confirmation --next-stage technical-plan --confirmed
-```
+## 产出与验收
 
-### 3. 不适用阶段必须说明原因
+它只产出一份文件，但这份文件要能被别人核对：
 
-```bash
-# 错误: 静默跳过
---plan-advance --stage code-generation --next-stage business-development
+- **文件本身**：`docs/<developer-id>/tasks/todo/<原文件名>.md`，顶部写 `Owner`。
+- **阶段记录**：当前段、状态、Owner、门禁、产物、已完成的段、结果、下一段、阻塞与恢复条件。已完成的段必须是当前段之前的完整前缀，缺一段就说明有人跳过了。
+- **功能队列**：`[x]` 已完成、`[~]` 正在做、`[ ]` 未开始、阻塞项在同一行写原因和恢复条件。`执行实例` 只属于 `[~]`；阻塞时改写成 `最后执行实例`，供确认之后释放。
+- **每次续作的那一行来源复核**，以及完成时那条带 `AC -> 证据` 的合并结果。
 
-# 正确: 说明原因
---plan-advance \
-  --stage code-generation \
-  --next-stage business-development \
-  --artifact "不适用：项目采用手写代码，无代码生成器" \
-  --result "跳过代码生成"
-```
+一项要被标成完成，得同时成立：用户能看见的功能和全部适用交付面真的接上了——菜单或按钮入口背后的那一串东西要全在，权限点、默认角色授权、后端鉴权、页面，以及页面上真实来自接口的数据，缺一样都不算；每条验收都有新鲜证据，没有一条停在未验证；开发者自验通过；一次完整 Review 没有未关闭的严重或重要 finding；已授权的提交推送完成并能从目标 ref 回读，或者文件里明确记着未授权/外部阻塞。
 
-### 4. 来源锚点必须完整
-
-```markdown
-<!-- 错误: 只有文件名 -->
-来源锚点: prd.md
-
-<!-- 正确: 完整锚点 -->
-来源锚点:
-- 来源文档: `docs/prd.md#用户注册`
-- 用户结果: 用户可以通过邮箱注册
-- 范围边界: 邮箱+密码注册，不支持第三方
-- 技术结论: Spring Boot + BCrypt
-```
-
-### 5. 每个开发者只维护一份 TODO
-
-```markdown
-<!-- 错误: 多份 TODO -->
-docs/alice-chen/tasks/todo/user-system.md
-docs/alice-chen/tasks/todo/order-system.md
-
-<!-- 正确: 唯一 TODO -->
-docs/alice-chen/tasks/todo/all-features.md
-  - Epic: 用户管理
-  - Epic: 订单管理
-```
-
-## 故障排查
-
-### 问题 1: PreToolUse 拦截了合法操作
-
-**症状**: 规划文档也被拦截
-
-**原因**: 文档路径在生产代码目录内
-
-**解决方案**:
-- 规划文档放在 `docs/` 目录
-- 或使用 `--artifact` 参数记录路径
-
-### 问题 2: 阶段推进失败
-
-**症状**: --plan-advance 报错
-
-**原因**: 阶段名称错误或顺序不对
-
-**解决方案**:
-- 检查当前阶段名称
-- 确保 next-stage 是固定顺序中的下一阶段
-- 查看 todo-continuation.cjs 日志
-
-### 问题 3: 找不到 TODO 文件
-
-**症状**: 系统提示找不到 TODO
-
-**原因**: 开发者身份未解析
-
-**解决方案**:
-```bash
-# 检查 Git 身份
-git config --get user.name
-
-# 或设置环境变量
-export AGENT_DEVELOPER_NAME=alice-chen
-```
-
-## 下一步
-
-- [project-manager](/skills/skills-reference/high/project-manager) - 生成功能 TODO
-- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义
-- [add-todo](/skills/skills-reference/high/add-todo) - 追加 TODO 项
-- [update-status](/skills/skills-reference/high/update-status) - 更新 TODO 状态
-- [progress](/skills/skills-reference/high/progress) - 进度统计
-- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis) - 变更影响分析
+<Aside type="note">
+勾选发生在提交之前，和业务改动进同一次 commit&push，推送后核验 local / upstream / remote 三方一致。只有远端那份文件里的 `[x]` 成立，依赖它的条目才解锁——本地勾上但没推，下一项仍然要等。
+</Aside>

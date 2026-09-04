@@ -1,0 +1,271 @@
+---
+title: WebSocket 与 SSE（websocket-sse）
+description: 先选对协议再还原真实链路，定义连接、消息、重连与跨实例契约，并按真实客户端和网关声明验证边界
+order: 38
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+长连接的问题几乎从来不在"怎么建立连接"上。会出事的是这些：Token 过期了但连接还活着；旧连接的超时回调把同一个用户刚建立的新连接从注册表里删掉了；两个实例各推一份，客户端收到重复消息；事务还没提交就把"成功"推给了前端，然后数据库回滚；反向代理把事件流缓冲住了，前端要等几十秒才收到第一条。
+
+`websocket-sse` 先逼出一个判断——这需求到底要不要长连接——再把连接、消息、重连和跨实例语义逐项定死。协议库、端点、握手方式、连接注册表、消息总线、代理能力都要从你的仓库或明确约束里读出来，不会拿示例去补造。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "做个实时推送" | 服务端单向事件流、状态变更通知 |
+| "要双向通信" | 聊天、协作编辑、指令下发 |
+| "加个长连接" | 需要确认协议、心跳、背压与跨实例路由 |
+| "任务进度实时显示" | 流式进度与断线恢复语义 |
+| "在线状态怎么做" | 租约、TTL、集群在线与"最后在线"的区别 |
+| "多实例推送收不到" | 消息总线、节点自收、重复与故障语义 |
+| "断网重连后消息丢了" | 重连退避、回放条件、离线补发边界 |
+
+## 什么时候不要用
+
+- **普通 HTTP 接口** → [api-development](/skills/skills-reference/high/api-development/)
+- **定时批量处理** → [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/)。别用高频轮询任务假装推送，也别用长连接做定时汇总。
+- **离线必达、要回放和消费确认** → 这需要持久消息系统，长连接只能当投递适配层，不能自己充当消息存储。
+- **短信、邮件这类离线通知** → [sms-mail](/skills/skills-reference/low/sms-mail/)
+- **通用认证授权与威胁建模** → [security-guard](/skills/skills-reference/high/security-guard/)；具体框架的登录态 → [satoken-core](/skills/skills-reference/medium/satoken-core/)
+- **推送慢、连接数上不去** → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)
+
+## 前置条件
+
+**确实需要实时。** 这是需求侧的判断。
+
+**普通轮询已经被排除。** 反过来说就是那条硬规则：轮询够用时不引入长连接。长连接会带来心跳、重连、背压、跨实例路由、优雅下线五份额外成本，弱实时场景付这个成本不划算。
+
+**客户端支持的协议已经确认。** Web、App、小程序和 IoT 设备对协议、鉴权头、重连的支持并不一致；没确认就写出的握手方式，可能在某一端根本用不了。
+
+<Aside type="danger">
+证据不足时它只会标出未知项，不会默认套用某个推送 starter、某个发布订阅通道或某条示例端点路径。长连接的错误配置往往在压力上来之后才显形，那时改动成本已经很高。
+</Aside>
+
+## 协议怎么选
+
+| 需求 | 优先候选 | 理由 |
+| --- | --- | --- |
+| 双向会话、聊天、协作 | WebSocket | 上行下行对等，帧开销小 |
+| 服务端单向事件流、进度 | SSE | 走普通 HTTP，浏览器自带重连和事件 id |
+| 低频、弱实时（分钟级） | 轮询 / 长轮询 | 不值得为它付长连接的运维成本 |
+| 离线必达、要回放和确认 | 持久消息系统 + 推送适配 | 易失通道不提供持久、确认、回放 |
+
+## 使用示例
+
+### 示例 1：任务进度推给前端（SSE）
+
+你说：`导入任务的进度要实时显示`
+
+端点这样开，三条结束路径都要幂等释放资源：
+
+```java
+@GetMapping(value = "/api/v1/tasks/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter events(@PathVariable String id,
+                         @RequestHeader(value = "Last-Event-ID", required = false) String lastId) {
+    SseEmitter emitter = new SseEmitter(0L);
+    String connId = UUID.randomUUID().toString();
+    registry.register(id, connId, emitter);
+    emitter.onCompletion(() -> registry.release(id, connId));
+    emitter.onTimeout(()    -> registry.release(id, connId));
+    emitter.onError(e       -> registry.release(id, connId));
+    replayService.replayAfter(id, lastId, emitter);   // 仅当服务端确实存了可回放事件
+    return emitter;
+}
+```
+
+消息用固定字段的信封，客户端才有幂等和排序的依据：
+
+```json
+{
+  "id": "1734901234567890123",
+  "type": "task.progress",
+  "ver": 1,
+  "ts": "2026-09-04T10:32:11.418+08:00",
+  "traceId": "b7f2c1a9",
+  "target": { "kind": "task", "id": "T-882" },
+  "data": { "percent": 62, "phase": "TRANSCODE" }
+}
+```
+
+前端按消息 id 幂等，重复投递不改 UI：
+
+```ts
+const es = new EventSource(`/api/v1/tasks/${id}/events`, { withCredentials: true })
+const seen = new Set<string>()
+es.addEventListener('task.progress', (e) => {
+  const msg = JSON.parse(e.data)
+  if (seen.has(msg.id)) return
+  seen.add(msg.id)
+  setProgress(msg.data.percent)
+})
+```
+
+反向代理这一段最容易被忽略，不关缓冲就会攒够一整块才吐给浏览器：
+
+```nginx
+location /api/v1/tasks/ {
+    proxy_pass http://app;
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    proxy_buffering off;              # 不关这个，前端要等几十秒
+    chunked_transfer_encoding on;
+    proxy_read_timeout 3600s;
+}
+location /ws/ {
+    proxy_pass http://app;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 75s;           # 必须大于心跳间隔
+}
+```
+
+### 示例 2：聊天（WebSocket）与握手鉴权
+
+浏览器原生 WebSocket 不能自定义请求头，长期 Token 也不该放进 URL（它会进 access log 和 Referer）。产出是一次性握手票据：
+
+```java
+@PostMapping("/api/v1/ws/tickets")
+public R<TicketVO> ticket() {                      // 走正常 HTTP 鉴权
+    String t = tickets.issue(currentUserId(), Duration.ofSeconds(30));
+    return R.ok(new TicketVO(t));                  // 一次性，30 秒过期
+}
+```
+
+```ts
+const { ticket } = await http.post('/api/v1/ws/tickets')
+const ws = new WebSocket(`wss://api.example.com/ws?ticket=${ticket}`)
+```
+
+握手通过不等于永久授权：订阅、上行命令和敏感事件要逐项校验主题权限；注销、封禁、权限变化要能让现有连接立刻失效。
+
+### 示例 3：连接清理（这一节值得单独看）
+
+```java
+// 每条连接一个唯一 id；清理时必须先比较，否则会删掉刚建立的新连接
+public void release(String userId, String connId) {
+    connections.computeIfPresent(userId, (k, cur) ->
+            cur.connId().equals(connId) ? null : cur);
+}
+```
+
+漏掉这个比较之后的症状是"偶发收不到推送，重启客户端就好了"——因为旧连接的超时回调晚到了几百毫秒，把新连接从注册表里摘掉了。这是这个领域最隐蔽的一类 bug，日志里通常什么异常都没有。
+
+### 示例 4：多实例收不到
+
+你说：`加了第二台机器之后，一半的推送到不了`
+
+产出是四个观测点，直接定位到断掉的那一环：
+
+```text
+① 客户端连在哪个节点   nginx access log 的 upstream 字段
+② 事件在哪个节点产生   业务日志里的 nodeId
+③ 总线是否投递         订阅端计数器 bus.received
+④ 本地注册表是否命中   registry.hit / registry.miss
+
+本次结论：① 与 ② 是不同节点，③ 计数为 0
+         → 两个实例订阅的 topic 前缀不一致，消息发出去没人收
+```
+
+修法是节点只推自己持有的连接，跨实例靠总线转发，并且跳过自己发出的那份：
+
+```java
+@EventListener
+public void onLocalPublish(PushEvent e) {
+    bus.publish(TOPIC, envelope(e).withOrigin(nodeId));
+}
+
+public void onBusMessage(Envelope env) {
+    if (nodeId.equals(env.origin())) return;      // 自收去重，否则本地连接收到两份
+    registry.deliverLocal(env.target(), env);
+}
+```
+
+### 示例 5：重连与背压
+
+```ts
+// 有上限的指数退避 + 抖动；被明确拒绝时停止重试
+let delay = 1000
+function connect() {
+  const ws = new WebSocket(url)
+  ws.onopen  = () => { delay = 1000 }
+  ws.onclose = (e) => {
+    if (e.code === 4001 || e.code === 4003) return goLogin()   // 不再重试
+    setTimeout(connect, delay + Math.random() * 500)
+    delay = Math.min(delay * 2, 30000)
+  }
+}
+```
+
+```text
+每一层都要有带单位的上限，超过就有明确动作
+单连接待发队列   1000 条 / 8 MB    超出 → 合并同 target 的最新一条
+单条消息         256 KB            超出 → 拒发，改推 id 让客户端来拉
+单用户连接数     5                 超出 → 关最旧的一条，关闭码 4001
+单 topic 广播    5000 连接 / 批     分批 + 速率限制
+```
+
+### 示例 6：验收长什么样
+
+```text
+合法票据握手            ✓
+过期 / 重复使用票据      ✓ 均被拒绝，关闭码 4001
+权限撤销后已有连接      ✓ 300ms 内被关闭，关闭码 4003
+断网 30s 后重连         ✓ 退避 1s → 2s → 4s → 8s（带抖动），上限 30s
+慢消费者                ✓ 队列到 1000 条后开始合并，进程未 OOM
+双实例交叉推送          ✓ 按消息 id 核对，无重复无丢失
+节点重启                ✓ 客户端 5s 内重连到另一节点
+真实网关 + iOS 客户端    ✗ 未验证 ← 写进未验证边界
+```
+
+## 与其他 Skill 的关系
+
+**先做**：[api-development](/skills/skills-reference/high/api-development/) 把 HTTP 侧契约和错误语义定下来。
+
+**后做**：[security-guard](/skills/skills-reference/high/security-guard/) 复核这条新暴露面的认证、授权、来源校验和资源上限，[code-review](/skills/skills-reference/high/code-review/) 做一次完整 Review。
+
+**配合**：[satoken-core](/skills/skills-reference/medium/satoken-core/)（握手票据与 Token 生命周期）、[redis-cache](/skills/skills-reference/medium/redis-cache/)（跨实例通道与在线状态租约的键）、[tenant-management](/skills/skills-reference/medium/tenant-management/)（topic 与广播的租户命名空间）。
+
+```text
+api-development（先定 HTTP 侧契约）
+  → websocket-sse（协议选择 → 连接/消息契约 → 重连 → 跨实例）
+      ├─ satoken-core（票据与连接失效）
+      ├─ redis-cache（跨实例通道与在线状态）
+      └─ tenant-management（topic 命名空间）
+            → security-guard（暴露面复核）→ code-review
+```
+
+## 常见坑
+
+**把重连当成"消息一定不丢"。** 重连只恢复通道；能不能补上断线期间的消息，取决于服务端有没有存可回放事件并校验了访问权。WebSocket 重连不会自动补发。
+
+**把易失的发布订阅通道当可靠送达。** 它不提供持久化、确认和回放。要这些就得上持久消息系统。
+
+**在事务提交前推送成功。** 前端已经显示"已提交"，数据库随后回滚。权威状态的通知必须在提交后发布。
+
+**在线状态当强一致数据用。** 它通常只是带 TTL 的近似快照；本节点的连接数不等于集群在线数。
+
+**只在本地开发环境验证。** 缓冲、空闲超时、连接数上限、优雅下线这四项全都由代理和部署配置决定，本地一个都测不到。
+
+**心跳间隔大于代理超时。** 连接会被代理静默掐掉，客户端表现为"莫名断线"。
+
+**广播不看范围。** 一次没加租户条件的广播，会把 A 公司的通知推给 B 公司。
+
+<Aside type="note">
+最终返回的是：协议选择和**排除项**（为什么不用另外几种）、实际改动路径、连接与消息契约、容量与安全策略、验证证据、剩余风险。没在真实浏览器/App、目标网关和多实例环境上验过时，不会声称生产稳定或跨实例送达成功。
+</Aside>
+
+## 下一步
+
+- [api-development](/skills/skills-reference/high/api-development/) - HTTP 侧契约先定下来
+- [satoken-core](/skills/skills-reference/medium/satoken-core/) - 握手票据与 Token 生命周期
+- [redis-cache](/skills/skills-reference/medium/redis-cache/) - 跨实例通道与在线状态的键设计
+- [security-guard](/skills/skills-reference/high/security-guard/) - 长连接暴露面的安全复核
+- [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/) - 定时汇总而非实时推送的场景
+- [code-review](/skills/skills-reference/high/code-review/) - 长连接改动的一次完整 Review
+
+
+
+

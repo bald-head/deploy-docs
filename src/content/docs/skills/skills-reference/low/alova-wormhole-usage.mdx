@@ -1,0 +1,152 @@
+---
+title: Wormhole OpenAPI 客户端生成（alova-wormhole-usage）
+description: 用 @alova/wormhole 从 OpenAPI/Swagger 规范生成 alova 请求函数与 TypeScript 类型，并用插件控制生成结果
+order: 12
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+手写一遍接口函数、再手写一遍参数类型、接口一改又两边都要改——`alova-wormhole-usage` 把这件事交给生成器。它负责 `@alova/wormhole` 这条链路：读 OpenAPI/Swagger 规范，产出 alova 请求函数和 TypeScript 类型，并且用配置和插件决定生成出来的函数叫什么名字、带哪些参数、哪些接口根本不生成。
+
+它管的是"代码怎么来"，不管"代码怎么用"：生成之后的客户端调用在 [alova-client-usage](/skills/skills-reference/low/alova-client-usage/)，服务端与 BFF 在 [alova-server-usage](/skills/skills-reference/low/alova-server-usage/)。如果项目已经或准备迁到新一代生成器 worma，配置与迁移看 [worma-guidelines](/skills/skills-reference/low/worma-guidelines/)。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "后端 Swagger 有了，接口函数别手写了" | 从 OpenAPI 规范生成 API 代码 |
+| "配一下 alova.config" | 生成器配置文件与 `defineConfig` |
+| "生成的函数名是下划线的，改成驼峰" | `rename` 插件或 `handleApi` 改名 |
+| "只生成 user 相关的接口" | `filterApi` 插件或 `handleApi` 过滤 |
+| "接口更新了要重新生成" | `alova gen` 与 `autoUpdate` |
+| "从 Apifox 导入接口文档" | `apifox` 插件 |
+| "生成的响应类型多包了一层" | `handleApi` 调整响应数据类型 |
+| "VSCode 里想直接看接口文档" | 开发工具与 VSCode 扩展 |
+
+触发词来自 `SKILL.md` 的 `triggers`：Wormhole、OpenAPI客户端。正文列出的真实触发场景是：alova OpenAPI/Swagger 配置、`@alova/wormhole`、API 代码生成、开发工具或 VSCode 扩展。
+
+## 什么时候不要用
+
+- **写运行时调用逻辑** → [alova-client-usage](/skills/skills-reference/low/alova-client-usage/)（客户端）或 [alova-server-usage](/skills/skills-reference/low/alova-server-usage/)（服务端）。`not_for` 排除"手动API调用"和"后端实现"。
+- **项目已经在用 worma / 要从 wormhole 迁过去** → [worma-guidelines](/skills/skills-reference/low/worma-guidelines/)。迁移工作流不在本 Skill。
+- **项目不是 alova 项目** → `not_for` 排除"非Alova项目"；生成器归属未定时先过 [tech-decision](/skills/skills-reference/high/tech-decision/)。
+- **要决定 OpenAPI 里的接口该怎么设计** → [api-development](/skills/skills-reference/high/api-development/)。生成器只忠实反映规范，不修正糟糕的契约。
+- **产品定义与验收** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+
+## 前置条件
+
+`SKILL.md` 没有声明 `gates`，但从正文的工作流可以读出真实输入要求：
+
+1. **有可访问的 OpenAPI 输入**。`generator[].input` 要么是 URL（例如 `http://localhost:3000/openapi.json`），要么是本地路径。规范拿不到，后面每一步都无从谈起。
+2. **输出目录已确定**。`generator[].output` 决定生成物落在哪（正文示例是 `src/api`），这会直接进入版本库，路径不能临时拍。
+3. **唯一 TODO 里有当前执行实例独占领取的 `[~]` 项**，且改动不越过它给的目录前缀与独占资源键。生成器会成批写文件，越界的破坏面比手写代码大得多。
+
+边界不清时返回 `scope-change-detected`。本 Skill 不创建/更新 TODO、不改状态、不操作 Git。
+
+## 怎么用
+
+### 1. 走完整条工作流
+
+```plaintext
+安装 → 创建 alova.config → 运行 alova gen → 自定义 alova 实例 → 使用生成的 API
+```
+
+### 2. 建配置文件
+
+支持三种格式：`alova.config.cjs`（CommonJS）、`alova.config.js`（ESModule）、`alova.config.ts`（TypeScript）。用 `alova init` 快速生成模板。
+
+配置主体是 `defineConfig`，核心是 `generator` 数组，每一项可配：
+
+| 配置项 | 作用 | 默认 |
+| --- | --- | --- |
+| `input` | OpenAPI 文件 URL 或本地路径 | 必填 |
+| `output` | 生成代码输出路径 | 必填 |
+| `platform` | 平台类型（如 `swagger`） | 无 |
+| `plugins` | 插件配置 | `[]` |
+| `responseMediaType` | 响应数据媒体类型 | `application/json` |
+| `bodyMediaType` | 请求体媒体类型 | `application/json` |
+| `version` | API 版本 | `auto` |
+| `type` | 代码类型：`auto` / `ts` / `typescript` / `module` / `commonjs` | `auto` |
+| `global` | 全局 API 导出名称 | `Apis` |
+| `globalHost` | 全局挂载对象 | `globalThis` |
+| `handleApi` | 筛选/转换 API 接口的函数 | 无 |
+
+顶层还有 `autoUpdate`：可以是 `true`，也可以是带 `launchEditor` 和 `interval` 的对象。`defineConfig` 也接收同步或异步函数，用于更动态的配置。
+
+### 3. 跑 CLI
+
+`references/CLI.md` 给出真实命令与参数：
+
+```bash
+npx alova gen [-f|--force] [-c|--cwd <path>] [-w|--workspace]
+npx alova init [-t|--type <type>] [-c|--cwd <path>]
+```
+
+`--force` 跳过更新检查强制重新生成；`--cwd` 指定包含 `alova.config` 的工作目录；`--workspace` 是 Monorepo 模式，按 `package.json` workspaces 或 `pnpm-workspace.yaml` 批量生成。
+
+<Aside type="danger">
+生成后的输出目录里，只有入口文件可以改。以 `src/api` 为例：`index` 是入口，可以安全编辑、不会被覆盖；`createApis` 和 `apiDefinitions` 是自动生成的，**不要手工编辑**——下一次 `alova gen` 会把你的修改冲掉。
+</Aside>
+
+### 4. 优先用插件调整生成结果
+
+插件从 `@alova/wormhole/plugin` 导入，放进 `generator[].plugins`：
+
+| 插件 | 说明 |
+| --- | --- |
+| `rename` | 重命名 API 函数与参数名，支持 camelCase / snake_case |
+| `tagModifier` | 修改 API tag 名称 |
+| `payloadModifier` | 添加/删除/修改 API 参数类型 |
+| `filterApi` | 按 URL 和 tag 匹配筛选 API |
+| `apifox` | 自动导入 Apifox 项目 |
+| `importType` | 排除需要自定义的类型 |
+
+### 5. 只在插件覆盖不到时用 handleApi
+
+`handleApi` 在生成每个 API 之前调用，入参 `apiDescriptor` 是 OpenAPI 里该接口的信息（对应规范里的 Operation Object），可以改函数名、tag、参数类型和响应类型；**返回 falsy 值即筛掉这个 API**。正文给了四个真实用法：把 snake_case 的 `operationId` 转成 camelCase、按 URL 改 `tags`、按 path 前缀过滤、把响应类型收敛到 `responses.properties.data`。
+
+<Aside type="caution">
+修改生成数据时优先使用插件，而不是 `handleApi`。插件能简化逻辑，并且按配置顺序执行；`handleApi` 是一个大函数，多个需求塞进去以后顺序和职责都会糊。
+</Aside>
+
+### 6. 按主题查 references
+
+| 需要什么 | 参考文件 |
+| --- | --- |
+| 安装与配置 | `references/INSTALLATION.md` |
+| CLI 用法（`alova gen`、`alova init`） | `references/CLI.md` |
+| 编程式 API（`generate`、`readConfig`） | `references/PROGRAMMATIC_API.md` |
+| 自定义 alova 实例（入口 `index.ts`） | `references/ALOVA_INSTANCE.md` |
+| 故障排查 | `references/TROUBLESHOOTING.md` |
+
+## 与其他 Skill 的关系
+
+`related_skills` 是**扁平列表**，只列了同族两项：
+
+- **同族协作**：[alova-client-usage](/skills/skills-reference/low/alova-client-usage/)（生成物在客户端怎么用）、[alova-server-usage](/skills/skills-reference/low/alova-server-usage/)（服务端怎么用）
+- **同一问题的另一代方案**：[worma-guidelines](/skills/skills-reference/low/worma-guidelines/)。worma 是通用 OpenAPI 生成器，`@alova/wormhole` 的迁移工作流写在那一页。
+- **上游**：[api-development](/skills/skills-reference/high/api-development/) 决定规范里有什么
+- **下游**：一次完整 [code-review](/skills/skills-reference/high/code-review/)
+
+```text
+后端 OpenAPI / Swagger 规范
+        ↓
+alova-wormhole-usage（alova.config + 插件 + alova gen）
+        ↓
+生成物：入口可编辑，createApis / apiDefinitions 不可手改
+        ↓
+alova-client-usage ／ alova-server-usage（真正调用）
+        ↓
+     code-review
+
+迁移到新生成器时： alova-wormhole-usage → worma-guidelines
+```
+
+## 产出与验收
+
+- 仓库里有一份可加载的 `alova.config.cjs` / `.js` / `.ts`，`input` 与 `output` 指向真实来源与真实目录。
+- 输出目录下生成物齐备，入口文件的自定义内容与自动生成文件分离清楚。
+- 命名、tag、参数与响应类型的调整能指到具体插件或 `handleApi` 分支，不是生成完再手改文件。
+- 向 feature owner 返回：路由顺序、binding、修改或只读结论、验证结果、未覆盖边界。
+
+判断真的完成了：删掉自动生成文件后重新跑一次 `alova gen`，配置能加载、输出能完整重建，业务代码不需要跟着手改——如果重跑一次就有人的改动丢了，说明有人编辑了不该编辑的文件。

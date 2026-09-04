@@ -1,0 +1,238 @@
+---
+title: Alova 服务端用法（alova-server-usage）
+description: 在 Node、Bun、Deno 和 BFF 层用 alova 发请求，配好缓存、重试、限流与分布式锁
+order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+同一个 alova，跑在浏览器里和跑在服务器上要操心的完全不是一回事。浏览器只有一个标签页；服务器上是一排进程，于是限流各算一份配额、Token 到期时四个 worker 一起去刷、缓存塞进程内存重启就空、第三方偶发 502 之后没人退避重试。
+
+`alova-server-usage` 管的就是这一层：Node / Bun / Deno 里的出站请求、BFF 聚合、网关转发，以及 `alova/server` 那组包装器怎么叠、状态放哪里才在集群下真的成立。
+
+它不碰浏览器侧的调用（那是 [alova-client-usage](/skills/skills-reference/low/alova-client-usage/)），不生成请求代码（那是 [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) 与 [worma-guidelines](/skills/skills-reference/low/worma-guidelines/)），也不替你决定接口本身长什么样（那是 [api-development](/skills/skills-reference/high/api-development/)）。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "在 Node 里调这个第三方接口" | 服务端出站请求 |
+| "搭一层给前端用的中间层" | BFF 聚合与裁剪 |
+| "做个转发，前端不直连" | 网关、服务间转发 |
+| "对方 Token 老过期，还老是并发去刷" | 单飞刷新与凭据托管 |
+| "人家每秒只让打 10 次" | 出站限速 |
+| "这个接口偶尔 502，重试一下" | 退避重试 |
+| "四个进程各限 10 次，加起来打了 40 次" | 集群共享状态 |
+| "服务端这层缓存到底放内存还是 Redis" | 缓存层级与存储适配器 |
+
+## 什么时候不要用
+
+- **浏览器或跨端里发的请求** → [alova-client-usage](/skills/skills-reference/low/alova-client-usage/)。两侧的策略不一样，混着写最典型的后果是客户端在重试、服务端也在重试，一次故障放大成九次。
+- **手上有 OpenAPI，想直接拿到请求函数和类型** → [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) 或 [worma-guidelines](/skills/skills-reference/low/worma-guidelines/)。
+- **项目里根本没有 alova** → 先去 [tech-decision](/skills/skills-reference/high/tech-decision/) 把请求库定下来。不要为了用某个包装器反过来引一个请求库进来。
+- **要定的是对外接口返回什么、错误码怎么排** → [api-development](/skills/skills-reference/high/api-development/)。
+- **Redis 的键空间、过期与锁语义要整体设计** → [redis-cache](/skills/skills-reference/medium/redis-cache/)。本页只负责把选定的存储接到 alova 上。
+- **要做页面** → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/)。
+
+## 开工前它会先看清三件事
+
+**这个项目真的在用 alova。** 依赖清单里有，才谈得上后面的策略；没有就是选型问题，不是用法问题。
+
+**服务端那个 alova 实例在哪、挂了什么适配器。** 这一条最容易被跳过，代价也最直接：现成实例上通常已经配好 baseURL、鉴权头、响应拦截和错误映射，你另起一个实例发请求，看起来能跑，实际把日志、错误处理和缓存策略全绕开了。
+
+**这次要动的是出站请求，不是对外接口。** 两者经常出现在同一个文件里，改错一侧的表现是"接口通了但契约变了"。
+
+<Aside type="caution">
+它有一条跟客户端那一侧不同的习惯：在回答"这个选项到底怎么配、这个行为的边界在哪"之前，它会先去拉一次 alova 官方文档再回答。alova 仍在快速迭代，凭记忆写出来的选项名很可能属于上一个大版本。客户端那边的做法更省，只在源码不够用时才查——两边别记混。
+</Aside>
+
+## 使用示例
+
+### 场景 1：给第三方接口套上限速和重试
+
+**你的输入**：
+
+```text
+对接的物流查询接口每秒只让打 10 次，超了返回 429，还偶尔 502。
+在我们的中间层挡住，别让它把我们拖垮。
+```
+
+**你会看到它按这个顺序推进**：
+
+```text
+1. 摸清现状   依赖里有 alova ^3 与 @alova/storage-redis
+              src/server/alova.ts 已有实例（baseURL、响应拦截齐全）→ 复用，不新建
+2. 选包装器   限速用令牌桶，失败用指数退避重试
+3. 定状态位置 PM2 起了 4 个进程 → 限速计数必须放共享存储，留在内存等于四份配额
+4. 落代码     在既有实例上包一层，出入参类型跟着 Method 走
+5. 验证       复用 pnpm typecheck；起 2 个进程连打 25 次，看是否只放过 10 次/秒
+```
+
+**产出的调用形态**：
+
+```ts
+// 外层先过限速，内层失败再退避重试
+const queryTrack = (no: string) =>
+  retry(limiter.limit(alovaInstance.Get<TrackResp>(`/track/${no}`)), {
+    retry: 3,
+    backoff: { delay: 500, multiplier: 2 },
+  });
+
+const data = await queryTrack('SF1234567890').send();
+```
+
+**它一起交回来的结论**：
+
+```text
+改动    src/server/logistics.ts    新增 2 个包装
+        src/server/alova.ts        限速器挂上 Redis 存储（+4 行）
+已验证  4 进程下 10 次/秒生效（本地单节点 Redis）
+未验证  生产 Redis 集群模式；连续 502 把重试打光之后的告警路径
+```
+
+<Aside type="danger">
+这一页最值钱的两句话：出站限速器的计数默认待在**当前进程的内存里**，四个 worker 就是四份配额，加起来超四倍；"只让一个进程去刷 Token"这类单飞包装，在没有共享存储时也拦不住别的进程。两个坑的共同点是**本地单进程测试全绿，一上集群就穿**。要么给它们配上共享存储（多机用 Redis，同机多 worker 用文件），要么就别声称限速和单飞已经生效。
+</Aside>
+
+### 场景 2：缓存加上了，但改了价还是旧的
+
+**你的输入**：
+
+```text
+商品详情调用量很大，加缓存。但后台改完价格要立刻看到新价。
+```
+
+**它会给的方案形态**：
+
+```ts
+// 读的一侧声明"我依赖谁"，而不是让每个写操作记住"我要清谁"
+const detail = (id: number) =>
+  alovaInstance.Get<Product>(`/product/${id}`, {
+    cacheFor: { mode: 'memory', expire: 5 * 60 * 1000 },
+    hitSource: ['updateProduct'],
+  });
+
+// 写的一侧只需要有个名字
+const updateProduct = (payload: ProductPatch) =>
+  alovaInstance.Post('/product/update', payload, { name: 'updateProduct' });
+```
+
+```text
+为什么这样写
+  失效关系写在读的那一侧 → 以后新增写接口，改的是那个接口的名字，
+  不用回头翻所有业务分支补一句"记得清缓存"
+
+两档存放位置
+  进程内存    命中最快，重启即空，worker 之间各存一份
+  持久化      跨重启保留；要多进程共享时才需要它
+
+顺带白拿的一件事
+  同一时刻打到同一个 key 的并发请求会自动合并成一次真实请求
+```
+
+<Aside type="tip">
+能用声明式失效就别手动清。手动调一次失效不是不能用，是它会随着接口变多而漏，而漏掉的那一次表现为"后台改完了但前台还是旧数据"，排查成本远高于当初省下的那两行。
+</Aside>
+
+### 场景 3：四个进程一起去刷 Token
+
+**你的输入**：
+
+```text
+第三方 Token 两小时过期。现在 4 个进程同时发现过期、同时去刷，被对方限流了。
+```
+
+**产出形态**：
+
+```ts
+// 同一时刻只放一个进程出去，其余等它的结果
+const refreshToken = atomize(
+  alovaInstance.Post<TokenResp>('/oauth/token', { grant_type: 'client_credentials' }),
+  { key: `${process.env.APP_ENV}:third-party:token`, storage: redisStorage },
+);
+```
+
+```text
+配这一段必须同时确认的三件事
+  key      全局唯一，并且带上环境前缀 —— 否则测试环境和生产会抢同一把锁
+  storage  缺了它就退化成"每个进程各自单飞"，等于没做
+  过期     持锁的进程被 kill 之后锁要能自己过期，否则其余进程会一直等下去
+```
+
+## 服务端这一侧有哪些牌可打
+
+```text
+从 alova/server 拿到的包装器（每个都是"包一层、返回新的请求对象"，可以互相叠）
+  retry         失败后退避重试，次数与倍率可配
+  RateLimiter   令牌桶限速；状态放共享存储才在多进程下成立
+  atomize       同一时刻只放一个进程出去，刷 Token、初始化资源用
+  sendCaptcha   验证码发送的频次约束
+
+状态该放哪，看部署形态
+  只有一个 Node 进程      默认的内存实现就够
+  多机 / 多进程           走 Redis 存储
+  同一台机器多个 worker   走文件存储
+
+发请求这一步本身
+  七种 HTTP 方法都有对应的创建函数；调用它只是造出一个请求对象，并不立刻发出去
+  这个对象可以直接 await，也可以显式 send()
+  想在全局拦截器里区别对待某一类请求（换响应、跳过统一提示）时，给它挂上元数据
+```
+
+<Aside type="note">
+方法齐全是 alova 的能力，不代表你的项目可以随便选。[alova-client-usage](/skills/skills-reference/low/alova-client-usage/) 那一页为本项目定过更窄的方法基线，客户端一改，服务端要跟着对齐 HTTP 方法、请求体类型和路径——以"库支持"为准而不是以"项目约定"为准，是这类改动最常见的返工原因。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游**：[api-development](/skills/skills-reference/high/api-development/) 先把下游契约和错误语义定下来；请求库、共享存储和部署拓扑还没定，先过 [tech-decision](/skills/skills-reference/high/tech-decision/)。
+
+**下游**：一次完整的 [code-review](/skills/skills-reference/high/code-review/)。
+
+**协作**：[alova-client-usage](/skills/skills-reference/low/alova-client-usage/) 管同一契约的客户端那一侧；[redis-cache](/skills/skills-reference/medium/redis-cache/) 管共享存储本身的语义；[error-handler](/skills/skills-reference/medium/error-handler/) 管转发失败之后对外怎么表达。
+
+```text
+tech-decision（部署拓扑与存储）→ api-development（下游契约）
+                                        ↓
+                    alova-server-usage   BFF / 网关 / 服务端包装器
+                                        ↕ 同一契约的两侧
+                    alova-client-usage   浏览器与跨端调用
+                                        ↓
+                                   code-review
+```
+
+## 常见坑
+
+**在单进程里验完就宣布限速做好了。** 这是本页排第一的坑，因为它一定测得过、也一定会在扩容那天出事。判断标准很简单：配额是不是一份，不是"我本地打了 25 次只过了 10 次"。
+
+**为了用某个包装器新建一个 alova 实例。** 现成实例上的 baseURL、鉴权头、响应拦截和错误映射会被整套绕过，而症状往往是几周后某个错误码没被统一处理。
+
+**缓存放进程内存，却指望重启后还在、worker 之间还共享。** 内存那一档不承担这两件事，需要就换存放位置，别靠祈祷。
+
+**响应类型用 `any` 兜住。** 后续的类型推断都是从请求对象上的响应标注传下去的，起点是 `any` 就一路 `any`，最后 IDE 什么也提示不出来。
+
+**凭记忆写配置项名。** alova 的选项在版本之间有过调整，写错一个键往往不报错，只是那条策略静默失效——限速形同虚设就属于这种。
+
+## 最佳实践
+
+- 请求函数集中放在一个目录里，按域名或下游服务分文件，别散落在业务逻辑中间。
+- 不同域名、不同环境各建一个实例，而不是靠一堆条件判断在同一个实例上打补丁。
+- 集群相关的配置要能在代码里指出来。注释里写"上线前记得挂 Redis"等于没挂。
+- 需要完整选项时按主题去查官方文档，让它替你把版本对上。
+
+<Aside type="note">
+怎么算真的完成了：你能回答这三个问题——多进程下限速是不是同一份配额、刷 Token 会不会并发、这条缓存由谁触发失效；并且明确说出哪些结论只在单进程跑过。单机绿灯不等于集群验收。
+</Aside>
+
+## 下一步
+
+- [alova-client-usage](/skills/skills-reference/low/alova-client-usage/) - 同一契约的客户端那一侧
+- [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) - 从 OpenAPI 生成请求函数与类型
+- [redis-cache](/skills/skills-reference/medium/redis-cache/) - 共享存储的键空间、过期与锁语义
+- [api-development](/skills/skills-reference/high/api-development/) - 对外接口契约与错误语义
+- [code-review](/skills/skills-reference/high/code-review/) - 改完做一次回归 Review
+
+
+

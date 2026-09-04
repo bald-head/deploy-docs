@@ -221,12 +221,7 @@ grilling Skill 会一次一个问题追问，直到约 95% 清晰。可查事实
 "需求没问题，继续"
 ```
 
-系统执行：
-
-```bash
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --plan-advance --confirmed
-```
+系统会推进到下一阶段。
 
 ### 第 6 步：UI/UX 设计（如有前端）
 
@@ -283,7 +278,7 @@ node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
 
 **架构输出示例**：
 
-```markdown
+````markdown
 ## technical-plan（技术方案）
 
 ### 系统架构
@@ -344,7 +339,7 @@ CREATE TABLE users (
 - PUT /api/v1/users/profile - 更新个人信息
 - POST /api/v1/users/change-password - 修改密码
 - POST /api/v1/users/upload-avatar - 上传头像
-```
+````
 
 ✅ **检查点**：TODO 文件包含技术方案，推进到 `technical-confirmation`。
 
@@ -741,6 +736,6 @@ git-commit（提交）
 
 项目初始化完成后，继续学习：
 
-- [功能开发流程](/skills/usage/feature-development) - 实施具体功能
-- [TODO 管理](/skills/usage/todo-management) - 管理任务和依赖
-- [代码审查流程](/skills/usage/code-review) - Review 代码质量
+- [功能开发流程](/skills/usage/feature-development/) - 实施具体功能
+- [TODO 管理](/skills/usage/todo-management/) - 管理任务和依赖
+- [代码审查流程](/skills/usage/code-review/) - Review 代码质量

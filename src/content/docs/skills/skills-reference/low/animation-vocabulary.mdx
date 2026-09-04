@@ -1,0 +1,101 @@
+---
+title: 动效术语映射（animation-vocabulary）
+description: 把"想让它有点弹一下"这类口语描述翻译成准确的动效术语，只负责命名，不做设计也不做审查
+order: 20
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+沟通动效最贵的成本不是实现，而是"我们说的是不是同一个东西"。用户说"元素一个个出来"，可能指错峰延迟，也可能指整体时序编排；说"弹一下"，可能是出现时的过冲，也可能是物理弹簧的回弹。`animation-vocabulary` 只做一件事：从你描述的视觉结果、交互方式和运动感觉判断意图，给出最准确的那个术语，再用一句中文解释它。
+
+它是一本会读上下文的词典，不是设计师也不是审查员。它不修改任何文件、不设计动画、不审查代码，也不评价现有实现好不好。拿到术语之后要做什么，是别的 Skill 的事。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "想让它有点弹一下，这个叫什么" | 有明确的感觉描述，缺一个准确名字 |
+| "元素一个个出来的那种效果" | 需要在几个相近概念之间辨析 |
+| "这个动画/动效叫什么术语" | 直接问命名 |
+| "hover 的时候放大，这算什么" | 交互触发加变换的组合命名 |
+| "过渡效果有哪几种说法" | 需要在相近概念之间划清界限 |
+| "我想描述得准一点，好去查文档" | 拿术语当检索入口 |
+
+触发词概括起来是三组：动效、动画、过渡效果。适用场景是：你能描述手感但说不出术语，或者需要区分两个听起来差不多的概念。
+
+<Aside type="tip">
+用它的正确方式是**描述结果**，不是猜术语。"点开之后菜单是从按钮那儿长出来的"比"是不是那个 origin 什么的"更容易被准确映射——它的判断依据是视觉结果和运动感觉，不是关键词匹配。
+</Aside>
+
+## 什么时候不要用
+
+- **要把效果做出来** → [ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/) 或 [frontend-polish](/skills/skills-reference/high/frontend-polish/)。
+- **要检查现有动画、审计整个项目、或找还能加动效的地方** → [review-animations](/skills/skills-reference/low/review-animations/)。审查是它的事，命名才是这里的事。
+- **要决定这个页面该不该有动效、动效方向是什么** → [frontend-design](/skills/skills-reference/high/frontend-design/)。设计决策被明确排除。
+- **要写代码、改配置、动 tokens** → 本 Skill 一行都不改。
+
+不适用范围概括为四条：动效实现、动效审查、新动效设计、代码编写。
+
+## 前置条件
+
+它没有声明 `gates`，也确实没有流程门槛——不依赖仓库、不依赖框架、不依赖已有 TODO。真实的输入要求只有一条：
+
+- **必须有一段可解析的描述**。可以说视觉结果（"从下面滑上来"）、交互方式（"松手之后继续飘一点"）或运动感觉（"有点重"）。只给一个组件名或一句"加个动画"没有可映射的信息量，它会先要求你补描述，而不是随便给一个术语。
+
+它自带一份术语表，覆盖出现与消失、多元素时序、位移与变换、状态与视图之间的过渡、以及与滚动绑定的运动这几类，需要时按需查阅。
+
+## 怎么用
+
+### 1. 你描述效果
+
+不需要任何前置声明，直接说你看到的东西或想要的手感。中文口语就够。
+
+### 2. 它判断意图并给出最准确的术语
+
+它不是拿你的词去表里做字符串匹配，而是先判断意图再选术语。相近概念存在时会补上少量辨析项，但数量有上限——这是刻意设计的，避免一次命名变成一篇术语综述。
+
+### 3. 你拿到术语加一句解释
+
+术语保留英文原文（这样才能直接拿去检索），解释是简体中文，并且会点出它和相邻概念的差别在哪。想深入时再追问，它才展开。
+
+<Aside type="note">
+术语表里没有完全对应的说法时，它会明确告诉你"最接近的是某个术语"，而不是造一个听起来很专业的新词。发明名词会让后续所有检索、文档和沟通失效，所以这条边界的优先级高于"给出一个答案"。
+</Aside>
+
+### 4. 拿术语去做下一件事
+
+术语的用途通常是三种：去查框架文档、和设计与前端对齐说法、写进设计规格或审查 finding 的描述里。本 Skill 到这里就结束。
+
+<Aside type="caution">
+它不设计动画、不审查代码、不修改文件。你说完术语紧接着说"那你顺手改一下"，这是一次 Skill 切换而不是本 Skill 的延伸——实现去 [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/) / [frontend-polish](/skills/skills-reference/high/frontend-polish/)，审查去 [review-animations](/skills/skills-reference/low/review-animations/)。
+</Aside>
+
+## 与其他 Skill 的关系
+
+它的相关列表是平铺的：[review-animations](/skills/skills-reference/low/review-animations/)、[frontend-design](/skills/skills-reference/high/frontend-design/)，没有前置或后续分组。它本身是**独立入口**，任何时候都能插进来，也不会阻塞别的流程。
+
+- **协作**：[review-animations](/skills/skills-reference/low/review-animations/) 写 finding 时需要准确术语；[frontend-design](/skills/skills-reference/high/frontend-design/) 写设计规格的动效部分时需要同一套词。
+- **下游**：[ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)、[frontend-polish](/skills/skills-reference/high/frontend-polish/)——术语确定之后才好写清"要做成什么"。
+
+```text
+用户口语描述
+      ↓
+animation-vocabulary（拿到准确术语）
+      ↓
+frontend-design（决定要不要、要成什么样）
+      ↓
+ui-pc / ui-app / frontend-polish（实现）
+      ↓
+review-animations（只读审查，用同一套术语写 finding）
+```
+
+## 产出与验收
+
+它的产出**只在对话里**：一个术语加一句解释，必要时加少量近义辨析。不写文件、不改 TODO、不产生 finding、不留任何仓库痕迹。
+
+判断真的完成了：
+
+- 你拿到的是一个能直接用于检索的标准英文术语，而不是一段描述性解释；
+- 相近概念之间的差别被说清了，你知道为什么是这个词不是那个词；
+- 术语表里确实没有对应项时，答复里出现的是"最接近"，而不是一个新造的词；
+- 你可以直接把这个术语写进设计规格、issue 或 finding，不需要再加括号解释。

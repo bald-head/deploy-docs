@@ -1,0 +1,148 @@
+---
+title: 经验沉淀（experience-sedimentation）
+description: 在任务验证和回归 Review 都通过之后，把已验证、可复用、边界清晰的经验放进正确的长期位置
+order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+一次任务做完，会剩下三种东西：这次踩的坑、这个项目的事实、真正能跨项目复用的方法。把它们混在一起写进同一个地方，下次谁都不敢用。`experience-sedimentation` 只做一件事——判断**每一条经验应该落在哪里**，然后按门槛决定它到底该不该落。
+
+它是收尾动作，不是过程动作：只执行既有 TODO 的收尾沉淀步骤，不维护任务状态，也不触发 Review。项目专属事实不进这里，统一由 [project-details](/skills/skills-reference/high/project-details/) 写进目标仓库的 `PROJECT-MEMORY.md`。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这次的经验记一下" | 任务收尾，验证和 Review 都过了 |
+| "以后都按这个来" | 有一条真正可复用的方法需要进长期位置 |
+| "这个坑记下来别再踩" | 已验证的失败经验和它的反例 |
+| "整理一下团队知识" | 知识管理：判断已有经验的落点是否正确 |
+| "这个规范应该沉下去" | 项目规范或 Skill/Agent 经验的沉淀 |
+| "团队学习" | 直接点名本 Skill |
+
+`triggers` 登记三个词：`经验沉淀`、`知识管理`、`团队学习`。触发场景在正文中写为"沉淀已验证的 Skill、Agent、项目规范或任务经验"。
+
+## 什么时候不要用
+
+- **要把重复纠正变成跨 Skill 的长期规则** → [skill-evolution](/skills/skills-reference/low/skill-evolution/)。`not_for` 排除"规则创建"：本 Skill 沉淀经验，不制定规则。
+- **要写项目专属的框架、Owner、字段、协议、权限、部署或领域细节** → [project-details](/skills/skills-reference/high/project-details/) 原位更新 `PROJECT-MEMORY.md`。本 Skill 不创建平行文档。
+- **这次只是一个临时改动或一次性过程** → 不进任何长期记忆。`not_for` 排除"临时修改"。
+- **要审查或修改某个 Skill** → [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)；要审查 Agent 协作架构 → [agent-optimizer](/skills/skills-reference/low/agent-optimizer/)。
+- **写代码、定产品** → [universal-development](/skills/skills-reference/low/universal-development/) / [product-manager](/skills/skills-reference/critical/product-manager/)。`not_for` 排除"代码实现"和"产品定义"。
+
+## 前置条件
+
+`gates` 字段为空，但正文的运行约束里有一条**硬**门槛，实际效果等同于 gate：
+
+**只在任务验证和回归 Review 已通过时才沉淀经验。**
+
+为什么存在：没通过验证的"经验"是假设。一旦写进长期位置，它会被后续所有任务当成事实消费，而错误默认比没有默认更贵。
+
+不满足会发生什么：沉淀的内容会在下一个项目里被当作既定结论使用，直到有人再花一次调试成本把它推翻。
+
+<Aside type="caution">
+本 Skill **不触发 Review**。它消费 [code-review](/skills/skills-reference/high/code-review/) 已经完成的结果。如果这一轮还没跑过 Review，正确动作是先去做 Review，而不是先把经验记下来。
+</Aside>
+
+## 三条沉淀门槛
+
+只有**同时**满足以下三条，才允许更新通用 Skill 或 Agent：
+
+| 门槛 | 含义 | 不满足时 |
+| --- | --- | --- |
+| 已验证 | 有真实证据支撑，不是推测或一次巧合 | 留在本轮结论，不进长期位置 |
+| 可复用 | 换一个项目、一个人来也成立 | 判为项目专属，交 `project-details` |
+| 边界清晰 | 说得清适用范围和反例 | 先补边界，否则不落盘 |
+
+一次性过程不进入长期记忆——这是明文规定，不是建议。
+
+## 怎么用
+
+### 1. 确认验证与 Review 已通过
+
+先核对本轮的验证结果和回归 Review 结论。这一步是入口条件，不是形式。
+
+### 2. 按落点判断表分流
+
+SKILL.md 给出的判断表就是路由规则：
+
+```text
+跨项目通用方法   → ~/.claude/skills
+跨项目专业角色   → ~/.claude/agents
+当前项目技术事实 → PROJECT-MEMORY.md（必要时链接既有项目文档）
+当前任务过程和决定 → 当前 TODO 或用户指定的任务记录
+```
+
+四类落点互斥。判不清落点的经验，说明"可复用"和"边界清晰"这两条门槛还没过。
+
+### 3. 项目事实交给 project-details
+
+会影响后续复用和实现判断的**项目专用**框架、Owner、字段、协议、权限、部署和领域细节，一律**原位更新** `PROJECT-MEMORY.md` 的 `Reuse map` 或对应章节，由 [project-details](/skills/skills-reference/high/project-details/) 在 Feature 启动、续作或实现中维护。本 Skill 不在这里重复维护第二份。
+
+<Aside type="danger">
+禁止生成 Context JSON、Evidence JSON 或按 Feature 的记忆副本。目标仓库只有**一份** `PROJECT-MEMORY.md`；任何"每个 Feature 一份记忆快照"的做法都会立刻产生两个事实源，并让后续判断无法确定该信哪个。
+</Aside>
+
+### 4. 每条经验记满六项
+
+落盘时必须记录：
+
+```text
+来源      —— 这条经验从哪次任务、哪个 diff、哪条纠正来
+问题      —— 它解决的是什么具体失败
+验证证据  —— 什么命令、什么结果、什么 Review 结论支撑它
+适用范围  —— 哪些语言、模块、项目类型成立
+反例      —— 什么情况下不适用
+回滚方式  —— 如果这条经验后来被证伪，怎么撤回
+```
+
+缺"反例"和"回滚方式"是最常见的失败形态：经验一旦没有退出路径，就变成了永久性的技术债。
+
+### 5. 更新用户级仓库前先展示摘要
+
+更新用户级 Git 仓库（例如 `~/.claude/skills`、`~/.claude/agents`）前，**先展示变更摘要**，不自动提交或推送。提交与推送由 [git-commit](/skills/skills-reference/high/git-commit/) 在明确授权后执行。
+
+<Aside type="tip">
+优先更新当前 TODO 和项目规范，其次才考虑通用位置。绝大多数"经验"其实只在当前项目成立——先落 `PROJECT-MEMORY.md` 是更安全也更常见的答案。
+</Aside>
+
+## 与其他 Skill 的关系
+
+`related_skills` 扁平列出：[skill-evolution](/skills/skills-reference/low/skill-evolution/)、[project-details](/skills/skills-reference/high/project-details/)。这两个正好是它的两个出口方向。
+
+| 方向 | Skill | 关系 |
+| --- | --- | --- |
+| 上游 | [code-review](/skills/skills-reference/high/code-review/) | 提供"验证与 Review 已通过"这个入口条件 |
+| 出口 | [project-details](/skills/skills-reference/high/project-details/) | 项目专属事实原位写入 `PROJECT-MEMORY.md` |
+| 出口 | [skill-evolution](/skills/skills-reference/low/skill-evolution/) | 需要变成跨 Skill 长期**规则**时转过去 |
+| 出口 | [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) | 经验要落成某个 Skill 的具体修改时转过去 |
+| 协作 | [update-status](/skills/skills-reference/medium/update-status/) | 任务过程与决定回写当前 TODO |
+| 协作 | [git-commit](/skills/skills-reference/high/git-commit/) | 用户级仓库变更的提交与推送授权 |
+
+典型链路：
+
+```text
+任务完成 → 验证通过 → code-review 通过
+  → experience-sedimentation（三条门槛 + 四类落点判断）
+      ├→ 跨项目通用方法   → ~/.claude/skills
+      ├→ 跨项目专业角色   → ~/.claude/agents
+      ├→ 项目技术事实     → project-details → PROJECT-MEMORY.md
+      └→ 本次过程与决定   → 当前 TODO
+  → 需要变成长期跨 Skill 规则时 → skill-evolution
+```
+
+## 产出与验收
+
+完成时仓库和上下文里留下的东西**很少**，这是设计意图：
+
+- `PROJECT-MEMORY.md` 的对应章节被原位更新（不是新增文件、不是追加副本）
+- 或者 `~/.claude/skills` / `~/.claude/agents` 下的既有文件被更新，且已先展示变更摘要
+- 或者当前 TODO 里补上了本次的过程与决定
+- 每条落盘内容都带来源、问题、验证证据、适用范围、反例、回滚方式
+
+判断真的完成了：任何一条新增内容都能回答"证据在哪""什么时候不适用""怎么撤回"这三个问题；同时没有新增任何 Context JSON、Evidence JSON、按 Feature 的记忆副本或平行知识文档。
+
+<Aside type="note">
+中文输出，技术名词保留英文原文。未经授权不执行 Git 操作、不发布、不做破坏性数据动作。
+</Aside>

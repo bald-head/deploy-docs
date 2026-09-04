@@ -1,0 +1,249 @@
+---
+title: 安全防护（security-guard）
+description: 实现认证、授权、输入与输出防护、加密脱敏、限流与安全响应头，并留下可复现的验证证据
+order: 24
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`security-guard` 管的是"能不能进来"这一侧：身份怎么验、授权在哪一层判、输入输出的边界画在哪、敏感数据怎么存怎么返、限流和幂等各自解决什么问题、安全响应头按什么部署拓扑配。
+
+这个领域最容易变成玄学——加了几个注解、配了一堆响应头，然后谁也说不清越权到底还能不能发生。所以它的交付物是**可复现的验证记录**：拿一个越权身份去请求，实际返回什么状态码；把 Redis 停掉，限流是放行还是拒绝。加了注解不算验收。
+
+它不做行级数据过滤，那是 [data-permission](/skills/skills-reference/high/data-permission/) 的事。默认拒绝、分层判断、最小暴露是它的三条底线。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "这个接口要加权限" | 接口授权、资源归属、角色分层判断 |
+| "登录和 Token 怎么做" | 认证、会话、刷新、注销、多端策略 |
+| "参数要校验一下" | 入参校验、注入与反序列化边界 |
+| "手机号要脱敏" / "这字段要加密" | 数据分类、脱敏、加密与密钥管理 |
+| "接口被刷了" / "防重复提交" | 限流、重放，以及真正的业务幂等 |
+| "扫描报了个漏洞" | 漏洞整改与影响面确认 |
+| "跨域报错" / "加安全响应头" | CORS、CSP、HSTS、Cookie 属性 |
+
+## 什么时候不要用
+
+- **行级/字段级数据范围、租户数据隔离** → [data-permission](/skills/skills-reference/high/data-permission/)。这里管"能不能调这个接口"，它管"调进来能看到哪些行"。
+- **接口路径、请求响应结构** → [api-development](/skills/skills-reference/high/api-development/)
+- **一般业务逻辑** → [universal-development](/skills/skills-reference/low/universal-development/) 或 [dev](/skills/skills-reference/high/dev/)
+- **某个认证框架的具体用法** → [satoken-core](/skills/skills-reference/medium/satoken-core/)
+- **注解和切面为什么不生效** → [backend-annotations](/skills/skills-reference/low/backend-annotations/)
+- **主机、网络、集群加固** → 属于运维侧，不在这里
+- **前端按钮显隐** → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)。前端隐藏不是防线。
+
+## 前置条件
+
+三件事定下来之后再动手，否则很容易把控制点加错位置。
+
+**知道要防谁、防什么。** 一个内网管理后台和一个公网开放接口的威胁完全不同，不先说清就只能靠堆注解找安全感。
+
+**知道认证实际发生在哪一层。** 网关、`Filter`、`Interceptor`、框架中间件——落点决定改哪个文件。搞错了就会写出与既有机制双写冲突的代码。
+
+**知道失败时怎么办。** 依赖挂掉、上下文缺失、Token 解析异常时，是拒绝、降级还是放行，得是明确选择。异常路径静默放行是最容易被利用的那种缺口。
+
+<Aside type="caution">
+项目里同时跑着两套登录体系（比如后台用户和 C 端用户）时，要按客户端和用户类型逐条对应，不能混用上下文或 Token 接口。找不到某个自定义工具类的定义时，也不会凭名字生成对它的调用。
+</Aside>
+
+## 使用示例
+
+### 示例 1：给订单详情接口加权限
+
+你说：`订单详情不能被别人看到`
+
+产出会把三层判断分开写，并明确每层失败时返回什么：
+
+```java
+@PreAuthorize("hasAuthority('order:read')")            // ① 接口权限
+@GetMapping("/api/v1/orders/{id}")
+public R<OrderVO> get(@PathVariable Long id) {
+    Principal me = SecurityContexts.current();          // ② 服务端可信主体
+    OrderVO vo = orderQueryService.getVisible(id, me);  // ③ 归属 + 行级范围
+    return R.ok(vo);
+}
+```
+
+```text
+① 有 order:read 权限吗        没有 → 403
+② 这条记录属于当前主体/租户吗  不属于 → 404，不要用 403 泄露"这条记录存在"
+③ 行级范围放行吗              不放行 → 404
+```
+
+只判断"已登录"是最常见的漏洞形态——它挡住了匿名，没挡住横向越权。
+
+### 示例 2：登录与 Token
+
+你说：`做一套账号密码登录，支持 App 和 Web`
+
+产出包括端点清单、口令存储方式和统一的失败文案：
+
+```java
+@Bean
+PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder(12);   // 单向自适应哈希，代价因子随硬件调
+}
+```
+
+```text
+POST /api/v1/auth/login     签发 access + refresh
+POST /api/v1/auth/refresh   轮换 refresh，旧的立即失效
+POST /api/v1/auth/logout    服务端撤销，不只是前端删本地存储
+GET  /api/v1/auth/me        当前主体，权限变化后应立即反映
+```
+
+```json
+{ "code": 401, "message": "账号或密码不正确" }
+```
+
+上面这句文案是刻意统一的：账号不存在和密码错误返回同一句，否则登录接口就成了账号枚举工具。
+
+### 示例 3：限流、防重复、幂等是三件事
+
+你说：`这个下单接口被刷了，加个防重复`
+
+产出会先把三个经常混用的词分开，因为它们的键和失败行为都不同：
+
+```text
+限流    保护资源不被打爆    键 = 身份/IP/接口 + 时间窗    超限 → 429
+防重复  挡住误双击          键 = 身份 + 接口 + 短 TTL      命中 → 提示重复提交
+幂等    保证副作用只一次    键 = 业务语义 + 客户端请求号   命中 → 返回首次结果
+```
+
+真正的资金类接口要的是第三种：
+
+```java
+String key = "pay:idem:%s:%s:%s".formatted(tenantId, orderId, requestId);
+boolean first = Boolean.TRUE.equals(
+        redis.opsForValue().setIfAbsent(key, "PENDING", Duration.ofHours(24)));
+if (!first) {
+    return payResultRepository.findByRequestId(requestId)
+            .map(R::ok)                                       // 复用首次结果
+            .orElseGet(() -> R.fail(409, "请求正在处理中，请稍后重试"));
+}
+```
+
+```json
+{ "code": 429, "message": "操作过于频繁，请 30 秒后再试" }
+```
+
+<Aside type="danger">
+时间窗"防重复"不是业务幂等。资金、订单、外部副作用这些场景，请求号必须由调用方带来并且绑定业务主体，否则十分钟后的一次重试就会再扣一笔钱。
+</Aside>
+
+### 示例 4：脱敏要覆盖全部出口
+
+你说：`手机号要脱敏`
+
+序列化层加注解只是第一步：
+
+```java
+@Sensitive(strategy = SensitiveStrategy.PHONE)
+private String phone;        // 输出 138****8000
+```
+
+真正的产出是一张出口清单，逐个确认，而不是只看接口响应：
+
+```text
+API 响应     ✓ 序列化层已覆盖
+业务日志     ✓ 打印 DTO 而不是 Entity
+Excel 导出   ✗ 常见缺口：导出走的是另一条组装链路
+MQ 消息体    ✗ 常见缺口：payload 直接塞了 Entity
+异常堆栈     ✗ 常见缺口：参数被框架打进 WARN 日志
+第三方回传   ✗ 常见缺口：对账文件里是明文
+```
+
+### 示例 5：CORS 与安全响应头
+
+你说：`前端跨域报错，顺便把安全头补上`
+
+```java
+CorsConfiguration cfg = new CorsConfiguration();
+cfg.setAllowedOrigins(List.of("https://admin.example.com"));   // 带凭据时禁止 *
+cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE"));
+cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
+cfg.setAllowCredentials(true);
+cfg.setMaxAge(1800L);
+```
+
+响应头按实际部署拓扑给，而不是复制一份网上的固定清单——`CSP` 写死之后前端引一个 CDN 就白屏：
+
+```text
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Content-Security-Policy: default-src 'self'; frame-ancestors 'none'
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Set-Cookie: token=...; Secure; HttpOnly; SameSite=Lax; Path=/
+```
+
+<Aside type="caution">
+是否需要 CSRF 防护取决于凭据怎么传：靠 Cookie 自动携带就需要，靠 `Authorization` 头显式携带通常不需要。"是 JSON API 所以不用管"不是一个可靠判断。
+</Aside>
+
+### 示例 6：验收长什么样
+
+最终交付的不是一句"已加固"，而是一张带实际状态码的表：
+
+```text
+匿名访问受保护接口     401  ✓
+普通用户访问管理接口   403  ✓
+跨租户读取他人订单     404  ✓
+过期 Token             401  ✓
+注销后旧 Token         401  ✓
+重放同一请求号         复用首次结果，未产生第二笔  ✓
+并发 10 次扣款         仅 1 次生效                ✓
+Redis 停机时限流       fail-closed，503 且日志有 WARN  ✓
+导出接口是否脱敏       未验证 ← 写进未验证边界
+生产网关响应头         未验证 ← 写进未验证边界
+```
+
+## 与其他 Skill 的关系
+
+**先做**：[architecture-design](/skills/skills-reference/high/architecture-design/) 定信任边界与部署拓扑，[tech-decision](/skills/skills-reference/high/tech-decision/) 定认证方案与回退。
+
+**后做**：[data-permission](/skills/skills-reference/high/data-permission/) 在接口授权之上落行级过滤，[code-review](/skills/skills-reference/high/code-review/) 对本次改动做一次完整 Review。
+
+**配合**：[api-development](/skills/skills-reference/high/api-development/)（接口契约）、[satoken-core](/skills/skills-reference/medium/satoken-core/)（具体认证框架用法）、[backend-annotations](/skills/skills-reference/low/backend-annotations/)（注解接入与切面顺序）、[redis-cache](/skills/skills-reference/medium/redis-cache/)（限流与幂等依赖的键设计）。
+
+```text
+architecture-design → tech-decision → security-guard → data-permission → code-review
+                                            ↕
+                api-development / satoken-core / backend-annotations / redis-cache
+```
+
+典型顺序是：先立起接口授权和信任边界，再由 `data-permission` 在其上做行级过滤，最后统一进一次 `code-review`。
+
+## 常见坑
+
+**只判断"已登录"。** 挡住了匿名，没挡住把 URL 里的 id 改成别人的。资源归属必须单独判。
+
+**用 403 表示"这条记录不属于你"。** 等于确认了这条记录存在。归属类拒绝统一走 404。
+
+**Base64、Hex、掩码当加密。** 它们是编码和展示手段，反过来就还原了。
+
+**给密码做可逆加密。** 口令只做单向自适应哈希，任何"能解回来"的方案都是错的。
+
+**按 IP 限流但没确认代理链。** 前面有一层网关而没配可信代理时，所有请求的来源 IP 都是网关地址，等于全局限流。
+
+**自研"接口加密"当认证用。** 它既不提供身份也不防重放，还常常把密钥写进前端包里。
+
+**依赖挂掉时静默放行。** 这条会在最需要防护的时刻失效，而日志里什么都看不出来。
+
+<Aside type="note">
+只有静态检查和编译通过时，不能声称安全验收完成。越权、跨租户、过期 Token 这类负例必须有可复现的请求记录；生产网关、第三方回调这些没条件验的边界要明确写出来。
+</Aside>
+
+## 下一步
+
+- [data-permission](/skills/skills-reference/high/data-permission/) - 接口放行之后的行级可见性
+- [satoken-core](/skills/skills-reference/medium/satoken-core/) - 具体认证框架的会话与 Token
+- [backend-annotations](/skills/skills-reference/low/backend-annotations/) - 注解为什么没生效
+- [api-development](/skills/skills-reference/high/api-development/) - 接口契约与错误语义
+- [redis-cache](/skills/skills-reference/medium/redis-cache/) - 限流与幂等的键与过期设计
+- [code-review](/skills/skills-reference/high/code-review/) - 安全改动的一次完整 Review
+
+
+
+

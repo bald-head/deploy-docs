@@ -69,8 +69,9 @@ codex
 # 4. 检查客户端配置
 cat ~/.claude/settings.json | grep -A 20 hooks
 
-# 或 Codex
-cat ~/.config/codex/settings.json | grep -A 20 hooks
+# 或 Codex（Hook 与 notify 分成两个文件）
+cat ~/.codex/hooks.json
+grep -A 3 '^notify' ~/.codex/config.toml
 
 # 5. 确认路径正确
 which node
@@ -106,11 +107,8 @@ echo 'AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0' >> ~/.zshrc
 **解决方案**：
 
 ```bash
-# 手动完成任务
-node ~/.agent-workflow/skills/runtime-hooks/scripts/todo-continuation.cjs \
-  --complete USER-LOGIN \
-  --instance <instance-id> \
-  --result "AC-001 -> evidence; Review: pass"
+# 直接说明任务完成
+"USER-LOGIN 已经完成,所有验收条件都通过了"
 
 # 然后提交代码
 git add .
@@ -260,10 +258,7 @@ git log --oneline -10
 cat docs/alice-chen/tasks/todo/project.md
 
 # 2. 如果代码已提交但 TODO 未更新
-node ~/.agent-workflow/skills/runtime-hooks/scripts/todo-continuation.cjs \
-  --complete USER-LOGIN \
-  --instance <instance-id> \
-  --result "已提交"
+"USER-LOGIN 已经完成并提交"
 
 # 3. 如果 TODO 已完成但代码未提交
 git add .
@@ -422,7 +417,7 @@ cat docs/alice-chen/tasks/todo/project.md
 
 ### 症状：项目记忆未加载
 
-**表现**：没有看到 `<project_memory>` 上下文。
+**表现**：每轮请求前看不到项目记忆上下文。
 
 **诊断步骤**：
 
@@ -501,21 +496,31 @@ AGENT_COMMAND_GUARD=0 claude
 
 ### 症状：Git 强制推送被拦截
 
-**原因**：命令防护保护分支。
+**原因**：命令防护按设计拦截会改写或删除远端 ref 的 `git push`。`--force`、`-f`、`--force-with-lease`、`--force-if-includes` 都在拦截范围内，Agent 侧不存在"更安全的写法"可以绕过。
 
 **解决方案**：
 
 ```bash
-# 1. 检查是否真的需要强制推送
+# 1. 先确认是否真的需要改写远端历史
 git log --oneline -10
+git log origin/main --oneline -10
 
-# 2. 如果确实需要
-# 明确确认后手动执行
-git push --force-with-lease  # 更安全
-
-# 3. 或临时禁用
-AGENT_COMMAND_GUARD=0 git push --force
+# 2. 绝大多数情况下用普通 push 就够（本地落后时先 rebase）
+git pull --rebase origin main
+git push origin main
 ```
+
+3. 确实需要强推时，由你在自己的终端里手动执行，Agent 不代为绕过。
+
+4. 只有你确认要长期关闭命令防护时，才在**启动 CLI 之前**导出环境变量并重启会话：
+
+```bash
+export AGENT_COMMAND_GUARD=0   # 必须在启动 Claude Code / Codex 之前导出
+```
+
+<Aside type="caution">
+`AGENT_COMMAND_GUARD=0 git push --force` 这种行内前缀无效：环境变量只作用于 `git` 子进程，而防护运行在 CLI 启动时就已带好环境的 Hook 进程中，命令依然会被拒绝。
+</Aside>
 
 ## 性能问题
 
@@ -570,10 +575,18 @@ git status
 # 2. 暂存 TODO
 git add docs/alice-chen/tasks/todo/project.md
 
-# 3. 重新提交（修正上一次提交）
+# 3a. 上一次提交尚未推送：修正它，再正常 push
 git commit --amend --no-edit
-git push --force-with-lease
+git push origin <当前分支>
+
+# 3b. 上一次提交已经推送：追加一次提交，不要改写远端历史
+git commit -m "docs: 补充 TODO 状态更新"
+git push origin <当前分支>
 ```
+
+<Aside type="note">
+已推送的提交不要用 `--amend` + 强推来"补一下"：强推被命令防护按设计拦截，追加一次提交是唯一不需要改写远端历史的路径。
+</Aside>
 
 ### 症状：远端校验失败
 
@@ -701,6 +714,6 @@ claude
 
 ## 下一步
 
-- [最佳实践](/skills/best-practices) - 避免常见问题
-- [核心概念](/skills/core-concepts) - 理解系统原理
-- [使用指南](/skills/usage) - 学习正确的使用方式
+- [最佳实践](/skills/best-practices/) - 避免常见问题
+- [核心概念](/skills/core-concepts/) - 理解系统原理
+- [使用指南](/skills/usage/) - 学习正确的使用方式

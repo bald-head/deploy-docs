@@ -1,0 +1,173 @@
+---
+title: PPT 制作（pptx）
+description: 从模板或从零创建 PowerPoint，按解包改 XML 的方式编辑，并用渲染图做视觉验收
+order: 34
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+做 PPT 有两件事同时要成立：文件结构不能坏，视觉上不能像随手生成的。`pptx` Skill 两头都管——技术上走"解包 XML、改内容、清理、重新打包"的路线，视觉上带一整套设计约束（配色权重、字体配对、字号档位、留白、以及一串明确禁止的做法），最后要求把成品渲染成图片逐页看过。
+
+`SKILL.md` 的流程边界写明：仅执行既有 TODO 的 PPTX 处理步骤，不维护任务状态。它不替你决定演示要讲什么，但会拦住"白底加一堆项目符号"这种交付。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "做一份 PPT" | 从零创建演示文稿 |
+| "按这个模板生成一版" | 以现有 pptx 为模板，复用其版式 |
+| "改一下第 5 页的内容" | 编辑现有演示文稿 |
+| "这份 PPT 里都写了什么" | 读取与分析既有内容 |
+| "把每页导成图片我看看" | 渲染 QA，逐页视觉检查 |
+| "帮我把幻灯片顺序调一下" | 结构操作：删除、复制、重排 |
+
+触发词来自 `SKILL.md` 的 `triggers`：PPT、演示文稿、幻灯片。触发场景覆盖：创建、读取、编辑和验证 PowerPoint 演示文稿。
+
+## 什么时候不要用
+
+- **写代码、改代码** → [universal-development](/skills/skills-reference/low/universal-development/)。
+- **产品定义与验收** → [product-manager](/skills/skills-reference/critical/product-manager/)。汇报材料不能反向定义需求。
+- **技术文档、开发过程记录** → [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/)。
+- **用户手册、需要共创的长文** → [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)。
+- **Word 文档** → [docx](/skills/skills-reference/low/docx/)；**PDF** → [pdf](/skills/skills-reference/low/pdf/)；**Excel** → [xlsx](/skills/skills-reference/low/xlsx/)。
+- **静态海报、单张视觉设计** → [canvas-design](/skills/skills-reference/low/canvas-design/)。
+
+`not_for` 明确排除：代码实现、产品定义、技术文档、用户手册。
+
+## 前置条件
+
+frontmatter 没有 `gates`，落盘规则和 QA 工具链构成实际门槛：
+
+1. **输出路径先定**。用户指定则直接用；未指定时沿用仓库文档目录约定；两者都没有时，首次写文件前询问文档存储前缀，最终文件保存到 `<doc-prefix>/pptx/`。
+2. **`$DOC_PREFIX` 要有真实值**。命令示例中的 `$DOC_PREFIX` 表示已确认的前缀，执行前替换或设置同名环境变量。
+3. **原件保持原位**。渲染图、解包目录和 QA 中间文件都放临时目录。
+4. **渲染 QA 需要 LibreOffice 与 Poppler**。`soffice.py` 转 PDF、`pdftoppm` 转图，缺任何一个都做不了视觉验收，此时只能声明未做渲染确认。
+
+不满足会发生什么：模板文件被就地覆盖、临时渲染图散落在仓库里，或者交付了一份从没被人看过实际排版的 PPT。
+
+## 怎么用
+
+### 1. 先选路线
+
+| 任务 | 方法 |
+| --- | --- |
+| 读取/分析内容 | `python -m markitdown presentation.pptx` |
+| 从模板编辑或生成 | 读 `editing.md` |
+| 从零创建 | 读 `pptxgenjs.md` |
+
+### 2. 模板路线的七步
+
+`editing.md` 给的是完整顺序，其中第 4 步和第 5 步的先后关系是硬要求：
+
+```bash
+# 1 看清模板有哪些版式（缩略图网格 + 文本内容）
+python scripts/thumbnail.py template.pptx
+python -m markitdown template.pptx
+
+# 2 规划每段内容用哪张模板页（刻意选多样版式）
+
+# 3 解包
+python scripts/office/unpack.py template.pptx unpacked/
+
+# 4 结构操作：删除、复制、重排（改 <p:sldIdLst>；复制用 add_slide.py）
+python scripts/add_slide.py unpacked/ <source>
+
+# 5 编辑内容：改各 slide{N}.xml 的文本
+
+# 6 清理孤儿文件
+python scripts/clean.py unpacked/
+
+# 7 打包（带 --original 保留原包未改动部分）
+python scripts/office/pack.py unpacked/ "$DOC_PREFIX/pptx/output.pptx" --original template.pptx
+```
+
+<Aside type="caution">
+所有结构变更（删除、复制、重排幻灯片）必须在第 5 步编辑内容之前全部完成。顺序反过来会让已经写好的内容跟着结构调整错位。`editing.md` 还提示：内容编辑阶段各页是独立 XML 文件，可以并行处理；结构阶段不要并行。
+</Aside>
+
+### 3. 设计约束不是建议
+
+`SKILL.md` 用了整节篇幅讲这件事，核心是"别做无聊的幻灯片"：
+
+- **配色要贴主题**：一种颜色占 60–70% 视觉权重，1–2 个辅色，一个锐利强调色；不要平均分配，不要默认蓝色。
+- **明暗结构**：标题页与结论页深底、内容页浅底（三明治结构），或者全程深色走高级感。
+- **一个视觉母题贯穿全篇**：圆角图框、彩色圆形里的图标、单侧粗边框——选一个并重复。
+
+`SKILL.md` 里给出的备选配色（十套，可直接取用）：
+
+| 主题 | Primary | Secondary | Accent |
+| --- | --- | --- | --- |
+| Midnight Executive | `1E2761` | `CADCFC` | `FFFFFF` |
+| Forest & Moss | `2C5F2D` | `97BC62` | `F5F5F5` |
+| Coral Energy | `F96167` | `F9E795` | `2F3C7E` |
+| Warm Terracotta | `B85042` | `E7E8D1` | `A7BEAE` |
+| Ocean Gradient | `065A82` | `1C7293` | `21295C` |
+| Charcoal Minimal | `36454F` | `F2F2F2` | `212121` |
+| Teal Trust | `028090` | `00A896` | `02C39A` |
+| Berry & Cream | `6D2E46` | `A26769` | `ECE2D0` |
+| Sage Calm | `84B59F` | `69A297` | `50808E` |
+| Cherry Bold | `990011` | `FCF6F5` | `2F3C7E` |
+
+排版档位：标题 36–44pt 加粗、节标题 20–24pt 加粗、正文 14–16pt、图注 10–12pt 弱化；页边距至少 0.5 英寸，内容块之间 0.3–0.5 英寸并保持一致。字体配对从 `SKILL.md` 的表里选（Georgia + Calibri、Arial Black + Arial、Cambria + Calibri 等），不要默认 Arial 一种字体走完。
+
+明确禁止的做法：每页重复同一版式、正文居中（只有标题可以居中）、标题与正文字号差距不够、默认蓝色、间距随机混用、只美化一页其余留白、纯文字页、忘记文本框内边距导致对不齐、低对比度元素，以及**标题下方的装饰性下划线**——`SKILL.md` 把它列为 AI 生成幻灯片的典型特征，要求改用留白或背景色区隔。
+
+### 4. 渲染成图做视觉 QA
+
+```bash
+python scripts/office/soffice.py --headless --convert-to pdf --outdir /tmp/pptx-qa "$DOC_PREFIX/pptx/output.pptx"
+pdftoppm -jpeg -r 150 /tmp/pptx-qa/output.pdf /tmp/pptx-qa/slide
+```
+
+产出 `slide-01.jpg`、`slide-02.jpg` 等。修完某几页后只重渲染那几页：
+
+```bash
+pdftoppm -jpeg -r 150 -f N -l N /tmp/pptx-qa/output.pdf /tmp/pptx-qa/slide-fixed
+```
+
+<Aside type="tip">
+`scripts/thumbnail.py input.pptx [output_prefix] [--cols N]` 会把所有页拼成一张缩略图网格，并用 XML 文件名（例如 `slide1.xml`）标注每一格，隐藏页用占位图案表示。分析模板和自查成品版式一致性时，它比逐页看 JPG 快得多。
+</Aside>
+
+### 5. 真实可用的脚本与参考
+
+| 资源 | 调用方式或用途 |
+| --- | --- |
+| `editing.md` | 模板路线完整流程与脚本说明 |
+| `pptxgenjs.md` | 从零创建演示文稿的库用法 |
+| `scripts/thumbnail.py` | `python scripts/thumbnail.py input.pptx [output_prefix] [--cols N]` |
+| `scripts/add_slide.py` | `python scripts/add_slide.py <unpacked_dir> <source>`（复制页或按版式新建） |
+| `scripts/clean.py` | `python scripts/clean.py <unpacked_dir>`（清理孤儿文件） |
+| `scripts/office/unpack.py` | `python scripts/office/unpack.py <office_file> <output_dir>` |
+| `scripts/office/pack.py` | `python scripts/office/pack.py <input_directory> <output_file> [--original <file>] [--validate true\|false]` |
+| `scripts/office/validate.py` | `python scripts/office/validate.py <path> [--auto-repair]`，XSD 结构校验 |
+| `scripts/office/soffice.py` | LibreOffice 命令包装，用于转 PDF 等格式转换 |
+
+<Aside type="danger">
+不要把输出写回模板文件。原始演示文稿保持原位，输出到 `<doc-prefix>/pptx/` 或用户指定路径；解包目录和渲染图留在临时目录。模板一旦被覆盖，后续所有基于它的生成都会带上这次的内容。
+</Aside>
+
+## 与其他 Skill 的关系
+
+`SKILL.md` 的 `related_skills` 是不分方向的列表：[docx](/skills/skills-reference/low/docx/)、[pdf](/skills/skills-reference/low/pdf/)。按实际链路：
+
+- **上游**：讲什么由内容类 Skill 定稿——[internal-comms](/skills/skills-reference/low/internal-comms/)、[doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)、[product-manager](/skills/skills-reference/critical/product-manager/)（对外汇报材料的口径）。
+- **同族**：[docx](/skills/skills-reference/low/docx/)、[pdf](/skills/skills-reference/low/pdf/)、[xlsx](/skills/skills-reference/low/xlsx/) 共用 `scripts/office/` 这套解包打包校验工具。
+- **下游**：需要发出去的只读版本时转 [pdf](/skills/skills-reference/low/pdf/)；图表与数据可视化素材来自 [xlsx](/skills/skills-reference/low/xlsx/) 的结果。
+
+```text
+internal-comms / doc-coauthoring（内容与口径）
+        ↓
+pptx（模板路线或从零创建 → clean → pack → 渲染 QA）
+        ↓
+pdf（只读交付版本）
+```
+
+## 产出与验收
+
+- **主产物**：`.pptx` 文件，位于用户指定路径或确认过前缀的 `<doc-prefix>/pptx/`；模板与原件未被改动。
+- **结构可验证**：`scripts/office/pack.py` 打包时带校验，必要时用 `scripts/office/validate.py` 单独跑一次。
+- **视觉已确认**：有渲染出来的逐页图片，且检查过配色权重、字号对比、版式多样性、留白与对比度。
+- **临时文件有交代**：`/tmp` 下的 QA 目录与解包目录说明保留或清理。
+
+判断真的完成了：每一页都有除文字之外的视觉元素；相邻页版式不重复；标题与正文字号差距明显；没有装饰性标题下划线；并且这些结论是看着渲染图得出的，而不是从 XML 推的。没有 LibreOffice 或 Poppler 时，只能报告结构校验通过，同时写明未做视觉验收。

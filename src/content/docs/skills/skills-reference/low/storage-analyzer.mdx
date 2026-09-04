@@ -1,0 +1,224 @@
+---
+title: 本机存储分析（storage-analyzer）
+description: 对本机磁盘做一次只读扫描，产出可交互的 HTML 报告和分级清理建议，删除动作始终留给用户
+order: 37
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"磁盘满了"这件事，找出占空间的目录只是第一步，难的是判断每个目录能不能动。一个 97GB 的 UUID 命名目录，可能是能随手删的构建缓存，也可能是某个应用唯一存放数据的地方。
+
+这个 Skill 走的是四步：只读扫一遍、按能不能动分级、生成一个可交互的 HTML 报告、在对话里给一段结论。报告不是体积排行榜，而是一份决策清单——只列那些"存在要不要动它这个问题"的项。天天在用的应用、系统本身、以及一大堆几百 KB 的碎文件不进清单，它们归到磁盘条上那段蓝色的"系统及其他"里。
+
+<Aside type="danger">
+删除命令只展示，不代跑。报告里的命令是给你自己在终端里确认后执行的；即使在对话里说"帮我删了吧"，也会先停下来确认一次。网页上的"移到废纸篓"按钮同理——那是你点的，浏览器还会再弹一次确认。
+</Aside>
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "磁盘不够了，看看什么占的" | 全盘只读扫描，加占用最大的几项及其性质 |
+| "帮我出个空间占用报告" | 一个可交互的 HTML 页面，也可以存成静态文件 |
+| "这个 97GB 的目录是什么" | 追查到具体属于哪个应用、装的是什么 |
+| "哪些缓存能清" | 分成能放心清、要自己看、别手删三档 |
+| "清理缓存" | 可复制的命令，附带要先退出哪些进程 |
+| "Mac 空间怎么优化" | 长期建议：定期清什么、什么该归档出去 |
+
+## 什么时候不要用
+
+- 要真的执行删除 → 这一步不自动做。命令给你，你自己确认后跑。
+- 服务器或容器的磁盘 → [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/)。这里只看本机。
+- 其实是卡顿、CPU 或内存问题 → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。磁盘只是看起来相关。
+- 要把大文件迁到远端并管好访问 → [file-oss-management](/skills/skills-reference/medium/file-oss-management/)。
+- 数据库占用和索引膨胀 → [database-design](/skills/skills-reference/high/database-design/)。
+
+## 前置条件
+
+目标是本机磁盘，这一轮只做只读扫描和出报告，而且你接受"删除命令只展示"这个前提。第三条最好一开始就讲清楚——如果你真正想要的是"你直接帮我清干净"，那报告交出来了但期望没对上。
+
+脚本只用 Python 3 标准库，不装任何第三方包；macOS 自带的 `python3`、`du`、`diskutil`、`osascript` 就够了。扫哪些盘、报告放哪如果不明确，先用 [grilling](/skills/skills-reference/medium/grilling/) 问清楚再开始。
+
+## 使用示例
+
+### 示例 1：扫一遍，看看输出什么
+
+你说："磁盘只剩 12G 了，看看什么占的。"
+
+```bash
+python3 scripts/scan.py > /tmp/storage_scan.json
+```
+
+扫描会跑一两分钟。出来的 JSON 分两块——机器和磁盘信息，以及按组统计的子目录体积（已经降序排好，小于 50MB 的不列）：
+
+```json
+{
+  "system": {
+    "os": "darwin",
+    "disk_name": "Macintosh HD",
+    "total": "994.7 GB", "used": "982.1 GB", "free": "12.6 GB",
+    "disks": [{ "name": "Macintosh HD", "used": "982.1 GB" }]
+  },
+  "groups": {
+    "containers": [
+      { "path": "~/Library/Containers/A1B2-…-9F0", "size_gb": 97.4 },
+      { "path": "~/Library/Containers/com.docker.docker", "size_gb": 61.2 }
+    ],
+    "dev_caches": [
+      { "path": "~/Library/Developer/Xcode/DerivedData", "size_gb": 43.8 },
+      { "path": "~/.cache/uv", "size_gb": 11.3 },
+      { "path": "~/Library/pnpm/store", "size_gb": 8.9 }
+    ],
+    "denied": ["/Library/Application Support/MobileSync"]
+  }
+}
+```
+
+<Aside type="caution">
+读不到的目录会落进 `denied`。这些必须在报告里列出来，并且说明可能漏掉多少体量——否则看报告的人会以为"已用 982G 但只找到 640G"是工具算错了，而实际原因是没给权限。所有"可释放空间"都是估算值，报告里要这么说。
+</Aside>
+
+### 示例 2：追查一个看不懂的大目录
+
+`~/Library/Containers/A1B2-…-9F0` 占了 97GB，名字看不出是谁的：
+
+```bash
+plutil -p ~/Library/Containers/A1B2-*-9F0/.com.apple.containermanager.metadata.plist \
+  | grep -i identifier
+du -sh ~/Library/Containers/A1B2-*-9F0/Data/Library/*  | sort -rh | head -5
+```
+
+```text
+"MCMMetadataIdentifier" => "com.apple.iMovie"
+ 94G  Data/Library/Application Support/iMovie
+ 1.2G Data/Library/Caches
+```
+
+结论写成具体的：这是 iMovie 的项目库，里面是渲染中间产物和原始素材。这类目录不进"能放心清"那一档——里面有用户自己的东西。
+
+### 示例 3：报告里的卡片长什么样
+
+**能放心清的那一档**，给出体积、要先退出什么、以及可以直接复制的命令：
+
+```text
+Xcode DerivedData   约 43.8 GB
+  编译中间产物，下次构建会重新生成，删掉不影响任何项目源码。
+  先退出 Xcode，否则删了会立刻被重建。
+
+  rm -rf ~/Library/Developer/Xcode/DerivedData/*
+```
+
+```text
+uv / pnpm 包缓存   约 20.2 GB
+  下载过的包快照。删掉之后首次安装会慢一些，之后照常。
+
+  uv cache clean
+  pnpm store prune
+```
+
+**要自己看的那一档**，不给删除命令，给的是内容画像和几条处置路径：
+
+```text
+iMovie 项目库   约 94 GB
+  里面是剪辑项目、渲染中间文件和导入的原始素材，混在一个包里。
+  · 在 iMovie 里逐个项目看，删掉已经导出成片的
+  · 导出成片后把项目整体归档到外置硬盘
+  · 用「访达」打开这个目录自己挑（内部结构不适合手动取舍）
+  风险：手动删包内文件会让 iMovie 打不开对应项目。
+
+  [ 在访达中打开 ]
+```
+
+**别手删的那一档**，说清为什么，并给出正确的卸载路径：
+
+```text
+Docker Desktop 数据   约 61.2 GB
+  这是 Docker 的虚拟磁盘镜像，里面是镜像层和容器卷。
+  直接删这个文件会让 Docker 无法启动，而且不会真正释放你以为的空间。
+  正确做法：打开 Docker Desktop → Troubleshoot → Clean / Purge data，
+  或在终端 docker system prune -a（会删掉所有未使用镜像）。
+
+  [ 在访达中打开 ]
+```
+
+差别在于按钮权限：第一档才有"移到废纸篓"，第二档只有"在访达中打开"，第三档连打开都是为了让你去用应用自带的卸载入口。
+
+### 示例 4：打开报告
+
+默认起一个本地服务，页面上的按钮才能真正生效：
+
+```bash
+python3 scripts/server.py /tmp/storage_analysis.json
+# 监听 127.0.0.1 随机端口 + 随机 token，自动开浏览器，Ctrl+C 停
+```
+
+只要一份能存档或发给别人的文件时，用静态模式——用 `file://` 打开的页面碰不到文件系统，所以它没有删除按钮：
+
+```bash
+python3 scripts/build_report.py /tmp/storage_analysis.json ~/Desktop/storage-report.html
+open ~/Desktop/storage-report.html
+```
+
+网页上没看到按钮，通常只有两个原因：开的是静态报告；或者那一项没提供可删的具体路径。
+
+### 示例 5：对话里的那段摘要
+
+报告出来之后，不需要你先去读网页才知道结论：
+
+```text
+可释放大约 64 GB（估算）。
+
+最值得先动的三项：
+1. Xcode DerivedData 43.8 GB —— 退出 Xcode 后直接清，无风险
+2. 包缓存 20.2 GB —— uv / pnpm 各一条命令
+3. 下载文件夹里 8.4 GB 的安装包 —— 都是已安装应用的 dmg
+
+风险最高的一项：Docker 数据 61.2 GB。别删那个镜像文件，走
+Docker Desktop 里的 Clean，否则 Docker 起不来。
+
+另外 /Library/Application Support/MobileSync 没有读取权限，
+那里可能还有 iPhone 备份，体量未知。
+
+详细清单和可复制命令在报告页面里。
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [grilling](/skills/skills-reference/medium/grilling/) | 扫描范围或报告落点不清楚时 |
+| 后续 | [performance-doctor](/skills/skills-reference/medium/performance-doctor/) | 清完还是慢，继续查运行时 |
+| 协作 | [file-oss-management](/skills/skills-reference/medium/file-oss-management/) | 大文件要迁到远端时 |
+| 替代 | [performance-doctor](/skills/skills-reference/medium/performance-doctor/) | 问题其实不在磁盘 |
+| 边界外 | [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/) | 服务器和容器磁盘 |
+
+```text
+grilling（范围不清时）
+    ↓
+storage-analyzer（只读扫描 → 分级 → HTML 报告 → 对话摘要）
+    ↓
+performance-doctor（其实是运行时）   file-oss-management（大文件外迁）
+```
+
+## 常见坑
+
+**把没有清理决策的项也列进清单。**  系统文件、APFS 快照占了几十 G，但你并不会去动它们。列进去只会稀释真正需要看的那几项。
+
+**给了"能清"的结论却没说要先退出什么进程。**  应用还在跑的时候删缓存，它会立刻重建；更糟的情况是删到一半应用崩了。
+
+**权限被拒的目录不提。**  报告里的总数和系统显示的对不上，看的人第一反应是"这工具不准"，而不是"我该去开权限"。
+
+**报告写成排查日记。**  "我发现""需要注意"这类话暴露的是过程。直接说这是什么结构、为什么不建议手删、想精细处理该去哪。
+
+**把估算值说成准确值。**  写"约 14 GB"就够了，"约"已经表达了估算的意思。
+
+## 下一步
+
+- [performance-doctor](/skills/skills-reference/medium/performance-doctor/) — 清完还是慢时继续查
+- [file-oss-management](/skills/skills-reference/medium/file-oss-management/) — 大文件迁到对象存储
+- [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/) — 服务器磁盘运维
+- [grilling](/skills/skills-reference/medium/grilling/) — 范围不清时先问清
+- [database-design](/skills/skills-reference/high/database-design/) — 数据库侧的占用
+
+
+

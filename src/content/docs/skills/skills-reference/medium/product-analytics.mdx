@@ -1,0 +1,247 @@
+---
+title: 产品数据分析（product-analytics）
+description: 定义可追溯的产品指标口径，并分析漏斗、留存、同期群与 A/B 实验数据，给决策提供有不确定性标注的结论
+order: 40
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"这个功能有效果吗"——回答这类问题最常见的失败不是算错，而是算出了一个没人会拿它做决定的数字。所以顺序要反过来：先问清楚谁要用这个结论、用它决定什么，再倒推该看哪个指标、口径怎么划、哪些数字用来兜底，最后才动手写查询。
+
+它固定的一件事是可追溯：每个数字都要能指回具体的表、字段、时间窗和去重规则。没真跑过的结果不写成结论。
+
+它不决定产品要做什么，也不负责把埋点和看板做上线；不猜表结构，不动生产数据，不把相关性说成因果。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "帮我定义一下这个指标" | 一份能直接拿去写查询的口径，含分母和排除项 |
+| "这个漏斗哪一步掉得最多" | 各步转化率、绝对流失量，以及步骤定义的说明 |
+| "留存怎么样" | 同期群表格，标明进入事件、回访事件和成熟窗口 |
+| "这个实验能不能推全" | 效应量、置信区间、兜底指标检查，以及带条件的建议 |
+| "帮我设计个实验" | 主指标、随机化单位、样本量与最小可检测效应 |
+| "分析下用户行为" | 事件口径、去重规则、迟到数据的处理方式 |
+
+## 什么时候不要用
+
+- 产品目标和验收还没收敛 → [product-manager](/skills/skills-reference/critical/product-manager/)。方向本身没定的时候，先去定方向。
+- 要把埋点、看板、实验开关真正做上线 → [product-execution](/skills/skills-reference/high/product-execution/) 与 [project-manager](/skills/skills-reference/high/project-manager/)。这里只给口径和统计约束。
+- 要写查询服务或数据管道的代码 → 先过 [tech-decision](/skills/skills-reference/high/tech-decision/) 比一下复用还是新建，再交给实现类 Skill。
+- 要设计测试方案 → [test-strategy](/skills/skills-reference/medium/test-strategy/)。
+- 还在验证机会本身值不值得做 → [product-discovery](/skills/skills-reference/high/product-discovery/)。
+
+## 前置条件
+
+得有一个具体的业务问题，得有人打算拿结论做决定，数据源和分析目标也得清楚。这三条都在防同一件事：分析退化成"先跑个数看看"。
+
+表结构没确认时它不会编表名——只给带占位的查询骨架，加一份待确认清单。
+
+<Aside type="caution">
+碰到生产或准生产数据，先把这几件事确认掉：为什么要查、有没有权限、只取哪几个字段、要不要脱敏或只出聚合值、扫描量上限、结果存在哪。默认只读。
+</Aside>
+
+## 使用示例
+
+### 示例 1：定义一个指标
+
+你说："给'活跃创作者'定个指标，我们要拿它看内容侧健康度。"
+
+先确认它要服务什么决定，再落成口径。产出是这样一份东西：
+
+```markdown
+## 活跃创作者数（WAC）
+
+含义    自然周内至少成功发布一篇内容的注册用户数
+公式    分子 = distinct user_id；分母无（这是绝对量，不是比率）
+总体    注册满 1 天的非内部账号
+排除    员工账号（is_staff = 1）、被封禁账号、自动化导入的内容
+时间窗  自然周，周一 00:00 到周日 24:00，Asia/Shanghai
+去重    按 user_id 去重；同一人一周发 10 篇也只算 1
+数据源  events.content_published（客户端上报，服务端二次确认）
+负责人  内容组，每周一 09:00 刷新
+兜底    发布失败率 < 2%，人均发布篇数不下降超过 10%
+```
+
+最后一行是最容易被跳过的一项。只看创作者数会有一个很自然的作弊路径——把发布门槛降到极低，人数上去了，内容质量掉了。兜底指标就是防这个的。
+
+<Aside type="tip">
+这类"最能代表用户拿到价值"的核心指标，不会自动等于收入、日活或页面浏览量。这三个更多是结果，不是价值本身。
+</Aside>
+
+### 示例 2：漏斗，先对齐步骤定义
+
+你说："发布漏斗哪一步掉得最多？"
+
+写查询之前先把每一步是什么事件、分母是谁说清，否则算出来的数字没法比：
+
+```sql
+-- 步骤定义：进入编辑器 → 保存草稿 → 点发布 → 发布成功
+-- 分母：当周进入过编辑器的用户；同一用户多次尝试只取首次会话
+with base as (
+  select user_id, min(event_time) as first_enter
+    from events
+   where event_name = 'editor_opened'
+     and event_time >= :week_start and event_time < :week_end
+   group by user_id
+),
+step as (
+  select b.user_id,
+         max(case when e.event_name = 'draft_saved'      then 1 else 0 end) as s2,
+         max(case when e.event_name = 'publish_clicked'  then 1 else 0 end) as s3,
+         max(case when e.event_name = 'content_published' then 1 else 0 end) as s4
+    from base b
+    join events e
+      on e.user_id = b.user_id
+     and e.event_time between b.first_enter and b.first_enter + interval '24' hour
+   group by b.user_id
+)
+select count(*) as s1, sum(s2) as s2, sum(s3) as s3, sum(s4) as s4 from step;
+```
+
+```text
+步骤            人数     相对上一步    绝对流失
+进入编辑器      12,480      —             —
+保存草稿         8,190     65.6%       4,290
+点击发布         7,905     96.5%         285
+发布成功         6,102     77.2%       1,803
+```
+
+结论落在两处：编辑器到草稿掉了三分之一（4290 人），是最大的一段；但发布成功那一步掉 1803 人更值得先查——用户已经明确表达了意图，失败原因大概率在技术侧，而且这一段可以从错误日志直接对上。
+
+### 示例 3：留存，说清是哪一种留存
+
+"留存"至少有四种意思，混着用会得出互相矛盾的结论：按注册周分组看回访、按最近活跃滚动看、看收入是否延续、看某个功能是否被持续使用。下面这个是第一种：
+
+```sql
+-- 进入事件：注册；回访事件：任意一次 content_published
+-- 周期：自然周；成熟窗口：第 4 周需要等满 28 天后才可读
+select date_trunc('week', u.registered_at)                        as cohort_week,
+       count(distinct u.user_id)                                  as cohort_size,
+       count(distinct case when w.week_offset = 1 then u.user_id end) as w1,
+       count(distinct case when w.week_offset = 2 then u.user_id end) as w2,
+       count(distinct case when w.week_offset = 4 then u.user_id end) as w4
+  from users u
+  left join weekly_active w on w.user_id = u.user_id
+ where u.registered_at >= :from and u.is_staff = 0
+ group by 1 order by 1;
+```
+
+```text
+注册周      规模    W1      W2      W4
+2026-01-05  1,204   41.2%   28.7%   19.4%
+2026-01-12  1,388   43.9%   30.1%   20.8%
+2026-01-19  1,551   45.7%   31.6%   （未成熟）
+2026-01-26  2,904   38.4%   （未成熟）（未成熟）
+```
+
+未成熟的格子留空，不要拿一个刚过三天的数字去比。1-26 那一周规模翻倍而 W1 掉了 7 个点，第一件要查的不是产品体验，而是这批人从哪来的——渠道换了的话，两批人本来就不可比。
+
+### 示例 4：实验结论
+
+你说："新的发布引导实验跑完了，能推全吗？"
+
+```text
+实验     publish_guide_v2      运行 2026-02-03 至 2026-02-24（3 个完整周）
+随机化   按 user_id 分流，50/50
+主指标   周内发布成功率
+         对照 48.6%   实验 52.1%
+         绝对差 +3.5pp，相对提升 +7.2%
+         95% 置信区间 [+1.8pp, +5.2pp]
+分流检查 对照 24,881 / 实验 24,903，比例偏差 0.04%，正常
+
+兜底指标
+  人均发布篇数     1.42 → 1.44     未下降
+  内容举报率       0.31% → 0.29%   未上升
+  次日留存         41.2% → 41.0%   在噪声范围内
+
+建议：可以推全，但附两个条件
+  1. 先只推给注册满 7 天的用户——新注册用户样本占比不足，这一段区间很宽
+  2. 推全后头两周盯举报率，超过 0.4% 就回退
+```
+
+<Aside type="danger">
+不要在没算过的时候给出 p 值或置信区间，也不要分群之后挑显著的那一段说事而不提做了多少次比较。样本量要按指标的实际分布、基线和最小可检测效应去算，不能套一个连统计功效都没有的简化公式。
+</Aside>
+
+### 示例 5：表结构还不知道的时候
+
+你说："看下付费转化率。"（还没给库表）
+
+不会编一个 `orders` 表出来，而是给骨架加清单：
+
+```sql
+-- 待替换：{{事件表}} {{用户表}} {{支付成功事件名}}
+select count(distinct case when e.event_name = :pay_success then e.user_id end) * 1.0
+       / nullif(count(distinct v.user_id), 0) as paid_conversion
+  from {{用户表}} v
+  left join {{事件表}} e on e.user_id = v.user_id
+ where v.registered_at >= :from and v.registered_at < :to;
+```
+
+```text
+需要你确认
+1. 数据库方言（分区裁剪和时间函数写法不同）
+2. 支付成功事件的真实名字，以及退款是否会补一条反向事件
+3. 用户表有没有逻辑删除字段、是否分租户
+4. 时间字段是本地时间还是 UTC
+5. 同一订单是否可能重复上报（决定要不要按订单号再去重）
+```
+
+这五条不是保守，是因为其中任意一条猜错，算出来的转化率都会偏，而偏多少你事后无法察觉。
+
+### 示例 6：结论要分层写
+
+同一份分析里，"跑出来的"和"我认为的"必须能分开：
+
+```text
+已计算    发布成功率 48.6% → 52.1%（查询见 sql/exp_publish_guide.sql，可复跑）
+统计解释  区间 [+1.8, +5.2]pp，不含 0；分流正常；未做中途偷看
+业务判断  按当前规模一年约多出 12 万篇内容，改动集中在前端引导，回退成本低
+待验证    为什么提升集中在移动端？需要一次定性访谈或分端二次实验
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [product-manager](/skills/skills-reference/critical/product-manager/) | 目标和验收先定 |
+| 前置 | [product-strategy](/skills/skills-reference/high/product-strategy/) | 更上游的方向选择 |
+| 后续 | [product-execution](/skills/skills-reference/high/product-execution/) | 把结论变成 PRD、路线图 |
+| 后续 | [project-manager](/skills/skills-reference/high/project-manager/) | 埋点、看板、实验开关进任务清单 |
+| 协作 | [database-ops](/skills/skills-reference/high/database-ops/) | 查询和视图真正落地 |
+| 协作 | [api-development](/skills/skills-reference/high/api-development/) | 数据要开成接口时 |
+| 协作 | [frontend-design](/skills/skills-reference/high/frontend-design/) | 看板需要真实界面时；设计稿也可走 [penpot](/skills/skills-reference/low/penpot/) |
+
+```text
+product-strategy → product-manager → product-analytics → product-execution
+                                            ↓
+                                     project-manager（埋点/看板进清单）
+                                            ↓
+                              database-ops / api-development（落地）
+```
+
+分析结论是决策的输入，不替代产品批准、技术选型或发布授权。
+
+## 常见坑
+
+**先跑数再想问题。**  数出来了，但没人知道它支持什么决定，于是变成一张没人看的图。
+
+**指标没有兜底。**  单看一个数字优化，一定会有人找到代价最小的那条捷径——而那条捷径通常伤害产品。
+
+**混用留存定义。**  两个人拿着"留存 40%"讨论，其实说的是两件事。定义写在结论旁边，比写在文档某一页有用。
+
+**猜表名后说"这段 SQL 可以直接用"。**  能跑通不等于算对。字段含义猜错时，查询不会报错。
+
+**只报显著的那一段。**  分十个群，总有一个显著。要么事先说明要看哪几个群，要么在结论里写清做了多少次比较。
+
+## 下一步
+
+- [product-manager](/skills/skills-reference/critical/product-manager/) — 目标与验收
+- [product-execution](/skills/skills-reference/high/product-execution/) — 把结论变成执行计划
+- [project-manager](/skills/skills-reference/high/project-manager/) — 埋点与看板进任务清单
+- [database-ops](/skills/skills-reference/high/database-ops/) — 查询与视图落地
+- [test-strategy](/skills/skills-reference/medium/test-strategy/) — 测试方案（不是实验设计）
+
+
+

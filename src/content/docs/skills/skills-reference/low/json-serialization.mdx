@@ -1,0 +1,242 @@
+---
+title: JSON 序列化契约（json-serialization）
+description: 设计精确且向后兼容的 JSON 序列化契约，处理 Long 精度、时区、命名策略、空值语义与反序列化安全
+order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+JSON 翻车的地方永远是那几处：`long` 型 ID 到了浏览器末几位变成 `...900`；时间字符串没带时区，客户端各按自己的理解解析；后端加了个字段，某个老版本 App 直接解析失败；`null` 和"这个字段根本没传"被工具类悄悄合并成同一件事。
+
+`json-serialization` 把这些当**契约问题**处理，而不是编码风格问题。产出物是一张前后端都能照着写的字段表，加上落到真实配置里的实现，再加一次序列化到反序列化的回环验证——而不是在某个 Controller 里加个注解就算完。
+
+它管的是对外的 JSON 表示与兼容性。接口结构本身归 [api-development](/skills/skills-reference/high/api-development/)，字段类型与 ORM 映射归 [database-ops](/skills/skills-reference/high/database-ops/)，前端展示格式归 [ui-pc](/skills/skills-reference/high/ui-pc/) 与 [ui-app](/skills/skills-reference/high/ui-app/)，ID 怎么生成归 [snowflake-id](/skills/skills-reference/low/snowflake-id/)。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "前端拿到的 ID 后几位不对" | 大整数跨 JavaScript 客户端丢精度 |
+| "时间格式和时区要统一一下" | 时间点、当地日期、带偏移时间的表示与迁移 |
+| "字段是驼峰还是下划线" | 命名策略与外部键映射的边界 |
+| "加了字段老客户端会不会崩" | 未知字段策略与前后兼容 |
+| "枚举怎么序列化" | 枚举与常量的对外表示 |
+| "反序列化报错但看不出哪个字段" | 解析失败的错误语义与提示 |
+| "金额算出来差一分" | 小数精度与字符串/数字表示 |
+
+## 什么时候不要用
+
+- **要定接口契约、校验规则和错误码** → [api-development](/skills/skills-reference/high/api-development/)。它定契约，这里定这份契约的序列化表示。
+- **要改库表字段类型或 ORM 映射** → [database-ops](/skills/skills-reference/high/database-ops/)
+- **要改前端表单校验或展示格式** → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)
+- **想把跨层 JSON 约定沉淀成项目记忆** → [project-details](/skills/skills-reference/high/project-details/)
+- **要实现 ID 生成逻辑** → [snowflake-id](/skills/skills-reference/low/snowflake-id/)
+- **只是想找个现成的转换工具类** → [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)
+
+## 前置条件
+
+三件事没有的时候，改动很容易白做。
+
+**全局配置先看过。** 不知道全局 mapper 怎么配就去加局部注解，结果是两者互相覆盖，同一个 DTO 在不同调用路径上行为不一样，排查成本极高。
+
+**改的确实是序列化层。** 如果真正要动的是业务规则或库表类型，硬塞进序列化层之后，半年内没人能想到去那里找这段逻辑。
+
+**知道谁在消费这份 JSON。** Web、App 三个版本、开放平台、内部 MQ、一张 JSON 列——消费方清单决定了一次字段改动是兼容的还是破坏性的。
+
+<Aside type="danger">
+没有在仓库里找到定义和调用之前，不会凭经验造一个 `JsonUtils`、`JacksonConfig` 或自定义异常类出来。多造一套入口的代价是：往后每个兼容问题都要在两个地方各修一遍，而且总有一处会被漏掉。
+</Aside>
+
+## 使用示例
+
+### 示例 1：前端拿到的订单 ID 末几位不对
+
+你说：`订单详情页显示的 ID 和数据库不一样，最后三位变成 000`
+
+先拿到一张字段契约表，这是后面所有实现和验证的基线：
+
+| 字段 | 业务类型 | JSON 表示 | 空值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `orderId` | 雪花 ID | `string` | 不可空 | 超出 JS 安全整数范围，按字符串传 |
+| `amount` | 金额 | `string` | 不可空 | 定点两位，不经过浮点 |
+| `createdAt` | 时间点 | `string` | 不可空 | ISO 8601 带偏移 |
+| `remark` | 备注 | `string` | 可为 `null` | `null` 表示清空，缺失表示不改 |
+
+然后是落到代码里的边界——Java 侧仍然是 `long`，只在序列化时转：
+
+```java
+public class OrderVO {
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long orderId;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ssXXX")
+    private OffsetDateTime createdAt;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private BigDecimal amount;   // 金额同样走字符串，绝不经过 double
+}
+```
+
+全局配置定基线，局部注解只处理例外：
+
+```yaml
+spring:
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+```
+
+对外的样例响应，各层表示保持一致：
+
+```json
+{
+  "code": 200,
+  "data": {
+    "orderId": "1734901234567890123",
+    "amount": "1299.00",
+    "createdAt": "2026-09-04T10:32:11+08:00",
+    "remark": null
+  }
+}
+```
+
+契约要同步进 OpenAPI，否则生成出来的 TS 类型又会变回 `number`：
+
+```yaml
+OrderVO:
+  type: object
+  required: [orderId, amount, createdAt]
+  properties:
+    orderId:
+      type: string
+      format: int64
+      example: "1734901234567890123"
+    amount:
+      type: string
+      pattern: '^\d+\.\d{2}$'
+      example: "1299.00"
+```
+
+```ts
+// 前端消费冻结后的类型，不自己 parseInt 回 number
+interface OrderVO {
+  orderId: string
+  amount: string
+  createdAt: string   // ISO 8601 带偏移
+  remark: string | null
+}
+```
+
+### 示例 2：`null`、空串还是没传
+
+你说：`PATCH 接口里备注传空到底是清空还是不改`
+
+这一步的产出是把六种情况分开，并各给一条样例——工具类最容易做的坏事就是把它们合并：
+
+| 情况 | JSON | 语义 |
+| --- | --- | --- |
+| 字段缺失 | `{}` | 不修改该字段 |
+| 显式 `null` | `{"remark": null}` | 清空 |
+| 空字符串 | `{"remark": ""}` | 有值，值为空串 |
+| 空对象 | `{"ext": {}}` | 结构存在但无内容 |
+| 空数组 | `{"tags": []}` | 集合存在且为空 |
+| 解析失败 | `{"tags": "a"}` | 类型不符，按 400 处理 |
+
+解析失败的响应也是契约的一部分，要能定位到字段：
+
+```json
+{
+  "code": 400,
+  "message": "字段 createdAt 格式不正确，应为 2026-09-04T10:32:11+08:00 这样的形式",
+  "traceId": "b7f2c1a9"
+}
+```
+
+### 示例 3：加字段会不会让老客户端崩
+
+你说：`响应里要加一个 couponId，App 有两个版本还在用`
+
+产出是一张兼容矩阵，直接给出这次改动落在哪一格：
+
+```text
+新增可选字段         兼容      老客户端忽略未知字段（前提是这个开关确实开着）
+新增必填请求字段     破坏      老客户端构造的请求会被拒
+删除字段             破坏      老客户端读到 undefined 后崩在解构上
+number → string      破坏      需要双写窗口或新版本路径
+枚举新增取值         看情况    取决于客户端是否有 default 分支
+```
+
+配套的回环验证用真实客户端的解析器，而不是同一套 Java 代码自己解自己：
+
+```bash
+curl -s localhost:8080/api/v1/orders/1734901234567890123 | node -e "
+const d = JSON.parse(require('fs').readFileSync(0, 'utf8')).data;
+console.log('orderId 类型', typeof d.orderId, '长度', d.orderId.length);
+console.log('时间解析', new Date(d.createdAt).toISOString());
+console.log('回写是否等值', String(BigInt(d.orderId)) === d.orderId);
+"
+```
+
+```text
+orderId 类型 string 长度 19
+时间解析 2026-09-04T02:32:11.000Z
+回写是否等值 true
+```
+
+### 示例 4：时间格式迁移
+
+你说：`历史接口返回的是 2026-09-04 10:32:11，现在要带上时区`
+
+产出是一个有淘汰计划的双读窗口，不是"自动识别所有日期格式"：
+
+```text
+阶段 1  响应同时给 createdAt（旧格式）和 createdAtIso（带偏移），文档标注旧字段将下线
+阶段 2  客户端全部切到新字段，埋点确认旧字段读取量归零
+阶段 3  下线旧字段，回归一次带夏令时的负例样例
+```
+
+## 与其他 Skill 的关系
+
+**先做**：[api-development](/skills/skills-reference/high/api-development/) 把对外契约冻结，[project-details](/skills/skills-reference/high/project-details/) 提供已记录的跨层 JSON 约定。
+
+**后做**：[code-review](/skills/skills-reference/high/code-review/) 对序列化与兼容改动做一次完整 Review，[check](/skills/skills-reference/medium/check/) 按仓库后端规范核对。
+
+**配合**：[database-ops](/skills/skills-reference/high/database-ops/)（字段类型与 JSON 表示对齐）、[error-handler](/skills/skills-reference/medium/error-handler/)（解析失败的错误码）、[utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)（复用既有转换工具）、[security-guard](/skills/skills-reference/high/security-guard/)（深度、大小、多态与日志回显）、[snowflake-id](/skills/skills-reference/low/snowflake-id/)（大整数 ID 的同一精度契约）、[git-commit](/skills/skills-reference/high/git-commit/)（改动提交）。
+
+```text
+api-development（冻结对外契约）
+  → project-details（消费或补齐跨层约定）
+  → json-serialization（契约表 → 配置落地 → 回环验证 → 迁移计划）
+  → check → code-review → git-commit
+```
+
+## 常见坑
+
+**只改了局部注解。** 全局 mapper 还是老策略，于是同一个对象在 REST 响应里是驼峰、在 MQ 消息里是下划线，两边各写一套解析。
+
+**为了配下划线列名去改 Java 字段名。** 数据库列名映射属于 ORM 层的事；把 `snake_case` 抬到 Java 字段上，后面所有工具和 IDE 提示都会跟你打架。
+
+**只把 ID 在 API 层转成字符串。** 同一个 ID 在日志、缓存键、MQ 消息、导出文件里还是数字形态，某一层就会截断，而且往往在几个月后才被发现。
+
+**金额过一遍 `double`。** 这类精度损失不可逆，账目对不上时已经没法从数据里还原正确值。
+
+**多态反序列化开着。** 允许按客户端传来的类型名实例化对象，等于把一条远程执行路径留在解析器里。
+
+**只跑正例样例。** 最小值、最大值、Unicode、空值、未知字段、旧版本、超大载荷、深层嵌套这些负例才是会出事的地方。
+
+<Aside type="caution">
+沙箱里跑通不等于线上兼容。哪些客户端版本实际验过、哪些历史数据没覆盖，需要明确写出来，而不是四舍五入成"已兼容"。
+</Aside>
+
+## 下一步
+
+- [api-development](/skills/skills-reference/high/api-development/) - 先把接口契约冻结
+- [database-ops](/skills/skills-reference/high/database-ops/) - 字段类型与映射的落地
+- [snowflake-id](/skills/skills-reference/low/snowflake-id/) - 大整数 ID 的生成侧
+- [error-handler](/skills/skills-reference/medium/error-handler/) - 解析失败的错误码与响应
+- [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) - 先找现成的转换工具
+- [code-review](/skills/skills-reference/high/code-review/) - 序列化改动的一次完整 Review

@@ -1,0 +1,282 @@
+---
+title: 数据库设计（database-design）
+description: 为当前功能给出表、列、约束、索引、迁移策略与回滚方案的设计结论，再交给 database-ops 实施
+order: 22
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+`database-design` 交的是**一份能直接照着写迁移的设计稿**：有哪些表、每列什么类型和注释、唯一性和删除语义怎么定、加哪些索引以及为什么加、迁移分几步、旧版本应用在窗口期还能不能跑、验证 SQL 怎么写、出问题怎么退。
+
+它顺手把几个容易在第三个月翻车的决定提前钉死：业务主键用雪花 ID 而不是自增，表之间的关联只在逻辑上成立、不画物理外键，业务规则写在应用的短事务里而不是 trigger 和存储过程里，新数据域默认选 PostgreSQL。这些默认值不是偏好问题——每一条都对应一类线上事故，页面下方的"常见坑"里有具体后果。
+
+它明确不动手：迁移脚本、ORM 实体、在隔离环境跑一遍迁移和回滚，全归 [database-ops](/skills/skills-reference/high/database-ops/)。所以拿到设计稿不等于库已经改了，这条分工是硬的。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这个功能要建哪些表" | 新功能的数据落到具体表与归属 |
+| "帮我设计一下表结构" | 实体、列、类型、默认值、唯一键、删除语义 |
+| "这个查询要加什么索引" | 从真实的过滤、连接、排序需求评估索引与写入代价 |
+| "给订单表加个字段" | 变更设计：兼容窗口、回填、旧版本共存、回滚 |
+| "评审一下这个数据模型" | 只读评审既有 Schema，输出风险与改法 |
+| "这张表要不要加租户字段" | 租户、逻辑删除、乐观锁这类可选能力开不开 |
+| "这个迁移能不能重跑" | 幂等性、失败重试与补偿方案 |
+
+## 什么时候不要用
+
+- **要写迁移脚本、改 ORM 实体、真正执行迁移** → [database-ops](/skills/skills-reference/high/database-ops/)。一句话分工：这里出结论，那边落地。
+- **还没定这块数据归谁写** → [architecture-design](/skills/skills-reference/high/architecture-design/) 先划清模块和数据归属。归属没定就开始设计表，最后往往是两个模块都在写同一张表。
+- **要定接口的请求和响应结构** → [api-development](/skills/skills-reference/high/api-development/)。接口契约和物理表结构是两层，不该互相裁剪。
+- **要生成 Entity、Mapper、Repository 代码** → 仓库有生成器就用 [crud](/skills/skills-reference/high/crud/)，手工写用 [crud-development](/skills/skills-reference/high/crud-development/)。
+- **要做行级、字段级的数据权限策略** → [data-permission](/skills/skills-reference/high/data-permission/)。这里只保证字段和索引撑得住那些策略。
+- **线上慢查询要救** → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。它按真实执行计划优化，这里是建表时的事前设计。
+- **要做多租户的隔离方案** → [tenant-management](/skills/skills-reference/medium/tenant-management/)；**只是要一个 ID 生成器** → [snowflake-id](/skills/skills-reference/low/snowflake-id/)。
+
+## 开始之前要有的三件事
+
+不是走流程，是这三件缺一件设计稿就会白写：
+
+**这块数据归谁写。** 表的归属决定谁能写、谁只能读。归属含糊时最常见的结果是两个模块各自往同一张表插数据，一致性再也说不清。
+
+**数据库和迁移工具已经定了。** 类型、方言、DDL 能不能进事务、失败能不能回退，全由它决定。定之前设计出来的 DDL，很可能在目标库上根本不成立。
+
+**仓库现有的命名和审计约定。** 新表得和老表长得像。字段名、审计语义、逻辑删除的取值各写一套，之后所有查询和自动填充都得改第二遍。
+
+<Aside type="note">
+它会先去项目记忆里翻这块数据以前有没有人定过规矩——谁是 owner、字段和契约怎么约定的、上次迁移怎么做的、租户怎么隔的、回滚怎么退的。翻到了就沿用或扩展现有表，而不是另建一张。这一轮新确认下来的稳定边界，由 [project-details](/skills/skills-reference/high/project-details/) 写回记忆文件。
+</Aside>
+
+## 使用示例
+
+### 场景 1：新功能建表
+
+**你的输入**：
+
+```text
+做报销单功能：员工提单、上传发票、主管审批、财务打款。
+仓库是 PostgreSQL + Flyway，已有 sys_user 和 sys_dept。
+```
+
+**你会拿到的产出**（节选）：
+
+```text
+## 选型
+沿用仓库既有的 PostgreSQL 与 Flyway，不动迁移契约。
+
+## 数据模型
+expense_claim         报销单（一次提交一张）
+  生命周期  草稿 → 待审 → 已批/驳回 → 已付款 → 关闭
+  唯一性    同一员工同一月同一发票号只能出现一次
+  删除语义  逻辑删除（沿用仓库已有的 del_flag，取值 0/1）
+expense_claim_item    报销明细（一张单多条）
+expense_claim_audit   审批流水（只追加，不更新）
+
+## expense_claim 列
+id            bigint       雪花 ID，业务主键
+claim_no      varchar(32)  报销单号，对外展示用，唯一
+applicant_id  bigint       申请人，逻辑关联 sys_user.id
+dept_id       bigint       报销归属部门，逻辑关联 sys_dept.id
+status        smallint     单据状态 0草稿 1待审 2已批 3驳回 4已付款 5关闭
+total_amount  numeric(14,2) 报销总金额，单位元，等于明细之和
+...
+
+## 注释要求
+上面每一列的注释都要写进 DDL，写的是业务含义、单位或枚举取值，
+不是把英文列名翻译一遍。ORM 实体上同步保留同样的说明。
+
+## 关联与校验
+三张表之间只做逻辑关联，不建物理外键。
+存在性、归属、状态这三类校验放在 Service 的同一个事务里：
+  - 提交时校验 applicant_id 存在且未离职
+  - 审批时用条件更新做并发保护（where status = 1）
+  - 明细删除后总额重算与主单在同一事务
+
+## 索引
+idx_claim_applicant_status  (applicant_id, status)   我的报销列表，选择性高
+idx_claim_dept_created      (dept_id, create_time)   部门月度查询 + 排序
+uk_claim_no                 (claim_no) unique        单号对外唯一
+uk_claim_invoice            (applicant_id, invoice_no) unique  防重复报销
+说明：status 单列索引不建 —— 只有 6 个取值，选择性太低，
+      写入代价换不来收益。
+
+## 审计字段（沿用仓库既有命名）
+create_dept / create_by / create_time / update_by / update_time / remark
+
+## 幂等与并发
+提单幂等键：applicant_id + invoice_no（同上唯一约束兜底）
+审批并发：  条件更新 + 版本号，不用悲观锁
+打款：      与外部支付的对账靠应用侧 outbox 表，不用 trigger
+
+## 迁移步骤
+V12__create_expense_claim.sql   建三张表 + 索引 + 注释（可重跑：IF NOT EXISTS）
+V13__seed_claim_status.sql      无 —— 状态用常量，不建字典表
+
+## 验证 SQL（从元数据证明，不靠肉眼看）
+1. 三张表和每一列的注释都非空
+2. 这三张表上的物理外键数量为 0
+3. 四个唯一约束都存在
+
+## 兼容与回滚
+旧版本应用不认识这三张表，纯新增，窗口期无影响。
+回滚：V12 的反向脚本 drop 三张表；已有数据时改为改名保留，不直接删。
+
+## 交给谁
+迁移脚本、实体映射、隔离环境跑一遍迁移与回滚 → database-ops
+```
+
+`database-ops` 拿到这份东西不用再问"这列什么类型""这个索引为什么加""失败怎么退"，就是这份设计稿合格的标准。
+
+### 场景 2：给已有表加字段
+
+**你的输入**：
+
+```text
+订单表要加一个"结算周期"字段，线上有 400 万行，多实例部署。
+```
+
+**你会拿到的产出**（节选）：
+
+```text
+## 关键约束：多实例 + 400 万行
+不能一步到位。加列、回填、切读、清理要分开，
+中间任何一步失败都不能让旧版本应用崩。
+
+## 分步
+第 1 步  加可空列 settle_cycle（不加默认值 —— 带默认值的加列在部分版本会重写全表）
+        旧版本应用不认识这列，照常跑
+第 2 步  应用发版：写的时候同时写新列，读的时候仍读旧逻辑
+第 3 步  分批回填历史数据，每批 5000 行，按主键区间推进，可中断可续跑
+第 4 步  回填完且校验通过后，应用发版切成读新列
+第 5 步  确认无人读旧字段后，才考虑加 NOT NULL 或清理
+
+## 每一步的回滚
+第 1 步  drop column（此时无数据依赖）
+第 2-4 步 应用回退到上一版即可，列留着不影响
+第 5 步  这一步之后回滚代价最高，所以放在最后且要有人确认
+
+## 验证
+回填进度：按批次记录已处理主键上界，可查
+回填正确性：抽样 200 行与原始来源比对
+新列注释非空、无物理外键新增
+
+## 兼容性提醒
+第 3 步跑批期间会持续产生写入，回填条件要排除新写入的行，
+否则会把刚写对的数据覆盖回旧值。
+```
+
+### 场景 3：它会直接换掉的两种写法
+
+**你的输入**：
+
+```text
+订单和订单项加个外键级联删除，另外状态流转写个 trigger 保证一致性。
+```
+
+**你会拿到的回应**：
+
+```text
+## 级联删除 → 换成应用侧的删除策略
+理由  级联是数据库替你做的隐式删除，业务日志里看不到、审计查不到，
+      一次误删主单会静默清掉几十条明细，回滚时没有依据。
+改成  Service 里显式删除，同一事务内按固定顺序（先明细后主单），
+      并给出孤儿数据的检测查询和修复脚本。
+
+## trigger 保一致性 → 换成短事务 + 条件更新
+理由  状态流转的逻辑藏进 trigger 后，读代码的人看不见它，
+      单测测不到它，两个 trigger 互相触发时排查成本极高。
+改成  状态机放在 Service，用带 where 条件的更新做并发保护，
+      锁顺序写在代码注释里；审计和消息投递用同事务的 outbox 表。
+
+## 既有的物理外键怎么办
+不静默留着，也不直接一条 drop 下去。先盘一遍：
+  哪些表在依赖它、drop 时会不会锁表、有没有已经存在的孤儿数据。
+然后出一个独立的前向迁移 + 回滚方案。历史迁移文件不改写。
+```
+
+<Aside type="danger">
+物理外键（表级和列级 `FOREIGN KEY`、inline `REFERENCES`、级联更新删除）以及存储过程、数据库函数、各类 trigger，在这套设计规范里都不出现。取而代之的是逻辑关联加应用层校验——这不等于放弃完整性：关联列的类型长度必须和目标主键一致、必须有支撑真实查询的索引、必须有孤儿数据的检测与修复办法。少了后面这几项，就真的只是把约束丢了。
+</Aside>
+
+### 场景 4：它会拒绝定死的字段
+
+**你的输入**：
+
+```text
+新项目，先把租户字段和逻辑删除字段定下来。
+```
+
+**你会拿到的回应**：
+
+```text
+仓库里现在还没有任何一张业务表，也没有配置能证明租户和逻辑删除怎么用。
+这两项我不定：字段名和取值一旦写错，后面每张表都得跟着错。
+
+需要你或架构侧先给一个来源：
+  租户   是共享库加租户列，还是分库？租户 ID 从哪来？
+  逻辑删除 用 0/1，还是删除时间戳？查询默认过不过滤？
+
+拿到之后我按你的口径落到每张表；在此之前，这两栏在设计稿里留空并标注。
+```
+
+## 与其他 Skill 的关系
+
+**上游**：[architecture-design](/skills/skills-reference/high/architecture-design/) 划模块与数据归属，[tech-decision](/skills/skills-reference/high/tech-decision/) 冻结这一功能的技术方案。
+
+**下游**：[database-ops](/skills/skills-reference/high/database-ops/) 写迁移与 ORM 并真跑一遍，[data-permission](/skills/skills-reference/high/data-permission/) 在结构之上加权限策略，[api-development](/skills/skills-reference/high/api-development/) 按表结构定接口契约。
+
+**协作**：[universal-development](/skills/skills-reference/low/universal-development/) 实现业务代码时消费这份设计，[redis-cache](/skills/skills-reference/medium/redis-cache/) 决定哪些读走缓存，[snowflake-id](/skills/skills-reference/low/snowflake-id/) 提供主键生成器本身。
+
+```text
+architecture-design（谁拥有这块数据）
+        ↓
+tech-decision（这个功能的技术方案）
+        ↓
+database-design  表 / 列 / 约束 / 索引 / 迁移 / 回滚（只出结论）
+        ↓
+database-ops（写迁移、跑迁移、跑回滚）
+        ↓                         ↓
+data-permission（权限）      api-development（接口契约）→ code-review
+```
+
+同一个人拿到设计稿后直接交给 `database-ops`，把整份数据契约一次移交完；不要在设计这一步顺手往生产迁移里塞脚本。
+
+## 常见坑
+
+**把设计稿当成交付。** "表设计好了"和"库改了"之间还差一次真实执行。这个 Skill 不会替你把两者混起来说，但汇报的时候人容易混。
+
+**给低选择性的列建单列索引。** 状态、类型、是否删除这类只有几个取值的列，单独建索引基本用不上，写入代价却是实打实的。它会把这类索引否掉并说明理由。
+
+**注释只是把英文列名翻译一遍。** `order_no` 注释成"订单号"没有增加任何信息。真正有用的是单位、枚举取值、关联的是哪张表、什么情况下为空。半年后接手的人靠这一栏活。
+
+**大表加列带默认值。** 在部分数据库版本上这会重写整张表并长时间持锁。它会拆成先加可空列、再回填、最后收紧。
+
+**回填脚本不能续跑。** 400 万行的回填中途失败是常态。按主键区间分批、记录进度、可中断可重跑，是设计阶段就该定下来的事，不是执行时临场发挥。
+
+**忘了旧版本应用还在跑。** 多实例滚动发布期间，新旧版本同时在读写同一张表。设计变更时如果只考虑最终状态，窗口期就会出现旧代码看不懂的数据。
+
+**孤儿数据没人管。** 去掉物理外键之后，如果既没有服务层校验也没有检测查询，那就是真的把完整性丢了——这是这套规范唯一容易被做坏的地方。
+
+## 最佳实践
+
+- **先说归属，再说列。** 每张新表第一行写清谁写、谁读，后面的争议会少一半。
+- **索引附上理由。** 写清它服务哪个查询、为什么这个列序、写入代价能不能接受。没有理由的索引在下一次性能排查时没人敢删。
+- **验证靠元数据查询，不靠肉眼。** 注释是否补齐、物理外键是否为零、唯一约束是否存在，都应该是一条能跑的 SQL。
+- **每一步迁移配一条回滚。** 包括"这一步之后回滚代价很高"这种说明——它比一句"可回滚"有用。
+- **敏感字段用仓库现成的方案。** 加密、脱敏、权限都别自创，沿用项目已有实现，否则解密和审计会各说一套。
+
+<Aside type="caution">
+它不维护任务状态。当前请求还没有 TODO 时，设计在当前会话里闭环，不会额外生成计划文件或第二份状态记录；已经有唯一 TODO 时，它把设计、风险、迁移与回滚、验证边界交回给那份 TODO 的负责人，由对方决定要不要回写。未经授权不做 Git 操作，也不执行任何破坏数据的动作。
+</Aside>
+
+## 下一步
+
+- [database-ops](/skills/skills-reference/high/database-ops/) - 把设计落成迁移、ORM 并真跑一遍
+- [architecture-design](/skills/skills-reference/high/architecture-design/) - 数据归属和模块边界还没定
+- [data-permission](/skills/skills-reference/high/data-permission/) - 行级与字段级权限策略
+- [api-development](/skills/skills-reference/high/api-development/) - 按表结构定接口契约
+- [performance-doctor](/skills/skills-reference/medium/performance-doctor/) - 线上慢查询与索引调优
+- [snowflake-id](/skills/skills-reference/low/snowflake-id/) - 主键生成器的实现与配置

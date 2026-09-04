@@ -1,52 +1,57 @@
 ---
 title: Stop Hook
-description: TODO 状态更新和自动续作详解
+description: 会话结束时自动标记 TODO 完成、核验推送并接着做下一项
 order: 7
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-## 概述
+## 这个 Hook 帮你做什么
 
-Stop Hook 在主 Agent 会话停止时触发，负责检查当前 Feature 的完成条件、原子更新 TODO 状态、核验远端推送，并自动续作下一个 Ready Feature。
+主 Agent 一轮会话结束时，Stop Hook 会自动做四件事，你不需要手工维护 TODO 勾选：
 
-**关键职责**：
-- **完成门禁检查**：验证 AC、Review、写集
-- **原子状态更新**：`[~]` → `[x]`（CAS 操作）
-- **远端核验**：确认代码已推送到远程仓库
-- **自动续作**：领取下一个 Ready Feature
+| 行为 | 你会看到的现象 |
+|------|--------------|
+| 检查完成条件 | 条件不足时，TODO 里的 Feature 仍是进行中状态，并给出缺什么 |
+| 更新 TODO | 条件满足时，Feature 自动从进行中变为已完成 |
+| 核验远端 | 代码没推到远端时，标记为 `delivery-pending`，不往下走 |
+| 接着做下一项 | 有可执行的下一个 Feature 时自动领取并继续 |
 
-## 触发时机
+<Aside type="note">
+Stop Hook 只对主 Agent 生效。Subagent 结束走 [SubagentStop Hook](/skills/hooks/subagent-stop/)，它不改 TODO、不提交代码。
+</Aside>
+
+## 什么时候会触发
+
+- 你主动结束会话
+- Agent 判断当前任务已经做完
+- 会话超时或被中断
+
+## 会检查哪些完成条件
+
+四项都满足，Feature 才会被标记完成。
 
 ```mermaid
 graph TD
-    A[会话结束] --> B[Stop Hook]
-    B --> C{有 [~] Feature?}
-    C -->|否| D[无操作]
-    C -->|是| E{完成门禁通过?}
-    E -->|否| F[保持 [~] 状态]
-    E -->|是| G[原子更新 [~] → [x]]
-    G --> H{远端核验通过?}
-    H -->|否| I[状态: delivery-pending]
-    H -->|是| J{有 Ready Feature?}
-    J -->|是| K[自动领取]
-    J -->|否| L[等待下一轮]
-    K --> M[继续执行]
+    A["会话结束"] --> B{"有进行中的 Feature?"}
+    B -->|没有| C["不做任何事"]
+    B -->|有| D{"AC 都有证据?"}
+    D -->|否| E["保持进行中，提示缺证据"]
+    D -->|是| F{"Review 通过?"}
+    F -->|否| E
+    F -->|是| G{"写集内有待提交改动?"}
+    G -->|否| E
+    G -->|是| H["标记为已完成"]
+    H --> I{"已推到远端?"}
+    I -->|否| J["delivery-pending"]
+    I -->|是| K{"有可执行的下一项?"}
+    K -->|有| L["自动领取并继续"]
+    K -->|没有| M["会话结束"]
 ```
 
-**触发场景**：
-- 用户主动结束会话
-- 会话超时
-- Agent 完成任务
-- 系统调用 `/stop` 命令
+### 1. 每个 AC 都有证据
 
-## 完成门禁
-
-Stop Hook 会检查以下条件，全部满足才允许完成：
-
-### 1. AC 证据完整
-
-每个 AC（验收条件）必须有证据：
+TODO 里每条验收条件后面必须写明怎么验的，`?` 表示还没验：
 
 ```markdown
 - [~] `USER-LOGIN` 用户登录
@@ -55,30 +60,10 @@ Stop Hook 会检查以下条件，全部满足才允许完成：
   - AC-003: 错误提示 -> 截图确认
 ```
 
-**检查逻辑**：
+常见的证据写法：
 
-```javascript
-function checkACEvidence(feature) {
-  const acs = extractACs(feature);
-  
-  for (const ac of acs) {
-    // AC-001: 描述 -> ?
-    if (ac.evidence === '?') {
-      return {
-        pass: false,
-        reason: `${ac.id} 缺少证据`
-      };
-    }
-  }
-  
-  return { pass: true };
-}
-```
-
-**常见证据类型**：
-
-| 证据类型 | 示例 | 适用场景 |
-|---------|------|---------|
+| 证据类型 | 写法示例 | 适用场景 |
+|---------|---------|---------|
 | 手工测试 | `手工测试通过` | 功能验证 |
 | 单元测试 | `单元测试通过 (UserLoginTest)` | 代码逻辑 |
 | DevTools | `DevTools 验证` | 前端调试 |
@@ -87,89 +72,49 @@ function checkACEvidence(feature) {
 | Postman | `Postman 测试通过` | API 验证 |
 
 <Aside type="caution">
-`AC-* -> ?` 表示缺少证据，Stop Hook 会拒绝完成。
+只要还有 `AC-xxx -> ?`，Feature 就不会被标记完成。
 </Aside>
 
-### 2. Review 通过
-
-必须有 Review 记录且结果为 `pass`：
+### 2. Review 结果为 pass
 
 ```markdown
 - [~] `USER-LOGIN` 用户登录
   - Review: pass
 ```
 
-**可能的 Review 状态**：
+| 状态 | 能否完成 |
+|------|---------|
+| `pending` | 否 |
+| `in-progress` | 否 |
+| `fail` | 否 |
+| `pass` | 是 |
 
-| 状态 | 说明 | 允许完成 |
-|------|------|---------|
-| `pending` | 待 Review | ❌ |
-| `in-progress` | Review 中 | ❌ |
-| `fail` | Review 失败 | ❌ |
-| `pass` | Review 通过 | ✅ |
+Review 结果可以来自 `code-review` Skill、团队成员的人工 Review，或自动化检查工具。
 
-**Review 来源**：
-- 调用 `code-review` Skill 的结果
-- 团队成员的 Code Review
-- 自动化检查工具（linter、类型检查）
+### 3. 写集内有真实改动
 
-### 3. 写集内有待提交改动
-
-写集内必须有实际的业务或必要文档改动：
+只改 TODO 勾选或只写证明文档，不算完成。必须有写集里声明的业务文件发生变化：
 
 ```markdown
 - [~] `USER-LOGIN` 用户登录
   - 写集: src/api/user/login.ts, src/pages/login.vue
 ```
 
-**检查逻辑**：
+自己确认一下：
 
 ```bash
-# 1. 获取写集文件列表
-writeSet = ["src/api/user/login.ts", "src/pages/login.vue"]
-
-# 2. 检查 git diff
 git diff --name-only
-
-# 输出:
-src/api/user/login.ts
-src/pages/login.vue
-docs/alice-chen/tasks/todo/user-mgmt.md
-
-# 3. 计算交集
-changedInWriteSet = ["src/api/user/login.ts", "src/pages/login.vue"]
-
-# 4. 判断
-if (changedInWriteSet.length > 0) {
-  // 允许完成
-}
 ```
 
-**禁止的完成方式**：
-
-```bash
-# ❌ 只修改了 TODO checkbox
-git diff --name-only
-docs/alice-chen/tasks/todo/user-mgmt.md
-
-# ❌ 只修改了证明文档
-git diff --name-only
-docs/evidence/screenshots.md
-
-# ✅ 修改了写集内的业务文件
-git diff --name-only
-src/api/user/login.ts
-src/pages/login.vue
-docs/alice-chen/tasks/todo/user-mgmt.md
-```
+输出里要能看到写集内的文件，只有 TODO 文件或文档变化时不满足条件。
 
 <Aside type="note">
-TODO 文件本身的修改会在 commit 时一起提交，但不能单独作为完成条件。
+TODO 文件的改动会跟着业务代码一起提交，但它本身不构成完成依据。
 </Aside>
 
-### 4. 验证档位声明
+### 4. 满足档位声明的要求
 
-根据 TODO 中的档位声明，检查相应的证据：
+TODO 头部声明的档位决定检查强度：
 
 ```markdown
 ## 规划与自主模式
@@ -178,13 +123,13 @@ TODO 文件本身的修改会在 commit 时一起提交，但不能单独作为�
 自主模式: Build
 ```
 
-| 档位 | 要求 | 检查项 |
-|------|------|--------|
-| Lite | 最小化文书 | AC 证据 + Review |
-| Standard | 标准流程 | AC 证据 + Review + 基本测试 |
-| High-risk | 高风险 | AC 证据 + Review + 回滚方案 + 发布检查 |
+| 档位 | 额外要求 |
+|------|---------|
+| Lite | AC 证据 + Review |
+| Standard | AC 证据 + Review + 基本测试 |
+| High-risk | AC 证据 + Review + 回滚方案 + 发布检查 |
 
-**High-risk 专属检查**：
+High-risk 的 Feature 需要在 TODO 里补齐这几行：
 
 ```markdown
 - [~] `DATABASE-MIGRATION` 数据库迁移
@@ -195,362 +140,54 @@ TODO 文件本身的修改会在 commit 时一起提交，但不能单独作为�
   - 发布检查: 灰度发布，先 10% 流量
 ```
 
-## 原子状态更新
+## 远端核验与 delivery-pending
 
-### CAS 操作
-
-Stop Hook 使用 Compare-And-Set（CAS）操作更新 TODO 状态：
-
-```javascript
-function completeFeature(featureId, instanceId) {
-  const lockFile = `/tmp/todo-lock-${gitRoot.replace(/\//g, '-')}`;
-  const lock = acquireLock(lockFile, timeout = 5000);
-  
-  try {
-    // 1. 重新读取 TODO
-    const todo = readTODO();
-    
-    // 2. 验证当前状态
-    const feature = todo.findFeature(featureId);
-    if (feature.status !== '[~]') {
-      throw new Error('Feature 状态已改变');
-    }
-    if (feature.instance !== instanceId) {
-      throw new Error('执行实例不匹配');
-    }
-    
-    // 3. 检查完成门禁
-    const gate = checkCompletionGate(feature);
-    if (!gate.pass) {
-      throw new Error(gate.reason);
-    }
-    
-    // 4. 原子更新
-    feature.status = '[x]';
-    feature.instance = null;
-    feature.completedAt = new Date().toISOString();
-    
-    // 5. 检查是否是 Epic 最后一个子 Feature
-    if (isLastSubFeature(feature)) {
-      const epic = findParentEpic(feature);
-      epic.status = '[x]';
-    }
-    
-    // 6. 写回文件
-    writeTODO(todo);
-    
-    return { success: true };
-    
-  } finally {
-    lock.release();
-  }
-}
-```
-
-### 互斥锁机制
-
-**锁文件路径**：
-```
-/tmp/todo-lock-<git-root-hash>
-```
-
-**锁超时**：5000 ms
-
-**Stale 阈值**：10000 ms（超过此时间的空锁可安全回收）
-
-**并发保护**：
-- 同一时刻只有一个进程可以更新 TODO
-- CAS 失败时必须重新读取 TODO
-- 锁超时后自动释放
-
-### Epic 汇总
-
-如果当前 Feature 是 Epic 的最后一个子 Feature，自动汇总 Epic：
-
-```markdown
-# 更新前
-- [ ] Epic: USER-MGMT
-  - [x] USER-REG 用户注册
-  - [x] USER-LOGIN 用户登录
-  - [~] USER-PROFILE 个人信息
-
-# 更新后（USER-PROFILE 完成）
-- [x] Epic: USER-MGMT
-  - [x] USER-REG 用户注册
-  - [x] USER-LOGIN 用户登录
-  - [x] USER-PROFILE 个人信息
-```
-
-## 远端核验
-
-### delivery-pending 状态
-
-`[x]` 但尚未推送到远端时，状态机返回 `delivery-pending`：
-
-```javascript
-function checkRemoteStatus(feature) {
-  // 1. 获取本地提交
-  const localCommit = execSync('git rev-parse HEAD').toString().trim();
-  
-  // 2. 获取远端提交
-  const remoteCommit = execSync('git rev-parse origin/main').toString().trim();
-  
-  // 3. 检查本地提交是否在远端
-  const isInRemote = execSync(`git branch -r --contains ${localCommit}`).toString().includes('origin/');
-  
-  if (!isInRemote) {
-    return {
-      status: 'delivery-pending',
-      reason: '代码尚未推送到远端'
-    };
-  }
-  
-  // 4. 检查 TODO 文件是否包含在远端提交中
-  const todoInRemote = execSync(`git show origin/main:${todoPath}`).toString();
-  if (!todoInRemote.includes('[x]')) {
-    return {
-      status: 'delivery-pending',
-      reason: 'TODO 更新尚未推送到远端'
-    };
-  }
-  
-  return {
-    status: 'delivered',
-    remote: 'origin/main',
-    commit: remoteCommit
-  };
-}
-```
-
-### delivery-pending 影响
+Feature 标记完成后，Stop Hook 会确认改动是否已经推到远端。没推的话状态是 `delivery-pending`：
 
 ```markdown
 - [x] `USER-LOGIN` 用户登录
   - 状态: delivery-pending
-  - 本地 commit: abc123
-  - 远端 commit: def456
 ```
 
-**限制**：
-- ❌ 不满足后续 Feature 的依赖
-- ❌ 不能再领取并行 Feature
-- ❌ Stop Hook 不会自动续作
+这个状态下会发生什么：
 
-**解除**：
+- 依赖它的后续 Feature 不会被认为可执行
+- 不会再领取新的并行 Feature
+- 不会自动续作
+
+推上去就能解除，下一轮 Stop Hook 会重新核验：
 
 ```bash
-# 推送到远端
 git push origin main
-
-# 下次 Stop Hook 会自动核验并续作
 ```
 
 <Aside type="caution">
-push 失败时必须解决冲突并重新推送，否则会阻塞后续任务。
+push 失败要先解决冲突再重推，卡在 `delivery-pending` 会阻塞后面所有任务。
 </Aside>
 
 ## 自动续作
 
-### 续作条件
+四个条件同时满足才会自动接着做下一项：
 
-Stop Hook 在以下条件下自动续作：
+1. 当前 Feature 已标记完成
+2. 远端核验通过，不是 `delivery-pending`
+3. 存在可执行的下一个 Feature：依赖都已完成，写集与其他进行中的 Feature 不冲突
+4. 当前会话没有被终止
 
-1. ✅ 当前 Feature 已完成（`[x]`）
-2. ✅ 远端核验通过（不是 `delivery-pending`）
-3. ✅ 存在 Ready Feature（依赖已满足，写集不冲突）
-4. ✅ 当前实例未被终止
-
-### Ready Feature 判断
-
-```javascript
-function findReadyFeature(todo, currentInstance) {
-  const features = todo.features.filter(f => f.status === '[ ]');
-  
-  for (const feature of features) {
-    // 1. 检查依赖
-    const deps = feature.dependencies;
-    const allDepsSatisfied = deps.every(depId => {
-      const dep = todo.findFeature(depId);
-      return dep && dep.status === '[x]';
-    });
-    
-    if (!allDepsSatisfied) {
-      continue;
-    }
-    
-    // 2. 检查写集冲突
-    const inProgressFeatures = todo.features.filter(f => 
-      f.status === '[~]' && f.instance !== currentInstance
-    );
-    
-    const hasWriteSetConflict = inProgressFeatures.some(f => {
-      return hasIntersection(f.writeSet, feature.writeSet);
-    });
-    
-    if (hasWriteSetConflict) {
-      continue;
-    }
-    
-    // 3. 找到 Ready Feature
-    return feature;
-  }
-  
-  return null;
-}
-```
-
-### 自动领取
-
-```javascript
-function autoClaimNext(currentInstance) {
-  const lock = acquireLock();
-  
-  try {
-    const todo = readTODO();
-    const ready = findReadyFeature(todo, currentInstance);
-    
-    if (!ready) {
-      return { hasNext: false };
-    }
-    
-    // 原子领取
-    ready.status = '[~]';
-    ready.instance = currentInstance;
-    ready.claimedAt = new Date().toISOString();
-    
-    writeTODO(todo);
-    
-    return {
-      hasNext: true,
-      feature: ready
-    };
-    
-  } finally {
-    lock.release();
-  }
-}
-```
-
-### 续作流程
-
-```mermaid
-graph TD
-    A[Feature 完成] --> B[Stop Hook]
-    B --> C[原子更新 [x]]
-    C --> D[核验远端]
-    D --> E{通过?}
-    E -->|否| F[delivery-pending]
-    E -->|是| G[查找 Ready Feature]
-    G --> H{存在?}
-    H -->|否| I[会话结束]
-    H -->|是| J[原子领取]
-    J --> K[注入上下文]
-    K --> L[继续执行]
-```
-
-### Codex 续作行为
-
-Codex 在 `decision:block` 后可能以 `stop_hook_active=true` 再次触发 Stop：
-
-```javascript
-// 这个字段表示续作再入，不是退出条件
-if (input.stop_hook_active === true) {
-  // 仍按当前实例的 [~]、完成事实和 Ready 队列决定是否继续
-  const status = checkCurrentFeature();
-  const ready = findReadyFeature();
-  
-  if (status.completed && ready) {
-    return { continue: true, feature: ready };
-  } else {
-    return { continue: false };
-  }
-}
-```
-
-<Aside type="tip">
-不要在首个 Feature push 后错误停止。检查 `stop_hook_active` 标志。
-</Aside>
-
-## 状态机命令
-
-### 手动完成
-
-```bash
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --complete USER-LOGIN \
-  --instance agent-123 \
-  --result "AC-001 -> 手工测试通过; AC-002 -> DevTools 验证; Review: pass"
-```
-
-**参数**：
-- `--complete <FEATURE-ID>`：要完成的 Feature ID
-- `--instance <INSTANCE-ID>`：执行实例 ID
-- `--result <RESULT>`：完成结果摘要
-
-**输出**：
-
-```json
-{
-  "success": true,
-  "feature": "USER-LOGIN",
-  "status": "completed",
-  "next": {
-    "hasNext": true,
-    "feature": "USER-PROFILE"
-  }
-}
-```
-
-### 阻塞当前任务
-
-```bash
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --block USER-LOGIN \
-  --instance agent-123 \
-  --reason "等待用户确认需求"
-```
-
-**输出**：
-
-```markdown
-- [!] `USER-LOGIN` 用户登录
-  - 最后执行实例: agent-123
-  - 阻塞原因: 等待用户确认需求
-  - 阻塞时间: 2026-09-03T10:30:00Z
-```
-
-### 释放任务
-
-```bash
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --release USER-LOGIN \
-  --instance main-agent \
-  --supervisor
-```
-
-**使用场景**：
-- 旧实例异常退出
-- 主 Agent 确认旧实例已停止
-- 需要重新分配任务
-
-<Aside type="caution">
-`--supervisor` 标志表示主 Agent 的管理操作，必须确认旧实例已停止。
-</Aside>
+Codex 下自动续作时会再触发一次 Stop 检查，这是正常现象，不代表任务出错。
 
 ## Git 交付流程
 
-### 完整流程
+Stop Hook 更新完 TODO 后，提交按下面的顺序走：
 
 ```bash
-# 1. Stop Hook 完成检查并更新状态 [~] → [x]
-
-# 2. 主 Agent 精确暂存写集内文件
+# 1. 精确暂存写集内的文件
 git add src/api/user/login.ts src/pages/login.vue
 
-# 3. 同时暂存 TODO 文件
+# 2. 一起暂存 TODO 文件
 git add docs/alice-chen/tasks/todo/user-mgmt.md
 
-# 4. 提交
+# 3. 提交，把验收证据写进 commit message
 git commit -m "feat: implement user login
 
 - Add login API endpoint
@@ -559,17 +196,13 @@ git commit -m "feat: implement user login
 
 AC-001: 用户可以登录 -> 手工测试通过
 AC-002: Token 存储 -> DevTools 验证
-Review: pass
+Review: pass"
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
-
-# 5. 推送
+# 4. 推送
 git push origin main
-
-# 6. 核验远端（下次 Stop Hook）
 ```
 
-### Commit Message 规范
+Commit message 的结构：
 
 ```
 <type>: <subject>
@@ -577,183 +210,101 @@ git push origin main
 <body>
 
 <evidence>
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ```
 
-**示例**：
+`<evidence>` 部分放 AC 证据和 Review 结果，下一轮核验和后续追溯都靠它。
 
-```
-feat: implement user login
+## 与 SubagentStop 的分工
 
-实现用户登录功能，包括：
-- 登录 API（POST /api/v1/auth/login）
-- 登录页面（src/pages/login.vue）
-- 路由配置
-
-AC-001: 用户可以登录 -> 手工测试通过
-AC-002: Token 存储 -> DevTools 验证
-AC-003: 错误提示 -> 截图确认
-Review: pass
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
-```
-
-## 与 SubagentStop 的区别
-
-| 特性 | Stop Hook | SubagentStop Hook |
+| 行为 | Stop Hook | SubagentStop Hook |
 |------|-----------|-------------------|
 | 触发对象 | 主 Agent | Subagent |
-| 状态更新 | ✅ 更新 TODO | ❌ 不更新 |
-| Git 操作 | ✅ commit & push | ❌ 交回主 Agent |
-| 远端核验 | ✅ 核验 | ❌ 不核验 |
-| 自动续作 | ✅ 领取下一任务 | ❌ 不续作 |
-| Handoff | ❌ 不需要 | ✅ 必须提供契约 |
+| 更新 TODO | 是 | 否 |
+| commit & push | 是 | 否，交回主 Agent |
+| 远端核验 | 是 | 否 |
+| 自动续作 | 是 | 否 |
+| 要求 Handoff 契约 | 否 | 是 |
 
-**SubagentStop Handoff 契约**：
-
-```json
-{
-  "feature": "USER-LOGIN",
-  "instance": "subagent-456",
-  "changedFiles": ["src/api/user/login.ts", "src/pages/login.vue"],
-  "acCovered": ["AC-001", "AC-002"],
-  "commands": ["npm run dev", "手工测试登录流程"],
-  "decisions": ["使用 JWT 而非 Session"],
-  "unresolvedRisks": ["Token 过期时间待定"]
-}
-```
-
-主 Agent 收到 Handoff 后：
-1. 对账真实 diff 和写集
-2. 执行 code-review
-3. 补充缺失的 AC 证据
-4. 调用 Stop Hook 完成
+Subagent 结束后，主 Agent 会对账实际 diff 与写集、执行 Review、补齐 AC 证据，然后才走 Stop Hook 的完成流程。
 
 ## 故障排查
 
-### Feature 无法完成
+### Feature 一直标不上完成
 
-**症状**：
+**现象**：会话结束了，TODO 里还是进行中，提示缺少证据。
 
-```
-错误: 完成门禁检查失败
-原因: AC-001 缺少证据
-```
-
-**解决方案**：
+**处理**：
 
 ```bash
-# 1. 检查 TODO
+# 1. 打开自己的 TODO
 cat docs/alice-chen/tasks/todo/project.md
 
-# 2. 补充 AC 证据
-vim docs/alice-chen/tasks/todo/project.md
+# 2. 把 AC-001: 用户可以登录 -> ?
+#    补成 AC-001: 用户可以登录 -> 手工测试通过
 
-# 修改
-- AC-001: 用户可以登录 -> ?
-# 为
-- AC-001: 用户可以登录 -> 手工测试通过
-
-# 3. 重新完成
-"USER-LOGIN 功能已验证完成"
+# 3. 告诉 Agent 重新收口
 ```
 
-### 远端核验失败
+同样先确认 `Review: pass` 已经写上，以及写集内确实有改动。
 
-**症状**：
+### 卡在 delivery-pending
 
-```
-状态: delivery-pending
-原因: 代码尚未推送到远端
-```
+**现象**：Feature 已完成但状态是 `delivery-pending`，后续任务不动。
 
-**解决方案**：
+**处理**：
 
 ```bash
-# 1. 检查远端状态
+# 确认远端有没有这些提交
 git log origin/main --oneline -10
 
-# 2. 推送代码
+# 推上去
 git push origin main
-
-# 3. 下次 Stop Hook 会自动核验并续作
 ```
 
-### 续作未触发
+下一轮 Stop Hook 会自动重新核验并续作。
 
-**症状**：Feature 完成后没有自动领取下一任务。
+### 没有自动接着做下一项
 
-**诊断**：
+**现象**：一个 Feature 完成后会话就结束了，没有领取下一项。
+
+按顺序排查：
 
 ```bash
-# 1. 检查是否有 Ready Feature
+# 1. 确认已推到远端，不是 delivery-pending
+git log origin/main --oneline -3
+
+# 2. 打开 TODO，看下一个 Feature 的依赖是否全部已完成
 cat docs/alice-chen/tasks/todo/project.md
 
-# 2. 检查依赖
-# 下一个 Feature 的依赖是否全部 [x]
-
-# 3. 检查写集冲突
-# 是否有其他 [~] Feature 与下一任务写集冲突
+# 3. 看是否有其他进行中的 Feature 与它写集重叠
 ```
 
-**解决方案**：
+依赖没满足就先做依赖项；写集冲突就等冲突任务结束，或调整写集边界让两者互不重叠。
+
+### 提示执行实例不匹配
+
+**现象**：报错说当前实例和 Feature 上记录的实例不是同一个。
+
+**原因**：这个 Feature 已经被另一个 Agent 实例领取了。同一时刻只允许一个实例更新 TODO，这是防止并发写坏文件的保护。
+
+**处理**：先确认旧实例确实已经停止，再让主 Agent 重新分配这个 Feature。旧实例还在跑的时候不要强行接管，会导致两边写同一批文件。
+
+## 环境变量
 
 ```bash
-# 如果依赖未满足
-"先完成依赖任务 USER-REG"
-
-# 如果写集冲突
-"等待冲突任务完成"
-# 或调整写集边界
-```
-
-### 多实例冲突
-
-**症状**：
-
-```
-错误: 执行实例不匹配
-预期: agent-123
-实际: agent-456
-```
-
-**原因**：另一个实例已领取该 Feature。
-
-**解决方案**：
-
-```bash
-# 1. 确认旧实例已停止
-ps aux | grep agent-123
-
-# 2. 主 Agent 释放任务
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs \
-  --release USER-LOGIN \
-  --instance main-agent \
-  --supervisor
-
-# 3. 重新领取
-"开始实现 USER-LOGIN"
-```
-
-## 配置选项
-
-### 环境变量
-
-```bash
-# 禁用所有 Hook
+# 跳过部分 Hook
 export AGENT_RUNTIME_HOOKS_DISABLED=1
 
-# 自定义实例 ID（仅在 Harness 未提供时）
+# 自定义实例 ID（仅在客户端未提供时生效）
 export AGENT_RUNTIME_INSTANCE_ID=worker-a
 
-# 仓库 ID 到 checkout 的映射
+# 仓库 ID 到本地 checkout 的映射
 export AGENT_REPO_ROOTS='{"backend":"/checkout/backend"}'
 ```
 
 ## 下一步
 
-- [SubagentStop Hook](/skills/hooks/subagent-stop) - Subagent 交接详解
-- [TODO 管理](/skills/usage/todo-management) - TODO 使用指南
-- [Git 工作流](/skills/usage/git-workflow) - Git 操作指南
-- [故障排查](/skills/hooks/troubleshooting) - 更多常见问题
+- [SubagentStop Hook](/skills/hooks/subagent-stop/) - Subagent 交接
+- [TODO 管理](/skills/usage/todo-management/) - TODO 使用指南
+- [Git 工作流](/skills/usage/git-workflow/) - Git 操作指南
+- [故障排查](/skills/hooks/troubleshooting/) - 更多常见问题

@@ -1,0 +1,288 @@
+---
+title: 服务器 Docker 部署（server-docker-deployment）
+description: 通过 SSH 密钥安全接入已授权服务器，按源码优先流程构建、验证、部署 Docker 服务，并提供可验证的回滚和部署密钥清理
+order: 42
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+线上出问题时最快的动作往往是"SSH 上去直接改一下"，而这正是下一次事故的来源——改完的内容不在仓库里，下一次部署会把它覆盖掉，从备份恢复时它凭空消失。
+
+`server-docker-deployment` 把部署收成一条固定链条：**进入服务器的东西，必须先在本地源码里落实并验证过**。服务器上没有临时手改，没有路径不明的覆盖，没有拿浮动 `latest` 当发布身份。
+
+它替你盯住三件容易失控的事：SSH 密钥怎么安全接入并在事后清理；候选制品在本地和远端是不是同一份（校验和与 digest 对得上）；失败时能不能真的退回到部署前那个精确镜像和配置。
+
+它不做平台选型（那要先走 [architecture-design](/skills/skills-reference/high/architecture-design/) 或 [tech-decision](/skills/skills-reference/high/tech-decision/)），不管本地开发环境（那是 [dev](/skills/skills-reference/high/dev/)），也不碰 Kubernetes、Helm、云资源和 IaC。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "部署到服务器" / "远程部署" | 已确定 Docker/Compose，要把服务发到指定主机 |
+| "容器化一下" | 需要新建或修正 `Dockerfile`、`.dockerignore`、Compose |
+| "打个镜像" | 本地构建镜像或制品，准备发布 |
+| "上线" / "发个版" | 已授权的发布动作与发布后验证 |
+| "线上容器起不来" | 远程排障，核对 digest、端口、挂载、日志 |
+| "回滚到上一个版本" | 用部署前备份恢复精确旧镜像与配置 |
+
+它不绑定项目名、域名、端口、用户、密钥、部署目录或制品类型——任意仓库只要已确定用 Docker/Compose 就适用。
+
+## 什么时候不要用
+
+- **还没决定跑在什么平台上** → [architecture-design](/skills/skills-reference/high/architecture-design/)
+- **要搭本地开发环境** → [dev](/skills/skills-reference/high/dev/)
+- **要写业务代码** → [universal-development](/skills/skills-reference/low/universal-development/) 或对应专业 Skill
+- **要上 Kubernetes / Helm / 云资源 / IaC** → 不在范围内
+- **要配 CI 流水线** → 不在范围内
+- **数据库迁移、备份恢复本身** → [database-ops](/skills/skills-reference/high/database-ops/)。容器部署不会顺带做数据操作。
+- **对象存储、静态资源分发** → [file-oss-management](/skills/skills-reference/medium/file-oss-management/)
+
+## 前置条件
+
+**部署形态已经定了。** 确定用 Docker/Compose，而不是在一次发布里顺便把选型也做掉。
+
+**目标服务器和授权都明确。** 哪台机器、哪个账号、哪个目录、允许做哪些动作。目标不清时它只会问缺的那几项，不会先连上去看看。
+
+**源码已经在本地构建并验证过。** 这是整条链的地基：服务器上的每一个字节都要能追溯到一次本地验证。
+
+<Aside type="danger">
+"服务器上已经有这个文件了""临时修一下更快""这条连接以前能用"——这三句都不构成跳过"改源码 → 本地构建 → 本地验证"的理由。私钥、密码、令牌和真实业务凭据不会被回显到对话里，也不会烘焙进镜像层；公钥和它的指纹可以展示。
+</Aside>
+
+## 使用示例
+
+### 示例 1：首次容器化并部署
+
+你说：`把这个 Spring Boot 服务容器化，部到 deploy.example.com`
+
+先拿到多阶段构建的 `Dockerfile`，运行阶段不带构建工具链，基础镜像固定到具体 tag：
+
+```dockerfile
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /src
+COPY pom.xml .
+RUN mvn -B -q dependency:go-offline
+COPY src ./src
+RUN mvn -B -q clean package -DskipTests
+
+FROM eclipse-temurin:17.0.11_9-jre-jammy
+WORKDIR /app
+RUN useradd -r -u 10001 app
+COPY --from=build /src/target/app.jar /app/app.jar
+USER 10001
+EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=3s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:8080/actuator/health || exit 1
+ENTRYPOINT ["java","-XX:MaxRAMPercentage=75","-jar","/app/app.jar"]
+```
+
+Compose 里镜像用 digest 钉住，配置从外部注入，端口先绑回环再交给反向代理：
+
+```yaml
+services:
+  api:
+    image: registry.example.com/order-api@sha256:9c1f4a...e2
+    env_file: [./config/api.env]
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["./data/upload:/app/upload"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5" }
+```
+
+本地验证跑完，才有一个"候选"：
+
+```bash
+docker compose -p order --env-file config/api.env config --quiet   # 配置先自检
+docker build -t order-api:2026.09.04-1 .
+docker run --rm -d -p 18080:8080 --env-file config/api.env --name smoke order-api:2026.09.04-1
+curl -fsS localhost:18080/actuator/health
+docker logs smoke --tail 50
+shasum -a 256 target/app.jar
+docker image inspect order-api:2026.09.04-1 --format '{{.Id}}'
+docker rm -f smoke
+```
+
+```text
+本地候选身份
+制品   target/app.jar            sha256 4f2b91…c7
+镜像   order-api:2026.09.04-1    id sha256:9c1f4a…e2
+健康   /actuator/health → {"status":"UP"}
+smoke  POST /api/v1/orders → 201；GET /api/v1/orders → 200
+```
+
+### 示例 2：SSH 密钥接入
+
+你说：`我给你服务器地址，你来部署`
+
+产出的第一步是一把专用部署密钥，不复用你的个人密钥：
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/deploy_order_prod -C "deploy:order-prod"
+ssh-keygen -lf ~/.ssh/deploy_order_prod.pub
+# 256 SHA256:HkP9…q4 deploy:order-prod (ED25519)
+```
+
+第二步是一整段交给你在服务器上粘贴执行的命令——幂等、权限收紧、最后自己验证：
+
+```bash
+KEY='ssh-ed25519 AAAAC3NzaC1lZDI1…  deploy:order-prod'
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+touch "$HOME/.ssh/authorized_keys" && chmod 600 "$HOME/.ssh/authorized_keys"
+grep -qxF "$KEY" "$HOME/.ssh/authorized_keys" || echo "$KEY" >> "$HOME/.ssh/authorized_keys"
+grep -cxF "$KEY" "$HOME/.ssh/authorized_keys"     # 期望输出 1
+```
+
+<Aside type="caution">
+这一段之后它会停下来等你反馈，不会自己往下试连接。本地存在一把私钥，不等于服务器上已经授权。
+</Aside>
+
+第三步核验主机指纹，要和云控制台上显示的那串对得上才写入 `known_hosts`：
+
+```bash
+ssh-keyscan -p 22 -t ed25519 deploy.example.com 2>/dev/null | ssh-keygen -lf -
+ssh -i ~/.ssh/deploy_order_prod -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+    -p 22 ops@deploy.example.com \
+    'hostname; id -un; uname -sm; docker version --format "{{.Server.Version}}"'
+```
+
+```text
+deploy-prod-01
+ops
+Linux x86_64
+26.1.3
+→ 身份与预期一致，继续；不一致则立即停止
+```
+
+### 示例 3：备份、上传、部署
+
+备份先做，且带上足以还原的全部要素——包括当前实际运行的镜像 digest：
+
+```bash
+H=ops@deploy.example.com; TS=$(date +%Y%m%d-%H%M%S)
+ssh $H "mkdir -p /srv/order/backup/$TS && \
+        cp /srv/order/compose.yaml /srv/order/backup/$TS/ && \
+        cp -r /srv/order/config     /srv/order/backup/$TS/ && \
+        docker inspect order-api --format '{{.Image}}' > /srv/order/backup/$TS/image.digest"
+
+scp target/app.jar $H:/srv/order/incoming/app.jar.$TS
+ssh $H "shasum -a 256 /srv/order/incoming/app.jar.$TS"   # 与本地一致才继续
+ssh $H "cd /srv/order && docker compose -p order up -d --no-deps api"
+```
+
+发布后从两个方向各跑一次 smoke——服务器本机和你实际访问的入口：
+
+```bash
+ssh $H "docker compose -p order ps --format '{{.Name}} {{.State}} {{.Image}}'"
+ssh $H "docker inspect order-api --format '{{.Image}} restarts={{.RestartCount}}'"
+ssh $H "curl -fsS localhost:8080/actuator/health"
+curl -fsS https://api.example.com/actuator/health
+curl -fsS -X POST https://api.example.com/api/v1/orders -d @sample.json -H 'Content-Type: application/json'
+```
+
+```text
+容器        order-api  running  sha256:9c1f4a…e2   ← 与本地候选一致
+重启次数    0
+本机 smoke  200 {"status":"UP"}
+外部 smoke  200，反向代理与 TLS 正常
+业务 smoke  下单 201 / 列表 200 / 上传 200
+```
+
+<Aside type="danger">
+只看到 `Running`，或者只有一个健康探针变绿，都不等于发布成功。反向代理配错、静态资源 404、跨域头丢失这些问题，容器状态里一点痕迹都没有。
+</Aside>
+
+### 示例 4：回滚
+
+你说：`不对，退回去`
+
+回滚用的是部署前那份备份，恢复的是精确的旧镜像和旧配置：
+
+```bash
+ssh $H "cd /srv/order && \
+        cp backup/$TS/compose.yaml . && cp -r backup/$TS/config . && \
+        docker compose -p order up -d --no-deps api"
+ssh $H "docker inspect order-api --format '{{.Image}}'"
+ssh $H "cat /srv/order/backup/$TS/image.digest"      # 两行必须一致
+curl -fsS https://api.example.com/actuator/health
+```
+
+```text
+回滚后镜像   sha256:71ae03…b8  = 备份记录的 digest ✓
+外部入口     200 {"status":"UP"}
+数据风险     本次未执行迁移，无需数据回退
+未验证       回滚前那 4 分钟内产生的订单是否受影响，需业务侧确认
+```
+
+删卷、清日志、把旧代码重新打成同一个 tag——这三种都不是回滚，只是让现场看起来正常了。
+
+### 示例 5：部署后的密钥清理
+
+部署验证结束后会明确问你一次：要不要把这次的部署公钥从服务器上删掉。选择保留也可以，但会给你指纹和所在账户，方便你自己记账。
+
+确认删除时按完整公钥行精确匹配，用临时文件原子替换，然后验证那一行确实不在了：
+
+```bash
+KEY='ssh-ed25519 AAAAC3NzaC1lZDI1…  deploy:order-prod'
+ssh $H "grep -vxF \"\$KEY\" ~/.ssh/authorized_keys > ~/.ssh/ak.tmp && \
+        chmod 600 ~/.ssh/ak.tmp && mv ~/.ssh/ak.tmp ~/.ssh/authorized_keys && \
+        grep -cxF \"\$KEY\" ~/.ssh/authorized_keys"
+# 输出 0 表示已删除
+```
+
+本地私钥和 `.pub` 要不要删是另一个问题，会分开问——远端撤销授权和本地清理是两件独立的事。
+
+<Aside type="tip">
+远端公钥删掉之后，当前那条 SSH 会话可能还能用一会儿。这是连接复用的正常现象，不要据此判断删除失败——按上面那条 `grep -cxF` 的输出来判断。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**先做**：[architecture-design](/skills/skills-reference/high/architecture-design/) 定部署形态与平台，[universal-development](/skills/skills-reference/low/universal-development/) 或 [dev](/skills/skills-reference/high/dev/) 把代码写完并本地验证。
+
+**后做**：[update-status](/skills/skills-reference/medium/update-status/) 按实际发布结果回写状态。
+
+**配合**：[database-ops](/skills/skills-reference/high/database-ops/)（迁移要单独确认与执行）、[scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/)（容器内的定时任务）、[file-oss-management](/skills/skills-reference/medium/file-oss-management/)（静态资源与上传目录）。
+
+```text
+architecture-design → universal-development → server-docker-deployment → update-status
+                                                        ↕
+                              database-ops（数据迁移单独确认）
+                              scheduled-jobs（容器内定时任务）
+```
+
+它不依赖任何上游 Skill 就能独立跑，但发布授权只能来自你，不来自上游 Skill 的结论。
+
+## 常见坑
+
+**用 `latest` 当发布身份。** 出问题时你没法说清线上到底跑的是哪次构建，也没法回滚到"上一个"——因为 `latest` 已经被覆盖了。
+
+**在服务器上直接改配置。** 下一次部署会覆盖它，从备份恢复也拿不回来。这类改动的半衰期通常是两周，然后变成一个查不出原因的线上差异。
+
+**秘密进了镜像层。** 写在 `ARG`、`ENV` 或 `COPY` 进去的 `.env` 里，即使后面一层删掉，镜像历史里依然能读出来。
+
+**整个仓库无差别上传。** 连带 `.git`、本机缓存、`node_modules` 和各种密钥文件一起进服务器。
+
+**执行全局 `docker prune`。** 会把同一台机器上其他服务的镜像和卷一起清掉，而这台机器上往往不止你这一个服务。
+
+**跳过主机指纹核验。** `ssh-keyscan` 只能拿到对方声称的 key，证明不了它可信；用 `StrictHostKeyChecking=no` 绕过，等于放弃了中间人防护。
+
+**只在服务器本机 curl 一下。** 这条路径不经过反向代理和 TLS，恰好跳过了最容易配错的一段。
+
+<Aside type="note">
+最终会给你一份对账清单：目标身份、源码改动、构建与验证命令及结果、候选校验和与远端 digest 是否一致、公钥与主机指纹、备份位置、容器实际状态、两侧 smoke 结果、回滚是否触发、密钥保留或删除的结论。缺哪一项就写成未验证边界，不会含糊过去。
+</Aside>
+
+## 下一步
+
+- [architecture-design](/skills/skills-reference/high/architecture-design/) - 部署形态与平台选型
+- [dev](/skills/skills-reference/high/dev/) - 本地开发与构建验证
+- [database-ops](/skills/skills-reference/high/database-ops/) - 发布伴随的数据迁移
+- [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/) - 容器内的定时任务
+- [update-status](/skills/skills-reference/medium/update-status/) - 发布后回写状态
+
+
+
+
+

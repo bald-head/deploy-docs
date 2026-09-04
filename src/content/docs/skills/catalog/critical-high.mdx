@@ -1,6 +1,6 @@
 ---
-title: Critical & High 优先级 Skill
-description: 20 个核心开发流程的关键 Skill
+title: 核心流程 Skill 详解
+description: 最常用的 20 个核心 Skill，含触发词、门槛与协作关系
 order: 2
 ---
 
@@ -8,932 +8,980 @@ import { Aside } from '@astrojs/starlight/components'
 
 ## 概述
 
-这 20 个 Skill 是核心开发流程的关键能力，路由优先级最高，触发词最丰富，准确率最高。
+本页详细拆解**日常最常用的 20 个 Skill**：它们串起了"想清楚 → 定方案 → 写代码 → 审查 → 提交"这条主线，触发词最丰富，路由也最准。
 
-**优先级**：
-- **Critical**（1 个）：任务管理核心
-- **High**（19 个）：核心开发流程
+框架里按 frontmatter 声明的优先级分布是：
+
+- **Critical**（2 个）：`change-impact-analysis`、`product-manager`
+- **High**（25 个）：核心开发流程
+- **Medium**（30 个）：见 [Medium 优先级](/skills/catalog/medium/)
+- **Low**（38 个）：见 [Low & Fallback](/skills/catalog/low-fallback/)
+
+本页收录的 20 个按"使用频率"挑选，因此也包含了几个优先级不是 High 但每天都会用到的 Skill（`project-navigator`、`progress`、`universal-development`）。剩余的 High 优先级 Skill 在页尾统一列出。
+
+<Aside type="tip">
+只想快速查一个 Skill 怎么用，直接去 [Skill 参考手册](/skills/skills-reference/)，那里每个 Skill 都有独立页面。
+</Aside>
+
 
 ## Critical 优先级
 
-### task-todo-workflow
+### change-impact-analysis
 
-**描述**：直接维护功能+菜单、覆盖全部交付面的当前开发者唯一 TODO
+需求改一个字，代码常常要动七个地方，难的不是动手，是知道到底是哪七个。这个 Skill 只做一件事：把一次已经批准过的范围变化，摊成一份完整的受影响清单——数据、契约、页面、权限、交付面——然后就地改掉那份 TODO，而不是另写一份报告。
 
-**触发词**：
-- 中文：任务管理、TODO、新项目、管理任务、任务清单
-- 英文：task management, TODO, new project
+它是 Critical，但不是每次开工都要先过一遍的关卡。判断标准只有一句：用户能做的事、或者别人依赖的契约，有没有真的动。没动就别叫它。
 
-**适用场景**：
-- 新项目启动（第一步必须调用）
-- 建立流程状态机
-- 维护 TODO 状态
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "需求改了，用户表要加个手机号" | 一份受影响清单：数据模型、注册入口、注册表单，以及要跟着改的验收条目 |
+| "这个接口的返回结构要换" | 所有调用方的位置，加上兼容窗口怎么留、旧版本怎么过渡 |
+| "这个功能以后也要能在手机上用" | 新增交付面带出来的页面、导航、权限和验收缺口 |
+| "先别动，帮我看看这改动会牵到哪些地方" | 只读的牵连范围，一个文件都不改 |
 
-**前置条件（gates）**：
-- 项目已初始化 Git 仓库
-- Git user.name 已配置
+触发面覆盖需求变动、字段增减、契约调整、交付面或权限范围变化这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 全新的东西、还没有过产品结论 → [product-manager](/skills/skills-reference/critical/product-manager/)。它管从零定义，这里管已有范围发生变化。
+- 第一次生成 TODO → [project-manager](/skills/skills-reference/high/project-manager/)。初始清单和变更后的更新是两件事。
+- 追加一个跟现有功能无关的功能 → [add-todo](/skills/skills-reference/medium/add-todo/)。
+- 代码写错了、Review 提的问题要改、勾状态提交 → 这些都不是范围变化，直接做。
+- 线上故障要定根因 → [bug-detective](/skills/skills-reference/high/bug-detective/)；需求本身还没说清 → [grilling](/skills/skills-reference/medium/grilling/)。
+
+**前后顺序**：一般先有 [product-manager](/skills/skills-reference/critical/product-manager/) 或 [project-manager](/skills/skills-reference/high/project-manager/) 留下的那份已批准计划；改完接着回到 [project-manager](/skills/skills-reference/high/project-manager/) 或 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 让计划继续往下走。
 
 **使用示例**：
 
+```text
+你的输入：
+需求改了，用户表要加个手机号，注册的时候必填。
+
+它会做什么：
+1. 先确认这是真变化：用户能做的事变了（注册多填一项），已发布的注册契约也变了
+2. 按交付面找齐被牵动的东西
+   - 数据层：user 表新增列、迁移与回填、唯一性怎么定
+   - 服务层：注册入口的参数校验、错误语义、号码重复怎么处理
+   - 客户端：注册表单多一个输入项和格式提示
+   - 验收：原有条目跟着改，并补上"号码重复"这条异常分支
+3. 就地改那份 TODO：受影响的功能条目、写集、依赖顺序一起更新
+
+你会拿到：
+- 改过的 TODO（不是一份新报告）
+- 哪些功能被牵动、为什么被牵动
+- 需要你拍板的地方：号码要不要唯一约束、老数据怎么补
 ```
-用户输入：
-"我要做一个用户管理系统"
-
-系统行为：
-1. 检查是否存在 TODO
-2. 创建 docs/<developer-id>/tasks/todo/user-management.md
-3. 建立流程状态机
-4. 自动路由到 product-manager
-
-预期输出：
-TODO 文件已创建，包含流程状态机
-```
-
-**与其他 Skill 的关系**：
-- **before**: 无（通常是第一个调用）
-- **after**: product-manager, project-manager
-- **complement**: add-todo, update-status, progress
 
 <Aside type="caution">
-task-todo-workflow 是新项目或新功能的强制第一入口，不能跳过。
+它的产出是就地改掉的计划。没有一份可改的 TODO，分析就没有落点——那种情况该先建计划，不是先做分析。
 </Aside>
+
+---
+
+### product-manager
+
+一个功能"大概做成什么样"和"到底做什么"之间，差着七八个异常分支。`product-manager` 负责把后者说清：谁在用、能做哪些事、菜单入口在哪、规则和权限怎么定、状态怎么流转、验收条目长什么样。
+
+它适合刚开工的项目，或者一个还没规划过的功能。已经批准、已经在 TODO 里的东西要改，别叫它——那是 [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 的活。用错的代价不对称：把变更当成从零定义，会把正在做的东西重新定义一遍，正在跑的执行者会读到两份不一样的范围。
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "我要做一个用户管理系统" | 从研究到验收的一整遍：角色、能力、菜单、规则、权限、状态、验收 |
+| "加一个批量导入" | 一个功能的完整边界，含空数据、部分失败、并发、权限不足这些真实分支 |
+| "这个需求你帮我想清楚" | 一次问一个问题问到足够清楚，而不是先交一份猜出来的文档 |
+| "验收条件怎么写" | 可观察、可复现、编号稳定的验收条目 |
+
+触发面覆盖新建项目、还没规划过的功能、需求要先想清楚、验收怎么定这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 已批准 TODO 的续作、修 Bug、修编译、不改变行为的维护 → [dev](/skills/skills-reference/high/dev/)。这类事重跑一遍产品流程没有产出，只有等待。
+- 已批准范围真的动了 → [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/)。这一条最容易走错。
+- 方向早定了，只要一份需求文档或 OKR → [product-execution](/skills/skills-reference/high/product-execution/)。
+- 机会还没验证 → [product-discovery](/skills/skills-reference/high/product-discovery/)；要定市场与商业模式 → [product-strategy](/skills/skills-reference/high/product-strategy/)。
+- 要划边界 → [architecture-design](/skills/skills-reference/high/architecture-design/)；要选技术 → [tech-decision](/skills/skills-reference/high/tech-decision/)；要写代码 → [dev](/skills/skills-reference/high/dev/)。
+
+**前后顺序**：一般先由 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 把 TODO 和阶段建起来（不然结论没有落点）；做完接着 [architecture-design](/skills/skills-reference/high/architecture-design/) → [tech-decision](/skills/skills-reference/high/tech-decision/) → [project-manager](/skills/skills-reference/high/project-manager/)；过程中可以配合 [grilling](/skills/skills-reference/medium/grilling/) 把话问清、[brainstorm](/skills/skills-reference/medium/brainstorm/) 发散候选。
+
+**使用示例**：
+
+```text
+你的输入：
+做一个用户管理系统，要有注册、登录、个人信息维护。
+
+它会做什么：
+1. 先把说不清的地方问掉：注册要不要审核、谁能改别人的资料、密码规则跟谁对齐
+2. 研究仓库里已有的同类实现，能沿用就不另起一套
+3. 把功能摊开：角色与权限、能力清单、菜单入口、状态流转、异常分支
+4. 写出编号稳定的验收条目，每条都可观察、可复现
+
+你会拿到：
+- 功能范围与边界，含明确写出来的"这一遍不做什么"
+- 验收条目 AC-001、AC-002 …，覆盖空值、重复、越权、并发这些分支
+- 菜单入口与能力的对应关系
+- 需要你拍板的取舍，以及还没被证实的假设
+```
 
 ---
 
 ## High 优先级
 
-### product-manager
+### task-todo-workflow
 
-**描述**：对新项目或新功能完成研究、brainstorm、产品定义与验收
+换台机器、上下文被压缩、隔三天回来——没有一份写下来的阶段记录，就只能靠回忆重建"上次到哪了"。`task-todo-workflow` 负责先把这份记录建起来：当前开发者是谁、TODO 文件落在哪、现在处在哪个阶段、下一步该谁上。别的 Skill 往里填内容，它守着这份记录。
 
-**触发词**：
-- 中文：产品定义、完整需求、产品规划、新项目、新功能、需求分析、PRD
-- 英文：product definition, requirements, PRD, product planning
+判断要不要开它有个简单标准：这件事会不会跨越一次会话。会，就开；改个 typo、看一段日志、跑一条命令，不用。
 
-**适用场景**：
-- 新项目的产品定义
-- 新功能的需求分析
-- 需要完整的用户故事和验收条件
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "我要做一个用户管理系统" | 一份带 Owner 和阶段状态的 TODO 文件，以及"下一步该谁上"的明确指向 |
+| "接着上次那个功能做" | 上次停在哪个阶段、卡在什么条件上、来源文档在哪一节 |
+| "等 DBA 开数据库账号" | 阶段挂上阻塞原因和恢复条件，恢复时不用重新解释一遍 |
+| "我们不用代码生成器" | 该阶段被标成不适用并写明原因，而不是静默跳过 |
 
-**前置条件（gates）**：
-- 新项目或尚未规划的新功能（非已批准 TODO 的续作）
-- 需求需要完整定义（用户、能力、菜单、规则、权限、验收）
-- 存在唯一 TODO 文件且已执行 --plan-start
+触发面覆盖新建项目、接续上次的工作、推进或阻塞某个阶段、维护那份唯一 TODO 这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
 
-**冲突解决**：
-- vs `universal-development`: universal-development 负责已有产品定义的实现；product-manager 负责新项目/新功能的产品定义
-- vs `change-impact-analysis`: change-impact-analysis 负责已有范围的变更分析；product-manager 负责新项目/新功能的完整定义
+**什么时候不要用**：
 
-**使用示例**：
+- 要定功能做什么 → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- 要把已定结论拆成功能清单 → [project-manager](/skills/skills-reference/high/project-manager/)。分工是"谁拿笔"的区别：这里管文件在哪、阶段到哪、什么时候能开工，那边管往里写什么。
+- 要写代码 → [dev](/skills/skills-reference/high/dev/) 或对应领域 Skill。
+- 只想看现在到哪了 → [progress](/skills/skills-reference/medium/progress/)；只想改某一条的状态 → [update-status](/skills/skills-reference/medium/update-status/)。
+- 问一句话、看一眼日志、跑一条命令 → 直接做。这类事不需要持久状态，硬套一套流程只会让事情变重。
 
-```
-用户输入：
-"用户管理系统需要包括注册、登录、个人信息管理"
-
-系统行为：
-1. 研究现有类似功能
-2. 通过 grilling 澄清关键问题
-3. 完成产品定义（用户、能力、菜单、规则、权限、验收）
-
-预期输出：
-完整的产品定义文档，包含：
-- 功能范围
-- 验收条件（AC-001, AC-002...）
-- 非功能需求
-- 边界说明
-```
-
-**与其他 Skill 的关系**：
-- **before**: task-todo-workflow
-- **after**: architecture-design, tech-decision, project-manager
-- **complement**: product-discovery, product-execution, brainstorm, grilling
-
-**不适用场景**：
-- 已有完整 PRD 的实现
-- 纯技术维护
-- Bug 修复
-
----
-
-### change-impact-analysis
-
-**描述**：当已批准范围真实变化时，完整识别受影响功能、契约、数据、权限和交付面并原位更新 TODO
-
-**触发词**：
-- 中文：影响分析、变更影响、依赖分析、需求改了、需求变了、范围变了、加一个字段、加字段、改需求、功能变更
-- 英文：impact analysis, change impact, scope change, requirement change
-
-**适用场景**：
-- 已批准的需求发生变化
-- 数据模型需要调整
-- API 契约变更
-- 功能范围扩大或缩小
-
-**前置条件（gates）**：
-- 已有批准的范围、契约或交付面
-- 发生真实变化（用户结果、API、数据、权限或交付面）
-- 存在唯一 TODO 文件需要更新
-
-**冲突解决**：
-- vs `product-manager`: product-manager 负责新项目产品定义；change-impact-analysis 负责已有范围的变更分析
-- vs `project-manager`: project-manager 负责初始 TODO 生成；change-impact-analysis 负责变更后的 TODO 更新
+**前后顺序**：通常是整条链的第一个；建完接着 [product-manager](/skills/skills-reference/critical/product-manager/) → [architecture-design](/skills/skills-reference/high/architecture-design/) → [tech-decision](/skills/skills-reference/high/tech-decision/) → [project-manager](/skills/skills-reference/high/project-manager/)；日常可以配合 [add-todo](/skills/skills-reference/medium/add-todo/)、[update-status](/skills/skills-reference/medium/update-status/)、[progress](/skills/skills-reference/medium/progress/)。
 
 **使用示例**：
 
-```
-用户输入：
-"需求改了，用户表要加一个手机号字段"
+```text
+你的输入：
+我要做一个用户管理系统。
 
-系统行为：
-1. 识别受影响的模块：
-   - 数据模型：User 表增加 phone 字段
-   - API：注册接口增加 phone 参数
-   - 前端：注册表单增加手机号输入
-2. 分析依赖关系
-3. 更新 TODO 中受影响的 Feature
+它会做什么：
+1. 解析当前开发者身份（先读仓库的 Git user.name）
+2. 在 docs/<developer-id>/tasks/todo/ 下建立那份唯一 TODO
+3. 建起阶段记录：从需求受理一路到收口，每个阶段有进入条件和证据要求
+4. 指向下一步：产品这一层还没有结论，先交给 product-manager
 
-预期输出：
-TODO 已更新，包含：
-- 新增或修改的 Feature
-- 更新的写集
-- 调整的依赖关系
+你会拿到：
+- 一份 TODO 文件，Owner 和当前阶段都写在里面
+- 一个明确的下一步，而不是"接下来随便挑一个 Skill"
 ```
 
-**与其他 Skill 的关系**：
-- **before**: product-manager, project-manager, task-todo-workflow
-- **after**: project-manager, task-todo-workflow
-- **complement**: universal-development, code-review
+<Aside type="caution">
+记录是先建起来、再往里填内容的，不是等方案都写完了回头补一份状态。
+</Aside>
 
 ---
 
 ### project-manager
 
-**描述**：把完整产品、设计、架构和技术结论写入当前开发者唯一 TODO
+产品、设计、边界、技术都定了之后还差一步：把这些结论变成一份能照着开工的功能清单。`project-manager` 做的就是这一步——按功能点和菜单入口铺开，每个条目纵向完整（数据、接口、页面算一个功能，而不是把前端后端切成两个阶段），并标出依赖顺序和写集，好让能并行的真能并行。
 
-**触发词**：
-- 中文：项目规划、任务分解、制定计划、生成 TODO
-- 英文：project planning, task breakdown, create TODO
+上游四样东西缺一样，清单就会漏东西：缺功能定义会漏菜单和权限，缺边界结论写集就是猜的，缺技术结论"怎么验证"那一栏没法填，实施时又要停下来补。
 
-**适用场景**：
-- 产品定义完成后生成 TODO
-- 架构和技术方案确定后拆分任务
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "都确认了，生成 TODO" | 一份按功能点和菜单入口铺开、覆盖全部交付面的唯一 TODO |
+| "这几个页面能一起做吗" | 依赖关系加写集互斥判断，以及到底能并行到什么程度 |
+| "这个大目标怎么拆" | Epic 下挂纵向完整的子功能，不按前端/后端/联调切阶段 |
+| "先做哪个" | 一个可执行顺序，前置没完成的不会被排在前面 |
 
-**前置条件（gates）**：
-- 已完成产品定义（product-manager）
-- 已完成架构设计（architecture-design）
-- 已完成技术选型（tech-decision）
+触发面覆盖生成 TODO、拆解目标、判断能不能并行、确定实施顺序这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 要定功能做什么 → [product-manager](/skills/skills-reference/critical/product-manager/)；要划边界 → [architecture-design](/skills/skills-reference/high/architecture-design/)；要选技术 → [tech-decision](/skills/skills-reference/high/tech-decision/)。
+- 要建文件、推进阶段 → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。这里只往里写功能条目。
+- 只想加一个功能 → [add-todo](/skills/skills-reference/medium/add-todo/)。它会先查重，不会重建整份清单。
+- 只想改一条的状态 → [update-status](/skills/skills-reference/medium/update-status/)；只想知道现在到哪了 → [progress](/skills/skills-reference/medium/progress/)。
+- 已批准范围动了 → [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/)。
+
+**前后顺序**：一般先走完 [product-manager](/skills/skills-reference/critical/product-manager/) → [architecture-design](/skills/skills-reference/high/architecture-design/) → [tech-decision](/skills/skills-reference/high/tech-decision/)；生成之后由 [crud-development](/skills/skills-reference/high/crud-development/)、[dev](/skills/skills-reference/high/dev/) 之类的实施 Skill 领条目开工。
 
 **使用示例**：
 
-```
-系统行为（自动）：
-1. 读取产品定义、架构、技术方案
-2. 拆分成可独立验收的 Feature
-3. 标注依赖关系
-4. 标注写集（并行冲突检测）
-5. 生成完整 TODO
+```text
+你的输入：
+产品、边界、技术这三层都过了，生成 TODO。
 
-预期输出：
-完整的 TODO 文件，包含：
-- Epic 汇总
-- Feature 列表（带 ID、依赖、写集、AC）
-- 档位和自主模式
-```
+它会做什么：
+1. 把上游结论压成来源锚点，跟着每个条目一起存（不只留一个文件名）
+2. 拆成 Epic + 纵向完整的功能条目，每条都能独立验收
+3. 标依赖 DAG：谁必须排在谁之前
+4. 标写集：两个条目会不会改到同一批文件，决定它们能不能并行
+5. 按风险给规划深度，小改动不套大流程
 
-**与其他 Skill 的关系**：
-- **before**: product-manager, architecture-design, tech-decision
-- **after**: universal-development, crud-development（开始实施）
-- **complement**: add-todo, update-status
+你会拿到：
+- Epic 汇总 + 功能条目清单，每条带 ID、依赖、写集、验收
+- 一个可执行顺序，以及可以并行的分组
+```
 
 ---
 
 ### architecture-design
 
-**描述**：设计系统、模块、数据所有权、部署和仓库边界
+功能定义回答"产品由哪些能力和入口构成"，这个 Skill 回答另一半：这些能力受哪些系统、数据和部署边界约束。它交出来的是模块归属、数据谁能写、允许的调用方向、环境矩阵和仓库拓扑。
 
-**触发词**：
-- 中文：领域边界、架构、系统架构、服务拆分、模块设计
-- 英文：architecture, system design, module design
+顺序上它必须靠前。这些边界一变，下游选中的技术往往要重做；反过来通常不用——所以是它先冻结，选型后接。它自己不挑语言、框架和存储，也不建表、不定接口签名。
 
-**适用场景**：
-- 新项目的系统架构设计
-- 模块划分和边界定义
-- 数据所有权设计
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "产品定好了，把边界划一下" | 模块归属、数据归属、允许的调用方向，以及留给选型的问题清单 |
+| "这块要不要拆成独立服务" | 几个真实候选的对比和一条带回滚点的演进路径，不是一句"建议拆" |
+| "这个功能该放哪个模块" | 从业务能力和数据归属给出的判断，附理由 |
+| "线上和测试环境怎么划" | 一份环境矩阵：用途、隔离方式、配置来源、晋级关系 |
+| "这个模块能依赖那个模块吗" | 依赖方向规则，以及跨边界调用的失败与超时语义 |
 
-**前置条件（gates）**：
-- 已有产品定义
-- 需要设计系统架构
+触发面覆盖边界划分、模块归属、服务拆不拆、环境与仓库拓扑这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 要选语言、框架、存储、请求库、生成器 → [tech-decision](/skills/skills-reference/high/tech-decision/)。这里定"怎么分边界"，它定"用什么实现"。
+- 要建表、加索引、写迁移 → [database-design](/skills/skills-reference/high/database-design/)。
+- 要定接口签名、错误码、校验 → [api-development](/skills/skills-reference/high/api-development/)。
+- 要页面结构和交互 → [frontend-design](/skills/skills-reference/high/frontend-design/) 定基线，[ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/) 落地。
+- 要建或改 TODO → [project-manager](/skills/skills-reference/high/project-manager/)。这里不动任务状态。
+
+**前后顺序**：一般先有 [product-manager](/skills/skills-reference/critical/product-manager/) 的结论（有页面的部分还要先有 [frontend-design](/skills/skills-reference/high/frontend-design/) 基线，因为页面结构会真实影响接口划分）；冻结之后接 [tech-decision](/skills/skills-reference/high/tech-decision/) 和 [database-design](/skills/skills-reference/high/database-design/)。
 
 **使用示例**：
 
-```
-系统行为：
-1. 设计系统架构（前后端分离、微服务等）
-2. 定义模块边界
-3. 设计数据模型
-4. 定义 API 契约
+```text
+你的输入：
+用户管理这一摊，帮我把系统边界和数据归属定下来。
 
-预期输出：
-架构设计文档，包含：
-- 系统架构图
-- 模块划分
-- 数据模型
-- API 设计
-```
+它会做什么：
+1. 按业务能力划模块，写清每个模块的职责边界
+2. 定数据归属：用户主数据只有 auth 模块能写，其他模块只读
+3. 定调用方向，以及跨边界调用的失败、超时、重试语义
+4. 冻结环境矩阵和仓库拓扑（用逻辑根路径，不写某台机器上的绝对路径）
+5. 把留给选型的技术问题列出来，不在这里替它做决定
 
-**与其他 Skill 的关系**：
-- **before**: product-manager
-- **after**: tech-decision, database-design
-- **complement**: database-design, api-development
+你会拿到：
+- 模块与职责清单、数据归属表、允许的依赖方向
+- 环境矩阵与仓库拓扑
+- 一份"交给 tech-decision 回答"的问题清单
+- 全新项目里，这些会明确标成"选定方案"而不是"现有模块"，免得后来接手的人以为代码已经存在
+```
 
 ---
 
 ### tech-decision
 
-**描述**：在每个业务 Feature 实现前比较可行技术并选出可实施、可验证、可回退的方案
+开工前"用什么"的那个决定，往往决定了后面三个月的返工量。`tech-decision` 把它从"顺手用仓库里已有的"或"社区最火的"，变成一次留得下证据的比较：每个功能都要有一句点名到具体技术的结论，后面挂着怎么落地、边界在哪、走不通怎么退。
 
-**触发词**：
-- 中文：选择技术、技术方案、技术评估、技术选型
-- 英文：tech decision, technology choice, tech stack
+"仓库里已经在用了"不算结论——它没回答"为什么在这个功能上它也是对的"。反过来，已有明确指向当前功能的确认结论，直接复用就好，不必重比一遍。
 
-**适用场景**：
-- 技术栈选择
-- 框架选型
-- 工具库选择
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "这个功能用什么做" | 先拆成会影响实现的技术问题，再逐个给点名结论 |
+| "帮我比一比这两条路" | 具名候选的对比、判据，以及选中那个的落地与回退方式 |
+| "用 WebSocket 还是 SSE" | 单个技术问题的同类候选比较 |
+| "要不要引入 Redis" | 新依赖值不值、成本多少、退不退得掉 |
 
-**前置条件（gates）**：
-- 已有批准需求或功能
-- 尚未开始生产代码编辑
-- 需要选择具体技术方案
+触发面覆盖选型、候选比较、单点技术取舍、要不要引入新依赖这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 要划的是系统边界和部署形态 → [architecture-design](/skills/skills-reference/high/architecture-design/)。顺序反了就会出现"还不知道这个模块归谁，却已经挑好了存储引擎"。
+- 要定的是功能做什么、验收长什么样 → [product-manager](/skills/skills-reference/critical/product-manager/)。选型不许反过来砍能力、客户端、权限或验收。
+- 代码已经在落地了 → 开发中间临时换技术，等于让选型变成对既成事实的追认。
+- 栈早定了、这个功能也没新增依赖 → 做一次适配核对就够，不必重新生成一批候选。
+- 连有哪些路子都没想清 → 先用 [brainstorm](/skills/skills-reference/medium/brainstorm/) 发散候选和被忽略的约束，再回来收敛。它给的推荐是原料，不是结论。
+
+**前后顺序**：一般先冻结 [architecture-design](/skills/skills-reference/high/architecture-design/)；结论出来后交 [project-manager](/skills/skills-reference/high/project-manager/) 写进 TODO；想知道仓库里现在用的是什么，配合 [project-navigator](/skills/skills-reference/medium/project-navigator/)。
 
 **使用示例**：
 
-```
-系统行为：
-1. 比较可行技术（如 Vue vs React）
-2. 分析优劣
-3. 考虑团队熟悉度、学习曲线、生态
-4. 记录决策理由
+```text
+你的输入：
+配置版本管理这个功能，开工前先把技术这层定下来。
 
-预期输出：
-技术选型文档，包含：
-- 选择的技术栈
-- 决策理由
-- 对比分析
-- reuse-existing 或新技术
-```
+它会做什么：
+1. 先把功能拆成会影响实现的技术问题：版本怎么存、差异怎么比、并发写入怎么办、怎么回滚
+2. 每个问题列具名候选——点名到具体库和版本，不是"某种数据库"
+3. 用判据比较：能不能满足验收、和现有栈的适配成本、运维负担、退路
+4. 给结论 + 落地路径 + 边界 + 回退方式
 
-**与其他 Skill 的关系**：
-- **before**: architecture-design
-- **after**: project-manager
-- **complement**: project-navigator（查找现有技术）
+你会拿到：
+- 每个技术问题一句点名结论，附理由
+- 落地步骤、兼容与迁移方式、回滚点
+- 复用现有实现时，明确写出复用的是哪一套、为什么这次也成立
+- 缺了生产路径、兼容、安全、验证或回滚中的任何一块，受影响的实现会先停下来补齐
+```
 
 ---
 
 ### crud-development
 
-**描述**：按已批准需求完成 CRUD 纵向业务交付，覆盖数据模型、API、Service 与页面联动
+增删改查这类功能的坑不在难度，在漏面：接口写完了页面没接，页面接了但没有空态和错误态，或者后端跑得通、前端字段名对不上。`crud-development` 按一个纵向切片来交——数据模型、数据访问、业务逻辑、接口、页面、联调，一次做完一个功能，而不是把前后端切成两个阶段各交一半。
 
-**触发词**：
-- 中文：开发功能、实现功能、纵向开发、CRUD 开发
-- 英文：implement feature, develop CRUD, full-stack development
+它手工写。仓库里有代码生成器、你要调用它，那是 [crud](/skills/skills-reference/high/crud/)；逻辑复杂到不像标准增删改查，用 [dev](/skills/skills-reference/high/dev/)。
 
-**适用场景**：
-- 标准的 CRUD 功能开发
-- 需要前后端 + 数据层完整实现
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "开始做用户注册" | 数据层到页面一整条：迁移、Service、接口、表单、联调 |
+| "做个用户列表，能搜能改" | 列表页 + 编辑入口 + 后端分页查询与更新，一起交 |
+| "这个模块照着订单那套做" | 沿用仓库现有的分层、命名和错误处理，不另起一套写法 |
 
-**前置条件（gates）**：
-- 已有批准需求
-- 已进入 business-development 阶段
-- 功能属于标准 CRUD（增删改查）
+触发面覆盖标准增删改查、列表与表单一起做、照着现有模块再来一个这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
 
-**冲突解决**：
-- vs `universal-development`: 明确 CRUD 业务时优先使用 crud-development
+**什么时候不要用**：
+
+- 要调用仓库现有的生成器 → [crud](/skills/skills-reference/high/crud/)。
+- 逻辑复杂、不属于标准增删改查 → [dev](/skills/skills-reference/high/dev/)。
+- 只要接口那一层 → [api-development](/skills/skills-reference/high/api-development/)；只要页面那一层 → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)。
+- 认证、缓存、数据权限这些专门领域 → 对应领域 Skill，比如 [security-guard](/skills/skills-reference/high/security-guard/)、[redis-cache](/skills/skills-reference/medium/redis-cache/)、[data-permission](/skills/skills-reference/high/data-permission/)。
+
+**前后顺序**：一般先有 [project-manager](/skills/skills-reference/high/project-manager/) 排好的条目和 [tech-decision](/skills/skills-reference/high/tech-decision/) 的结论；做完接 [code-review](/skills/skills-reference/high/code-review/)，再按授权走 [git-commit](/skills/skills-reference/high/git-commit/)；过程中配合 [database-design](/skills/skills-reference/high/database-design/)、[api-development](/skills/skills-reference/high/api-development/)、[frontend-design](/skills/skills-reference/high/frontend-design/)。
 
 **使用示例**：
 
+```text
+你的输入：
+开始实现用户注册。
+
+它会做什么（顺序固定，从数据往外走）：
+1. 数据模型与迁移
+2. 数据访问层，沿用仓库现有的 Mapper / Repository 写法
+3. Service：业务规则、事务边界、错误语义
+4. 接口层：入参校验、响应结构、错误码
+5. 页面：表单、校验提示、提交中 / 成功 / 失败三态
+6. 联调：用真实接口跑一遍主路径，不拿 mock 数据交差
+
+你会拿到：
+- 迁移脚本 + 后端实现 + 页面实现 + 路由与菜单配置
+- 一次真实主路径的自验结果
+- 没覆盖到的边界会写出来，比如并发注册、短信通道还没接
 ```
-用户输入：
-"开始实现用户注册功能"
-
-系统行为：
-1. 实现数据模型（User 表）
-2. 实现 API（POST /api/v1/auth/register）
-3. 实现 Service 业务逻辑
-4. 实现前端页面（register.vue）
-5. 完成联调
-
-预期输出：
-完整的纵向功能，包含：
-- 数据库迁移脚本
-- 后端 API 实现
-- 前端页面实现
-- 路由配置
-```
-
-**与其他 Skill 的关系**：
-- **before**: project-manager, tech-decision
-- **after**: code-review, test-development
-- **complement**: api-development, database-design, frontend-design
 
 ---
 
 ### api-development
 
-**描述**：设计实现 API 契约、校验、错误语义和文档
+接口的麻烦大多不在写 Controller，在契约：字段名和类型对不对得上、校验放在哪一层、失败怎么表达、文档跟不跟得上实现。`api-development` 管的就是这一层——请求与响应结构、校验规则、错误语义，以及跟着代码一起产出的文档。
 
-**触发词**：
-- 中文：API 开发、接口设计、开发接口、REST API
-- 英文：API development, interface design, REST API
+它不动物理表设计，也不写页面。
 
-**适用场景**：
-- RESTful API 开发
-- GraphQL API 开发
-- API 契约定义
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "做一个用户登录的接口" | 契约、校验、错误语义、文档一起交，不只是一个能跑的 handler |
+| "这个返回结构怎么定" | 响应结构与字段语义，以及分页、空值、失败的统一表达 |
+| "校验放哪一层" | 参数校验、业务校验、数据约束的分工，以及各自的失败响应 |
 
-**前置条件（gates）**：
-- 已有功能需求或产品定义
-- 已有相邻生产接口参考或架构方案
-- 尚未实现该 API
+触发面覆盖接口契约、请求与响应结构、校验与错误语义、接口文档这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 页面实现 → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)。
+- 建表、加索引、写迁移 → [database-design](/skills/skills-reference/high/database-design/) 出结论、[database-ops](/skills/skills-reference/high/database-ops/) 落地。接口契约和物理表是两层，不该互相裁剪。
+- 数据层到页面一整条一起做 → [crud-development](/skills/skills-reference/high/crud-development/) 或 [dev](/skills/skills-reference/high/dev/)。
+- 异常体系和错误码规范本身 → [error-handler](/skills/skills-reference/medium/error-handler/)。
+- 推送、长连接语义 → [websocket-sse](/skills/skills-reference/medium/websocket-sse/)。
+
+**前后顺序**：一般先有 [architecture-design](/skills/skills-reference/high/architecture-design/) 划好的边界和 [database-design](/skills/skills-reference/high/database-design/) 的结论；实现完接 [code-review](/skills/skills-reference/high/code-review/)；错误语义配合 [error-handler](/skills/skills-reference/medium/error-handler/)。
 
 **使用示例**：
 
+```text
+你的输入：
+实现用户登录，走 POST /api/v1/auth/login。
+
+它会做什么：
+1. 先看仓库里相邻的现有实现，沿用它的分层、命名和响应包装
+2. 定请求与响应结构：字段、类型、必填、示例值
+3. 校验分层：格式校验挡在入口，业务校验（账号锁定、错误次数）放在 Service
+4. 错误语义：每种失败对应哪个错误码和 HTTP 状态，不用 200 包一切
+5. 文档跟着代码走，字段说明和错误码表一起更新
+
+你会拿到：
+- Controller、DTO / VO、校验规则、错误处理
+- 一份和实现对得上的接口文档
+- 一条能直接跑的验证命令（curl，或者仓库里现成的调试入口）
 ```
-用户输入：
-"开发用户登录 API"
-
-系统行为：
-1. 设计 API 契约（POST /api/v1/auth/login）
-2. 定义请求参数和响应格式
-3. 实现参数校验
-4. 实现业务逻辑
-5. 实现错误处理
-6. 生成 API 文档（Swagger/OpenAPI）
-
-预期输出：
-完整的 API 实现，包含：
-- Controller 层
-- DTO 定义
-- 参数校验
-- 错误处理
-- API 文档
-```
-
-**与其他 Skill 的关系**：
-- **before**: architecture-design
-- **after**: code-review, test-development
-- **complement**: database-design, error-handler
 
 ---
 
 ### database-design
 
-**描述**：设计数据库结构、迁移、索引、幂等、兼容和回滚
+`database-design` 交的是一份能直接照着写迁移的设计稿：有哪些表、每列什么类型和注释、唯一性和删除语义怎么定、加哪些索引以及为什么加、迁移分几步、旧版本应用在窗口期还能不能跑、验证 SQL 怎么写、出问题怎么退。
 
-**触发词**：
-- 中文：建表、设计表、数据库、Schema 设计、数据模型
-- 英文：database design, schema design, table design
+它顺手把几个容易在第三个月翻车的决定提前钉死：业务主键用雪花 ID 而不是自增，表之间的关联只在逻辑上成立、不画物理外键，业务规则写在应用的短事务里而不是 trigger 和存储过程里。它明确不动手——迁移脚本、ORM 实体、在隔离环境跑一遍迁移和回滚，全归 [database-ops](/skills/skills-reference/high/database-ops/)。拿到设计稿不等于库已经改了。
 
-**适用场景**：
-- 数据库表设计
-- 索引设计
-- 数据库迁移
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "这个功能要建哪些表" | 表、列、类型、注释、唯一键、删除语义的完整设计稿 |
+| "给订单表加个字段" | 变更设计：兼容窗口、回填、旧版本共存、回滚 |
+| "这个查询要加什么索引" | 从真实的过滤、连接、排序需求评估索引与写入代价 |
+| "这个迁移能不能重跑" | 幂等性、失败重试与补偿方案 |
 
-**前置条件（gates）**：
-- 已有功能需求或产品定义
-- 需要新增或修改数据表
-- 已确定数据库类型
+触发面覆盖建表、字段与索引取舍、迁移与回滚、数据模型评审这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 要写迁移脚本、改 ORM 实体、真正执行迁移 → [database-ops](/skills/skills-reference/high/database-ops/)。这里出结论，那边落地，这条分工是硬的。
+- 还没定这块数据归谁写 → 先让 [architecture-design](/skills/skills-reference/high/architecture-design/) 划清归属，否则最后往往是两个模块都在写同一张表。
+- 要定接口的请求与响应结构 → [api-development](/skills/skills-reference/high/api-development/)。
+- 要做行级、字段级的权限策略 → [data-permission](/skills/skills-reference/high/data-permission/)。这里只保证字段和索引撑得住那些策略。
+- 线上慢查询要救 → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。那边按真实执行计划优化，这里是建表时的事前设计。
+
+**前后顺序**：一般先有 [architecture-design](/skills/skills-reference/high/architecture-design/) 的数据归属结论；设计稿出来后交 [database-ops](/skills/skills-reference/high/database-ops/) 落地，再由 [api-development](/skills/skills-reference/high/api-development/) 和 [crud-development](/skills/skills-reference/high/crud-development/) 往上接。
 
 **使用示例**：
 
+```text
+你的输入：
+做报销单功能：员工提单、上传发票、主管审批、财务打款。
+
+它会做什么：
+1. 先确认三件事：这块数据归谁写、用哪个库和哪个迁移工具、仓库现有的命名与审计约定
+2. 定实体与关系：报销单、明细、附件、审批记录
+3. 每列写清类型、可空性、默认值、注释；业务主键用雪花 ID
+4. 定索引：按真实查询（按人查、按状态查、按时间范围查）评估，并写明写入代价
+5. 迁移分步：加列 → 回填 → 加约束，并说明窗口期里旧版本还能不能跑
+6. 给验证 SQL 和回滚方式
+
+你会拿到：
+- 一份能照着写迁移的设计稿，细到 DDL 级别
+- 索引清单与每条的理由
+- 分步迁移计划、验证 SQL、回滚方案
+- 明确交给 database-ops 的实施边界
 ```
-用户输入：
-"设计用户表"
-
-系统行为：
-1. 分析数据需求
-2. 设计表结构（字段、类型、约束）
-3. 设计索引（唯一索引、普通索引）
-4. 编写迁移脚本（幂等、可回滚）
-5. 添加注释
-
-预期输出：
-数据库迁移脚本，包含：
-- CREATE TABLE 语句
-- 索引创建
-- 约束定义
-- 回滚脚本
-```
-
-**与其他 Skill 的关系**：
-- **before**: architecture-design
-- **after**: api-development, database-ops
-- **complement**: data-permission（数据权限设计）
 
 ---
 
 ### frontend-design
 
-**描述**：为新增或重构界面建立 UI/UX 设计基线，定义页面结构、交互、状态与约束
+直接开写，返工点通常出在没定清楚的地方：空结果长什么样、提交失败怎么提示、权限不足时那个按钮是隐藏还是禁用。`frontend-design` 在动手之前把这些定下来——页面结构、交互流程、状态清单、实现约束，交出一份能直接照着写的基线。
 
-**触发词**：
-- 中文：UI 设计、页面设计、交互设计、前端设计、界面设计
-- 英文：UI design, page design, frontend design, interface design
+它不写生产代码，也不管已经上线的界面好不好看。
 
-**适用场景**：
-- 新页面的 UI/UX 设计
-- 页面结构设计
-- 交互流程设计
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "先把用户列表页的结构定一下" | 页面结构、交互流程、状态清单、字段与校验规则 |
+| "这个筛选条件放哪比较合理" | 信息层级和操作分区的判断，附理由 |
+| "客户要先看方案再开发" | 一份可评审的基线，实现之前就能对齐 |
 
-**前置条件（gates）**：
-- 已有功能需求或产品定义
-- 尚未有实现（新页面）
-- 需要设计页面结构和交互
+触发面覆盖页面结构、交互与状态、还没实现的界面要先对齐这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
 
-**冲突解决**：
-- vs `frontend-polish`: frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化
-- vs `universal-development`: frontend-design 负责 UI/UX 设计；universal-development 负责实现
+**什么时候不要用**：
+
+- 页面已经实现了、要提升的是观感和顺手程度 → [frontend-polish](/skills/skills-reference/high/frontend-polish/)。这条最容易走错：还没有实现的走这里，已有实现的走那边。
+- 要写代码 → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)。
+- 要定功能做什么 → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- 要定后端契约 → [api-development](/skills/skills-reference/high/api-development/)。
+- 只是想把动效说得准一点 → [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)。
+
+**前后顺序**：一般先有 [product-manager](/skills/skills-reference/critical/product-manager/) 的结论；基线出来后交 [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/) 实现；过程中可以配合 [grilling](/skills/skills-reference/medium/grilling/) 把歧义问掉、[review-animations](/skills/skills-reference/low/review-animations/) 审现有动效。
 
 **使用示例**：
 
+```text
+你的输入：
+要一个用户管理页，能看列表、搜索、编辑、停用。
+
+它会做什么：
+1. 只在无法取证、而且答案会实质改变结构时才问你，比如"停用"是软删除还是仅置灰
+2. 定结构：筛选区、表格区、操作列、批量操作、分页
+3. 定交互流程：搜索 → 结果 → 编辑 → 保存 → 反馈，含失败与超时
+4. 定状态清单：加载中、空结果、无权限、请求失败、保存中
+5. 写出实现约束：字段来源、校验规则、要用仓库既有的组件与令牌
+
+你会拿到：
+- 一份基线：结构 + 交互 + 状态 + 约束
+- 明确的验收要点，实现完可以逐条对
+- 没定下来的地方会写成待确认，而不是替你拍一个
 ```
-用户输入：
-"设计用户登录页面"
-
-系统行为：
-1. 通过 grilling 澄清关键交互
-2. 设计页面结构（表单、按钮、链接）
-3. 定义交互流程（输入 → 验证 → 提交 → 跳转）
-4. 定义状态（loading、error、success）
-5. 输出 DesignContract
-
-预期输出：
-设计契约文档，包含：
-- 页面结构
-- 交互流程
-- 状态管理
-- 验证规则
-```
-
-**与其他 Skill 的关系**：
-- **before**: product-manager
-- **after**: ui-pc, ui-app（实现）
-- **complement**: grilling, review-animations
 
 ---
 
 ### ui-pc
 
-**描述**：按已发现的组件库、路由、状态与设计令牌实现 PC/管理端界面
+`ui-pc` 把基线变成真正跑起来的 PC / 管理端界面。它动手前先摸清这个仓库用的是什么——框架版本、组件库、路由注册方式、状态方案、设计令牌，然后照着它写，而不是引一套新的进来。
 
-**触发词**：
-- 中文：实现页面、开发页面、PC 界面、管理端页面
-- 英文：implement page, PC interface, admin page
+它接真实接口跑一遍，不拿 mock 数据交差。
 
-**适用场景**：
-- PC 端页面实现
-- 管理后台页面
-- Web 应用界面
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "实现用户列表页" | 页面组件、表格与筛选、分页，以及接真实接口的数据流 |
+| "这个表单按基线来" | 表单校验、错误提示、提交三态，用仓库既有的表单方案 |
+| "加一个数据看板" | 图表与卡片布局，沿用项目既有的图表库和主题令牌 |
 
-**前置条件（gates）**：
-- 已有设计基线（frontend-design）
-- 已发现项目的组件库和状态管理方案
-- 需要实现 PC 端界面
+触发面覆盖 PC 与管理端界面实现、表格与表单、看板与报表这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 移动端、小程序、跨端 → [ui-app](/skills/skills-reference/high/ui-app/)。
+- 还没有基线 → 先 [frontend-design](/skills/skills-reference/high/frontend-design/)。没有基线就实现，返工点会落在空态、错误态和权限态上。
+- 页面已经能用、要打磨 → [frontend-polish](/skills/skills-reference/high/frontend-polish/)。
+- 状态方案本身要设计 → [store-pc](/skills/skills-reference/medium/store-pc/)。
+- 后端契约 → [api-development](/skills/skills-reference/high/api-development/)。
+
+**前后顺序**：一般先有 [frontend-design](/skills/skills-reference/high/frontend-design/) 的基线和 [tech-decision](/skills/skills-reference/high/tech-decision/) 的结论；实现完接 [code-review](/skills/skills-reference/high/code-review/)，观感问题交 [frontend-polish](/skills/skills-reference/high/frontend-polish/)；状态部分配合 [store-pc](/skills/skills-reference/medium/store-pc/)。
 
 **使用示例**：
 
+```text
+你的输入：
+按基线实现用户列表页。
+
+它会做什么：
+1. 先发现事实：框架版本、组件库、路由注册方式、状态方案、令牌与主题
+2. 按基线搭结构：筛选区、表格、操作列、分页
+3. 接真实接口，并处理加载中、空结果、请求失败、无权限四种状态
+4. 注册路由与菜单入口，权限点按仓库既有方式声明
+5. 跑一遍：本地启动、类型检查、构建
+
+你会拿到：
+- 页面组件与样式、路由与菜单配置、接口调用层
+- 一次真实数据下的自验结果，含空态和失败态
+- 没验证到的部分会写清楚，比如没有多分辨率环境时不宣称适配已通过
 ```
-用户输入：
-"实现用户登录页面"
-
-系统行为：
-1. 读取设计契约
-2. 使用项目的 Vue 3 + Element Plus
-3. 实现页面组件
-4. 实现表单验证
-5. 集成状态管理（Pinia）
-6. 配置路由
-
-预期输出：
-完整的页面实现，包含：
-- Vue 组件文件
-- 样式文件
-- 路由配置
-- API 调用
-```
-
-**与其他 Skill 的关系**：
-- **before**: frontend-design, tech-decision
-- **after**: code-review, frontend-polish
-- **complement**: store-pc（状态管理）
 
 ---
 
 ### ui-app
 
-**描述**：按已发现的平台、框架、导航与视觉令牌实现跨端应用界面
+跨端的坑集中在"同一份代码在几个宿主里表现不一样"：安全区、手势冲突、键盘遮挡、各宿主的能力差异。`ui-app` 按仓库已经在用的平台和框架实现界面，把这些差异当成必须处理的部分，而不是等提测才发现。
 
-**触发词**：
-- 中文：实现移动页面、App 界面、跨端页面
-- 英文：implement mobile page, app interface
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "实现登录页" | 页面 + 导航注册 + 真实接口联调，按仓库既有的跨端框架写 |
+| "这个页面在小屏上被键盘挡住了" | 安全区、滚动容器、输入聚焦时的布局处理 |
+| "微信端要能拉起支付" | 宿主能力差异的分支处理，以及不支持时的降级路径 |
 
-**适用场景**：
-- 移动端页面实现
-- 跨端应用（React Native、Flutter）
-- 小程序页面
+触发面覆盖移动端与跨端界面实现、多宿主差异、导航与手势这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
 
-**前置条件（gates）**：
-- 已有设计基线
-- 已确定跨端框架
-- 需要实现移动端界面
+**什么时候不要用**：
+
+- PC / 管理端 → [ui-pc](/skills/skills-reference/high/ui-pc/)。
+- 还没有基线 → [frontend-design](/skills/skills-reference/high/frontend-design/)。
+- 已有界面要打磨 → [frontend-polish](/skills/skills-reference/high/frontend-polish/)。
+- 后端契约 → [api-development](/skills/skills-reference/high/api-development/)。
+- 只想把动效说准 → [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)。
+
+**前后顺序**：一般先有 [frontend-design](/skills/skills-reference/high/frontend-design/) 的基线和 [tech-decision](/skills/skills-reference/high/tech-decision/) 的结论；实现完接 [code-review](/skills/skills-reference/high/code-review/)；动效相关配合 [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/) 和 [review-animations](/skills/skills-reference/low/review-animations/)。
 
 **使用示例**：
 
+```text
+你的输入：
+实现登录页，先跑微信端和 H5 两个宿主。
+
+它会做什么：
+1. 先确认平台事实：用的是哪套跨端框架、导航方案、组件库、构建目标
+2. 实现界面与表单，处理输入聚焦、键盘遮挡、安全区
+3. 接真实接口，处理网络失败与重试
+4. 注册导航与页面路径，按宿主差异分支；能力不支持时给降级路径
+5. 分宿主各跑一遍预览
+
+你会拿到：
+- 界面实现 + 导航配置 + 宿主差异处理
+- 每个宿主的预览自验结果
+- 没有真机时会明确说明只验证到模拟环境，不宣称真机通过
 ```
-用户输入：
-"实现移动端用户登录页面"
-
-系统行为：
-1. 读取设计契约
-2. 使用项目的 React Native / Flutter
-3. 实现移动端适配（触摸、手势）
-4. 实现响应式布局
-5. 集成原生能力（如生物识别）
-
-预期输出：
-跨端页面实现，包含：
-- 移动端组件
-- 平台适配代码
-- 导航配置
-```
-
-**与其他 Skill 的关系**：
-- **before**: frontend-design, tech-decision
-- **after**: code-review
-- **complement**: animation-vocabulary
 
 ---
 
 ### code-review
 
-**描述**：对指定 diff 做缺陷优先的完整 Review，并核对验收与交付证据
+它做的是缺陷优先的一次完整 Review：读你指定的那份 diff，按严重程度给出 findings，再回头核对验收条目有没有真的被证据支撑——"我改完了"和"能证明改对了"是两件事。
 
-**触发词**：
-- 中文：审查代码、Review、代码检查、代码审查
-- 英文：code review, review code, check code
+同一份 diff 只过一次完整 Review。后续修复只核对 findings 有没有关掉、受影响的命令要不要重跑，不重复整轮。
 
-**适用场景**：
-- 功能完成后的 Review
-- Pull Request 审查
-- 代码质量检查
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "帮我审一下这次的改动" | 按严重程度排好的 findings，每条带位置、原因、改法 |
+| "这段生成出来的能用吗" | 逐处核对：有没有偏离项目约定、有没有埋隐性缺陷 |
+| "能发了吗" | 验收条目逐条对证据，缺证据的会被明确点出来 |
 
-**前置条件（gates）**：
-- 已有代码改动（git diff）
-- 功能实现基本完成
-- 需要质量检查
+触发面覆盖改动复核、缺陷排查式审查、发布前的证据核对这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 要写代码或改 bug → [dev](/skills/skills-reference/high/dev/) / [universal-development](/skills/skills-reference/low/universal-development/)。
+- 只要按仓库后端规范逐条核对 → [check](/skills/skills-reference/medium/check/)。
+- 线上故障要定根因 → [bug-detective](/skills/skills-reference/high/bug-detective/)。
+- 慢，要按指标优化 → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。
+- 要写测试代码 → [test-development](/skills/skills-reference/medium/test-development/)，而且只在你本轮明确要求时才写。findings 本身不构成写测试的授权。
+
+**前后顺序**：一般在实施类 Skill（[crud-development](/skills/skills-reference/high/crud-development/)、[api-development](/skills/skills-reference/high/api-development/)、[ui-pc](/skills/skills-reference/high/ui-pc/)、[dev](/skills/skills-reference/high/dev/)）之后；findings 关掉后按授权走 [git-commit](/skills/skills-reference/high/git-commit/)；可以配合 [check](/skills/skills-reference/medium/check/) 和 [bug-detective](/skills/skills-reference/high/bug-detective/)。
 
 **使用示例**：
 
+```text
+你的输入：
+审一下登录这块的改动。
+
+它会做什么：
+1. 取指定范围的 diff，不凭印象读整个仓库
+2. 缺陷优先地看：边界与空值、错误分支、并发与事务、越权与注入、资源释放
+3. 核对项目约定：分层、命名、错误语义、日志与脱敏
+4. 核对验收：每条有没有对应证据，证据是不是真跑过
+5. findings 分级：严重 / 重要 / 次要 / 提示
+
+你会拿到：
+- 分级 findings，每条带文件位置和改法
+- 验收覆盖情况，缺证据的那几条单独列出
+- 一个结论：能不能进入提交环节
 ```
-用户输入：
-"审查用户登录功能的代码"
-
-系统行为：
-1. 读取 git diff
-2. 检查代码质量：
-   - 正确性（逻辑错误、边界条件）
-   - 安全性（SQL 注入、XSS）
-   - 性能（N+1 查询、内存泄漏）
-   - 可维护性（命名、注释、复杂度）
-3. 检查验收条件覆盖
-4. 给出修复建议
-
-预期输出：
-Review 报告，包含：
-- 发现的问题（按严重程度排序）
-- 修复建议
-- AC 覆盖情况
-- Review 结果（pass / fail）
-```
-
-**与其他 Skill 的关系**：
-- **before**: crud-development, api-development, ui-pc
-- **after**: git-commit（修复后）
-- **complement**: bug-detective, check
 
 ---
 
 ### bug-detective
 
-**描述**：用证据排查调用链故障
+异常堆栈只告诉你哪里炸了，不告诉你为什么。`bug-detective` 沿着调用链一层层收证据——现象、复现条件、日志、堆栈、真实入参和数据——直到根因能被证明，而不是停在"大概是缓存的事"。
 
-**触发词**：
-- 中文：定位问题、报错、不工作、出错了、故障排查、Bug 修复
-- 英文：debug, troubleshoot, fix bug, error
+它只处理功能性故障。"慢"是另一类问题，那边看的是指标分布，不是逻辑分支。
 
-**适用场景**：
-- Bug 排查
-- 错误定位
-- 故障诊断
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "登录接口返 500" | 从入口到数据层的分层定位，加上能证明根因的那条证据 |
+| "这个页面偶尔空白" | 复现条件的收敛过程，以及偶发背后的时序或数据前提 |
+| "两边数据对不上" | 写入路径与读取路径的比对，找出不一致是从哪一步开始的 |
 
-**前置条件（gates）**：
-- 已确认是故障而非需求变更
-- 有可观察的错误现象
-- 已有基本调查线索
+触发面覆盖异常与堆栈、功能行为不对、数据不一致、根因定位这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 慢，要按指标优化 → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。两者的证据类型不同：一个看逻辑分支，一个看指标分布。
+- 需求本来就是这么定的，行为其实没错 → [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 或 [product-manager](/skills/skills-reference/critical/product-manager/)。
+- 要写新功能 → [dev](/skills/skills-reference/high/dev/) 或对应领域 Skill。
+- 要统一异常体系和错误码 → [error-handler](/skills/skills-reference/medium/error-handler/)。
+
+**前后顺序**：通常由故障直接触发，前面不需要谁；定位之后由实施类 Skill 改，改完接 [code-review](/skills/skills-reference/high/code-review/)；配合 [project-navigator](/skills/skills-reference/medium/project-navigator/) 找相关代码、[error-handler](/skills/skills-reference/medium/error-handler/) 补错误语义。
 
 **使用示例**：
 
+```text
+你的输入：
+登录接口一直返 500，昨天还是好的。
+
+它会做什么：
+1. 固定现象：请求样本、时间点、影响范围、是不是所有账号都这样
+2. 找复现路径，能稳定复现之后才开始动作
+3. 分层排除：网关 → 应用入口 → Service → 数据层 → 外部依赖
+4. 取证据：日志与堆栈、真实入参、相关配置、最近的变更范围
+5. 给根因结论 + 最小修复 + 为什么这个修复能挡住它
+
+你会拿到：
+- 现象、复现步骤、根因、证据四件事连起来的结论
+- 一个最小改动范围，以及回归时要看的点
+- 取不到证据的部分会写成假设，不会当成结论
 ```
-用户输入：
-"用户登录失败，报错 401"
-
-系统行为：
-1. 收集错误信息（日志、调用栈）
-2. 分析错误原因
-3. 定位问题代码
-4. 提供修复方案
-
-预期输出：
-故障分析报告，包含：
-- 错误现象
-- 根本原因
-- 修复方案
-- 预防措施
-```
-
-**与其他 Skill 的关系**：
-- **before**: 无（故障发生时调用）
-- **after**: universal-development（修复）, code-review
-- **complement**: error-handler
 
 ---
 
 ### git-commit
 
-**描述**：精确暂存、commit 与明确授权后的 push 入口
+它只在你明确授权之后动 Git，而且只暂存这次功能真正改到的文件——不用 `git add .` 把顺手改的东西一起带走。信息按仓库既有风格写，推上去之后回读远端确认真的到了。
 
-**触发词**：
-- 中文：提交并推送、推送代码、git 提交、提交代码
-- 英文：commit and push, git commit, push code
+来这里之前有两个前提：一次完整 Review 已经过、验收条目有证据。缺哪个就先补哪个。
 
-**适用场景**：
-- 功能完成后提交代码
-- Review 通过后推送
-- 每个 Feature 一次提交
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "把这次的改动交上去" | 只暂存写集内的文件，一条符合仓库风格的信息 |
+| "顺手推到远端" | 推上去之后回读远端，确认分支和这一笔真的存在 |
+| "这次改了一堆，别混在一起" | 按功能拆成多笔，每笔的范围都能解释 |
 
-**前置条件（gates）**：
-- 已有待提交的改动
-- code-review 通过
-- 所有 AC 有证据
+触发面覆盖交付这次改动、推到远端、按功能拆分这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 分支、合并、rebase、历史整理 → [git-workflow](/skills/skills-reference/high/git-workflow/)。
+- Review 还没过、验收还没有证据 → 先把这两件事做完，它不会替你跳过。
+- 要写代码 → 实施类 Skill。
+- 要改 TODO 状态 → [update-status](/skills/skills-reference/medium/update-status/)（它会顺手带上这一步，但状态本身归那边管）。
+
+**前后顺序**：一般紧跟在 [code-review](/skills/skills-reference/high/code-review/) 之后；配合 [git-workflow](/skills/skills-reference/high/git-workflow/) 处理分支和历史，以及 [update-status](/skills/skills-reference/medium/update-status/) 把 TODO 条目标成完成。
 
 **使用示例**：
 
-```
-用户输入：
-"提交用户登录功能"
+```text
+你的输入：
+登录这块 Review 过了，交上去。
 
-系统行为：
-1. 精确暂存写集内文件
+它会做什么：
+1. 核对前提：findings 是否已关闭、验收是否有证据
+2. 精确暂存写集内的文件，不用通配符把无关改动带进来
    git add src/api/user/login.ts src/pages/login.vue
-2. 生成规范的 commit message
-3. 提交
-   git commit -m "feat: implement user login"
-4. 推送
-   git push origin feature/user-login
-5. 验证远端
+3. 按仓库既有风格生成信息
+   git commit -m "feat(user): 实现用户登录"
+4. 经你授权后推到远端，并回读确认
+   git push -u origin feature/user-login
+5. 把 TODO 里这一条标成完成
 
-预期输出：
-代码已提交并推送到远端
-TODO 状态自动更新为 [x]
+你会拿到：
+- 一笔范围干净的记录，以及远端确认结果
+- 没纳入本次的改动会被列出来，等你决定怎么处理
 ```
 
-**与其他 Skill 的关系**：
-- **before**: code-review
-- **after**: 无（功能完成）
-- **complement**: git-workflow
+<Aside type="caution">
+推到远端、改写已有历史、动共享分支这类不好回退的动作都需要你明确授权。没有授权时，它只会把要执行的命令摆出来给你看。
+</Aside>
 
 ---
 
 ### git-workflow
 
-**描述**：处理 Git 分支、历史与冲突
+分支从哪儿拉、主干的新改动怎么并回来、历史要不要整理、冲突怎么收——这些跟"这次改了什么"无关，只跟 Git 本身的形状有关。`git-workflow` 管这一摊，日常的交付动作归 [git-commit](/skills/skills-reference/high/git-commit/)。
 
-**触发词**：
-- 中文：合并分支、创建分支、解决冲突、rebase、Git 操作
-- 英文：merge branch, create branch, resolve conflict, rebase
+不好回退的动作（改写已推送的历史、动共享分支、丢弃本地改动）都会先说清会发生什么，再等你确认。
 
-**适用场景**：
-- 分支管理
-- 合并代码
-- 解决冲突
-- 历史管理
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "从主干拉一个功能分支" | 从哪个基点拉、命名按仓库习惯，切过去之后确认工作区干净 |
+| "把主干的新改动并进来" | 并还是 rebase 的取舍，以及冲突逐处收口 |
+| "这段历史太乱了" | 在未推送范围内整理；动到已推送的历史会先停下来问你 |
+| "本地这些先放一边" | 暂存与恢复，不丢东西 |
 
-**使用示例**：
+触发面覆盖分支、并入与 rebase、冲突、历史整理、暂存这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
 
-```
-用户输入：
-"创建功能分支 feature/user-login"
+**什么时候不要用**：
 
-系统行为：
-git checkout -b feature/user-login
+- 只是要把改动交上去 → [git-commit](/skills/skills-reference/high/git-commit/)。
+- 要写代码 → 实施类 Skill。
+- 想知道功能做到哪了 → [progress](/skills/skills-reference/medium/progress/)。
 
-用户输入：
-"合并主分支"
-
-系统行为：
-git fetch origin
-git merge origin/main
-# 如有冲突，提示解决
-```
-
-**与其他 Skill 的关系**：
-- **before**: 无
-- **after**: git-commit
-- **complement**: git-commit
-
----
-
-### project-navigator
-
-**描述**：从规则、构建清单和源码发现真实项目结构与参考实现
-
-**触发词**：
-- 中文：项目导航、查找组件、项目结构、代码定位
-- 英文：project navigation, find component, code structure
-
-**适用场景**：
-- 了解项目结构
-- 查找可复用组件
-- 定位参考实现
+**前后顺序**：通常在开工前（拉分支）和交付前（并主干、收冲突）各出现一次，中间的那一步交给 [git-commit](/skills/skills-reference/high/git-commit/)。
 
 **使用示例**：
 
+```text
+你的输入：
+拉一个 feature/user-login，做完再把主干的新改动并进来。
+
+它会做什么：
+1. 确认工作区干净，必要时先暂存
+   git switch -c feature/user-login origin/main
+2. 主干有新改动时先做取舍：
+   - 还没推送、想要线性历史 → git rebase origin/main
+   - 已经推送、多人在同一分支上 → git merge origin/main
+3. 冲突逐个文件收，并交代每处保留了什么、为什么
+4. 收尾核对：upstream 是否已设置、本地与远端是否一致
+   git branch -vv
+
+你会拿到：
+- 一个基点明确、状态干净的分支
+- 冲突处理说明，而不是一句"已处理完"
+- 会改写已推送历史的动作，都会先停下来等你确认
 ```
-用户输入：
-"查找项目中的 API 请求工具"
-
-系统行为：
-1. 扫描项目结构
-2. 查找 API 相关代码
-3. 分析使用方式
-
-预期输出：
-找到 src/utils/request.ts
-用途：封装 axios，统一请求/响应处理
-使用示例：import { request } from '@/utils/request'
-```
-
-**与其他 Skill 的关系**：
-- **before**: 无
-- **after**: 无
-- **complement**: 所有实施类 Skill
 
 ---
 
 ### frontend-polish
 
-**描述**：审查并优化已有前端实现的布局、交互、视觉与可用性
+界面已经能跑，但看着不对劲、用着不顺手——这类问题的修法和从零开始不一样：约束是现有实现和现有组件库，动作是分级修复而不是重画。`frontend-polish` 先体检（信息层级、反馈是否到位、状态是否齐、响应式、键盘可达、观感一致性），再按阻塞程度排序修。
 
-**触发词**：
-- 中文：优化这个页面、页面有点、交互有点、性能优化、前端优化
-- 英文：optimize page, improve performance, frontend optimization
+它不改产品行为。发现真正该改的是功能本身时，它会停下来。
 
-**适用场景**：
-- 已有页面的优化
-- 性能优化
-- 交互改善
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "这个页面看着挤" | 间距、层级、对齐的分级修复清单，按阻塞程度排 |
+| "上线前再收一轮" | 一次体检：反馈缺失、状态遗漏、响应式断点、键盘可达 |
+| "用户说找不到那个按钮" | 从信息层级和视觉权重给出的具体改法 |
 
-**前置条件（gates）**：
-- 已有页面实现
-- 需要优化而非重新设计
+触发面覆盖已有界面的观感与手感、响应式与可达性、上线前收尾这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
 
-**冲突解决**：
-- vs `frontend-design`: frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化
+**什么时候不要用**：
+
+- 界面还不存在 → [frontend-design](/skills/skills-reference/high/frontend-design/) 先定基线，[ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/) 再实现。
+- 要改的是产品规则 → [product-manager](/skills/skills-reference/critical/product-manager/) 或 [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/)。
+- 慢，需要按指标定位 → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。
+- 只是要把动效说准 → [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)；要审现有动效系统 → [review-animations](/skills/skills-reference/low/review-animations/)。
+
+**前后顺序**：一般在 [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/) 之后；改完接 [code-review](/skills/skills-reference/high/code-review/)；确实是慢的部分交 [performance-doctor](/skills/skills-reference/medium/performance-doctor/)。
 
 **使用示例**：
 
-```
-用户输入：
-"优化用户登录页面的加载性能"
+```text
+你的输入：
+用户列表这个页面再收一轮，上线前的最后一遍。
 
-系统行为：
-1. 分析性能瓶颈
-2. 提出优化方案（懒加载、代码分割、缓存）
-3. 实施优化
-4. 对比优化前后数据
+它会做什么：
+1. 体检两条线——体验（层级、反馈、空结果与失败态、文案）和技术（响应式、可达性、渲染开销）
+2. 问题分级：P0 阻塞、P1 上线前必修、P2 体验改进、P3 细节
+3. 用仓库既有组件和令牌修，不引新依赖、不改产品行为
+4. 跑一遍本地启动、类型检查、构建
 
-预期输出：
-优化报告，包含：
-- 性能基准数据
-- 优化措施
-- 优化后数据
-- 对比结果
+你会拿到：
+- 分级问题清单，每条写清改了什么、为什么
+- 改动前后的对照说明
+- 没有真实浏览器或多分辨率环境时，只报静态结论，不宣称观感已验收
 ```
 
-**与其他 Skill 的关系**：
-- **before**: ui-pc, ui-app
-- **after**: code-review
-- **complement**: performance-doctor
+---
+
+## 高频但优先级不是 High
+
+下面三个的优先级不在 High，但几乎每天都会碰到，所以放在这一页一起讲。
+
+### project-navigator
+
+在一个不熟的仓库里，最贵的时间花在找东西上：这个功能的代码在哪、有没有现成的工具可以用、别人写同类功能是怎么写的。`project-navigator` 只读地把这些答出来——路径、入口、职责、可以照着写的现成例子。
+
+它不改代码，也不替你做决定。
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "登录功能的代码在哪" | 模块路径、入口文件、相关配置，以及调用链的大致走向 |
+| "有没有现成的请求封装" | 既有工具的位置和用法，免得又封一层 |
+| "照着哪个模块写比较好" | 一个同类的现成实现，附它的分层和命名习惯 |
+
+触发面覆盖找代码位置、找入口与模块归属、找可复用实现这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 要一份整仓库的可核对概览 → [start](/skills/skills-reference/high/start/)。
+- 要把已确认的事实留档 → [project-details](/skills/skills-reference/high/project-details/)。
+- 要写代码 → 实施类 Skill。
+
+**前后顺序**：它没有固定上游，动手前先跑一次通常就够；选型、实施、排障时都可以配合。
+
+**使用示例**：
+
+```text
+你的输入：
+用户登录这块的代码在什么位置？
+
+它会做什么：
+1. 从构建配置和目录约定入手，先定位模块，再定位文件
+2. 顺着入口读到关键实现，确认职责边界
+3. 顺手找出可复用的工具和相邻的同类实现
+
+你会拿到：
+- 模块路径与入口文件，比如 src/utils/request.ts：封装 axios，统一请求与响应处理
+- 一句话用法：import { request } from '@/utils/request'
+- 一个可以照着写的现成实现，以及它遵循的约定
+```
 
 ---
 
 ### progress
 
-**描述**：只读统计当前开发者唯一 TODO 的功能进度
+`progress` 只读那份 TODO，回答"现在到哪了"：多少功能收了、哪些在做、哪些卡着、卡在什么前置上。它不改文件、不动 Git，看完就走。
 
-**触发词**：
-- 中文：查看进度、统计进度、进度如何、完成情况
-- 英文：check progress, show progress, progress status
+它不扫代码、不猜进度——数字全部来自 TODO 里已经落下的记录。所以记录不准的时候，这里也不会替它圆。
 
-**适用场景**：
-- 查看任务完成情况
-- 统计进度百分比
-- 识别阻塞任务
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "现在到哪了" | 按功能点的完成度，含在做的和被卡住的条目 |
+| "还剩什么没做" | 未开始的条目及其前置依赖 |
+| "这条为什么还没收" | 该条目缺哪份证据、或者卡在哪个前置上 |
+
+触发面覆盖当前进度、剩余工作量、被卡住的条目这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+**什么时候不要用**：
+
+- 要改状态 → [update-status](/skills/skills-reference/medium/update-status/)。
+- 要建或重排 TODO → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) / [project-manager](/skills/skills-reference/high/project-manager/)。
+- 要挑下一件该做的事 → [next](/skills/skills-reference/medium/next/)。
+
+**前后顺序**：没有上下游，任何时候都能跑；配合 [next](/skills/skills-reference/medium/next/) 决定下一步、[update-status](/skills/skills-reference/medium/update-status/) 更新记录。
 
 **使用示例**：
 
-```
-用户输入：
-"查看当前进度"
+```text
+你的输入：
+现在到哪了？
 
-系统行为：
-1. 读取 TODO 文件
-2. 统计 Feature 状态
-3. 计算进度百分比
-4. 识别阻塞和依赖
+它会做什么：
+1. 读那份唯一 TODO，不猜、不扫代码
+2. 按功能点归类：已收口、进行中、未开始、被阻塞
+3. 对被阻塞的，写出卡在哪个前置或缺哪份证据
 
-预期输出：
-Epic: USER-MGMT
-进度: 6/10 (60%)
+你会拿到：
+Epic: USER-MGMT   6/10
   ✓ INFRA-DB
   ✓ INFRA-SECURITY
   ✓ USER-REG-API
   ✓ USER-REG-PAGE
-  ~ USER-LOGIN-API（进行中）
-  ☐ USER-LOGIN-PAGE
+  ~ USER-LOGIN-API    进行中
+  ☐ USER-LOGIN-PAGE   等 USER-LOGIN-API
   ☐ USER-PROFILE-API
   ☐ USER-PROFILE-PAGE
   ☐ USER-CHANGE-PWD-API
   ☐ USER-CHANGE-PWD-PAGE
 ```
 
-**与其他 Skill 的关系**：
-- **before**: 无
-- **after**: 无
-- **complement**: project-navigator, task-todo-workflow
-
 ---
 
 ### universal-development
 
-**描述**：在没有适用专业 Skill 时作为最低优先级兜底
+这是最后一档兜底。把 Skill 清单扫完一遍、确认没有对得上的领域 Skill，也没有 [dev](/skills/skills-reference/high/dev/) 能接，才轮到它——修一个工具函数的空指针、加一个日期格式化方法这种边角事。
 
-**触发词**：
-- 中文：开发、实现、写代码
-- 英文：develop, implement, write code
+它存在的意义是不让边角小改动卡住流程，不是给"懒得挑 Skill"提供出口。只要有对得上的领域 Skill，就不该落到这里。
 
-**适用场景**：
-- 没有更具体的 Skill 时的兜底
-- 通用功能实现
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "StringUtils.isEmpty() 传 null 会抛异常，修一下" | 一处最小改动，加上影响范围说明 |
+| "加个日期格式化方法" | 放进仓库既有的工具类，跟随现有命名与写法 |
 
-**前置条件（gates）**：
-- 已有批准需求
-- 已进入执行阶段
-- 没有更适合的专业 Skill
+触发面覆盖工具函数与辅助方法的边角改动，以及扫完清单确实没有领域 Skill 可用的情况；具体触发词由 Skill 自己的 frontmatter 维护。
 
-**冲突解决**：
-- vs 所有专业 Skill: 专业 Skill 优先，universal-development 兜底
+**什么时候不要用**（几乎所有情况都有更合适的）：
+
+- 接口 → [api-development](/skills/skills-reference/high/api-development/)；建表与迁移 → [database-design](/skills/skills-reference/high/database-design/) / [database-ops](/skills/skills-reference/high/database-ops/)。
+- 界面 → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)；标准增删改查 → [crud-development](/skills/skills-reference/high/crud-development/)。
+- 鉴权与越权 → [security-guard](/skills/skills-reference/high/security-guard/)；缓存与锁 → [redis-cache](/skills/skills-reference/medium/redis-cache/)。
+- 通用业务功能 → [dev](/skills/skills-reference/high/dev/)。
+
+**前后顺序**：上游是"所有专业 Skill 都不适用"这个判断本身；改完仍然接 [code-review](/skills/skills-reference/high/code-review/)。
 
 **使用示例**：
 
-```
-用户输入：
-"实现 XXX 功能"（没有触发其他专业 Skill）
+```text
+你的输入：
+StringUtils.isEmpty() 传 null 会抛异常，修一下。
 
-系统行为：
-作为兜底 Skill 执行通用开发流程
-```
+它会做什么：
+1. 先确认没有更合适的领域 Skill——这是它唯一的准入条件
+2. 读现有实现和调用方，确认改这里不会影响别处
+3. 做最小改动，不顺手重构周边代码
 
-**与其他 Skill 的关系**：
-- **before**: 所有专业 Skill
-- **after**: code-review
-- **complement**: 无
+你会拿到：
+- 一处最小改动，以及影响范围说明
+- 仍然会走一次 Review
+```
 
 <Aside type="caution">
-universal-development 是兜底 Skill，优先级最低。尽量使用更具体的专业 Skill。
+它是最低优先级兜底。只要有任何对得上的领域 Skill 或 `dev` 可用，都不该选它。
 </Aside>
 
 ---
 
+## 其余 High 优先级 Skill
+
+下面这些同样是 High 优先级，只是不像上面 20 个那样每天都碰。完整说明见各自的参考页。
+
+| Skill | 什么时候用 | 说明 |
+|---|---|---|
+| [start](/skills/skills-reference/high/start/) | 接手一个不熟的仓库先跑一遍 | 建立可核对的项目概览与既有事实 |
+| [project-details](/skills/skills-reference/high/project-details/) | 已确认的事实要留档 | 把稳定事实原位归并进 `PROJECT-MEMORY.md` |
+| [dev](/skills/skills-reference/high/dev/) | 不属于标准增删改查的通用功能 | 按最小改动实施已批准的 TODO 条目 |
+| [crud](/skills/skills-reference/high/crud/) | 要调用仓库现有的代码生成器 | 生成之后仍要逐处审查 |
+| [database-ops](/skills/skills-reference/high/database-ops/) | 迁移脚本、ORM 实体、数据修订 | 把设计稿落地并验证回滚 |
+| [data-permission](/skills/skills-reference/high/data-permission/) | 谁能看到哪些数据 | 行级 / 字段级权限与租户边界 |
+| [security-guard](/skills/skills-reference/high/security-guard/) | 鉴权、越权、注入 | 授权、输入与数据安全的实现与加固 |
+| [product-discovery](/skills/skills-reference/high/product-discovery/) | 想法还没被验证 | 用用户与市场证据验证机会和假设 |
+| [product-strategy](/skills/skills-reference/high/product-strategy/) | 市场、竞争、定价要取舍 | 战略选择与商业模式 |
+| [product-execution](/skills/skills-reference/high/product-execution/) | 方向定了要落成文档 | 需求文档、OKR、路线图、发布计划 |
+
+<Aside type="note">
+`product-discovery` → `product-strategy` → `product-execution` 是产品侧的三段式：先验证机会，再定商业取舍，最后写成可执行文档。想一次走完整流程，用 `product-manager` 编排。
+</Aside>
+
 ## 使用建议
 
-1. **优先使用专业 Skill**：这 20 个 Skill 覆盖了核心流程，优先使用它们而不是 universal-development
-2. **明确触发词**：使用 Skill 的精确触发词，避免歧义
-3. **遵循流程**：按 task-todo-workflow → product-manager → architecture-design → tech-decision → project-manager 的顺序推进
-4. **每个 Feature 完整实现**：crud-development 覆盖前后端+数据层，不要只实现一部分
+1. **先挑对得上的领域 Skill**。这一页的 20 个覆盖了主线，`universal-development` 是最后一档，不是默认选项。
+2. **用整句说清你要什么**，别只丢一个词。"实现用户登录的接口和页面"比"开发"更容易被路由到对的地方。
+3. **顺序有意义**：先把 TODO 和阶段建起来，再定功能、划边界、选技术，最后写代码。跳过前面几步，代价会在联调阶段还回来。
+4. **一个功能一次交完**：数据、接口、页面算一个纵向切片。只做一半的功能没法验收，也没法从 TODO 上划掉。
 
 ## 下一步
 
-- [Medium 优先级](/skills/catalog/medium) - 查看专业领域 Skill
-- [使用指南](/skills/usage) - 学习如何使用这些 Skill
-- [最佳实践](/skills/best-practices) - 掌握使用技巧
+- [Medium 优先级](/skills/catalog/medium/) - 专业领域 Skill
+- [Low & Fallback](/skills/catalog/low-fallback/) - 扩展与兜底 Skill
+- [使用指南](/skills/usage/) - 完整流程怎么走
+- [最佳实践](/skills/best-practices/) - 用顺手之后的技巧

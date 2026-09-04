@@ -1,1023 +1,128 @@
 ---
-title: ui-pc
+title: PC 界面 - ui-pc
 description: PC/管理端界面实现 - 按设计令牌实现 Web 页面
 order: 17
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+import { Aside } from '@astrojs/starlight/components';
 
 ## 概述
 
-`ui-pc` 是 **High 优先级** Skill，负责按已发现的组件库、路由、状态与设计令牌实现 PC/管理端界面。
+`ui-pc` 干的是"把已经定下来的设计和契约落成真实页面"这件事。它的起点从来不是空白画布：仓库里已经有一套组件库、路由约定、请求层、认证链和设计令牌，新页面必须长在这套东西上，而不是在旁边再造一套。所以它做的第一件事永远是查——依赖里装的到底是哪个组件库、路由从哪来、相邻的生产页面怎么写、真实的 props 和事件名叫什么。
 
-**适用场景**：
-- PC/Web 管理后台页面
-- 桌面端应用界面
-- 数据看板和报表
-- 管理系统界面
+它对"完成"的判断线比通常想象的高。接口能返回数据、字段能在页面上显示，只是起点；权限、加载与空与错与成功、宽屏到窄窗口的自适应、键盘与焦点、并发下旧响应会不会盖掉新状态，都算在同一个功能里，缺一样就不算交付完。
 
-**不适用场景**：
-- 移动端/跨端应用 → 使用 `ui-app`
-- 设计基线制定 → 使用 `frontend-design`
-- 已有页面精修 → 使用 `frontend-polish`
-- 后端 API → 使用 `api-development`
+它不定设计基线，不写后端接口，不维护任务状态，也不碰 Git。它把改了哪些文件、跑了哪些验证、还有哪些边界没验证，交回给功能 owner。
 
-## 快速开始
+## 什么时候用
 
-### 实现新页面的完整流程
+| 你会这样说 | 场景 |
+| --- | --- |
+| "做个用户列表页" | 查询、分页、表格、批量操作的后台列表 |
+| "加个订单详情页" | 详情用什么承载，以及怎么实现 |
+| "做个数据看板" | 指标层级、时间范围、异常与下钻 |
+| "审批流那几个页面要改" | 流程系统页面：阶段、状态、责任人、待办 |
+| "菜单里加一项，进去是个新页" | 顶级业务入口对应真实路由视图 |
+| "这个字段要加到表格和编辑弹窗里" | 已有交付面上的增量实现 |
 
-```bash
-# 1. 确认设计基线已完成
-# 查看 TODO 中的页面结构、交互、状态定义
+触发面覆盖 PC 与管理端界面、Web 页面、桌面端这几类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。
 
-# 2. 发现项目结构
-# 查找框架、组件库、路由、状态管理
+## 什么时候不要用
 
-# 3. 开始实现
-"实现用户列表页面"
-"实现订单详情页"
+- **移动端、H5、小程序** → [ui-app](/skills/skills-reference/high/ui-app/)。平台事实完全不同——安全区、键盘顶起、条件编译、真机权限——把这边的结构和验证方式搬过去会整块返工。
+- **还没有设计结论** → [frontend-design](/skills/skills-reference/high/frontend-design/)。它输出可实施的设计基线；本 Skill 消费基线，不替你做设计决定。
+- **已有页面的打磨、精修、只读审查** → [frontend-polish](/skills/skills-reference/high/frontend-polish/)。分开是为了避免两个 Skill 对同一个页面各审一遍。
+- **跨组件共享状态、Store、本地持久化** → [store-pc](/skills/skills-reference/medium/store-pc/)。本 Skill 负责界面和页面局部状态；持久化的版本、迁移、登出清理归它。
+- **后端接口本身** → [api-development](/skills/skills-reference/high/api-development/)。
+- **页面业务流程的真实浏览器回归** → [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/)。本 Skill 实现页面，它跑流程。
+- **原型、品牌取值、艺术 sketch** → [penpot-prototype](/skills/skills-reference/low/penpot-prototype/)、[brand-guidelines](/skills/skills-reference/low/brand-guidelines/)、[algorithmic-art](/skills/skills-reference/low/algorithmic-art/)。三者的产出都不是生产页面。
+- **没有专业 Skill 覆盖的零碎改动** → [universal-development](/skills/skills-reference/low/universal-development/)。反过来不成立：业务页面不走兜底。
 
-# 4. 接入真实 API
-# 确认后端接口已就绪，接入真实数据
+## 前置条件
 
-# 5. 验证
-npm run dev          # 启动开发服务器
-npm run type-check   # 类型检查
-npm run build        # 构建验证
+三条门槛，都是为了让"页面长在真实事实上"这件事成立。
 
-# 6. Review
-/code-review
-```
+1. **UI/UX 结论已经在手，或者明确复用现有设计系统。** 它不做设计发散。缺这一步，页面结构会退化成一套通用模板——而结构本该由系统性质、用户角色、信息密度和主要输入方式决定：管理端与运营场景优先扫描、查询、比较和批量；驾驶舱优先指标层级、时间范围、异常和下钻；流程系统优先阶段、状态、责任人和待办；编辑器类优先工作区和即时反馈。
+2. **框架和组件库已经从仓库事实确认下来。** 依赖、组件定义、相邻生产调用三处对齐才算确认。从组件名猜 API 是最贵的错误；而为了一个页面混装第二套组件体系之后，主题和交互就再也统一不回来。没有既定 UI 基线、或者确实要换框架，选型属于规划阶段的 [tech-decision](/skills/skills-reference/high/tech-decision/)，不在写页面时临时决定。
+3. **后端契约已经明确，或者同步在做。** 字段名、枚举、分页、排序、null 与默认值、单位、时区、错误语义都得来自真实后端或既有调用。从表格列名反推 API 字段做出来的页面，联调时基本要重写一遍。
 
-## 使用示例
+<Aside type="danger">
+没有目标仓库、跑不起来、或者手上只有一份静态页面时，它只给静态契约和最小示例，**不会声称页面已经跑通或视觉已经通过**。同样，mock、fixture、静态页面和孤立的前端构建都不能用来关闭一个 `featureId`。
+</Aside>
 
-### 场景 1：实现用户列表页
+## 怎么用
 
-**设计输入**：
-```yaml
-页面: 用户列表
-路由: /user/list
-功能: 搜索、列表、编辑、删除
-状态: default, loading, empty, error, success
-```
+### 1. Preflight：先把项目找准
 
-**实现步骤**：
+用 `rg --files` 定位构建文件、锁文件、TypeScript 配置、入口、路由、全局样式、令牌和可用脚本——不要假设它们都在 `src/` 下。再从依赖和入口确认框架与版本、渲染模式、目标浏览器、CSS 方案、组件库、图标、国际化、状态管理和请求层。然后搜出布局、表格、表单、Dialog、空态、错误态、Loading、权限和 motion 令牌的既有实现，以及至少一个相邻的生产用例，核对真实导入、props、事件、slot 和命名。
 
-1. **发现项目结构**：
-```bash
-# 查找项目配置
-rg --files | rg 'package.json|vite.config|tsconfig'
+只有当缺失的信息会实质改变结构、公共行为、安全、数据或成本时才停下来问；普通实现细节照相邻生产代码办。
 
-# 查找路由和组件
-rg --files | rg 'src/(views|pages|components)/'
+### 2. 把契约和状态定死，再动手
 
-# 查找相邻页面
-rg -l 'defineComponent|<template>' src/views/
-```
+固定字段集合用具名类型，不用 `Record<string, unknown>` 或页面内临时键值约定糊过去。超出 JavaScript 安全整数范围的 ID 按契约走字符串；金额、比例、容量和时间保住单位与精度，不在展示层悄悄改业务含义。
 
-2. **创建页面文件**：
-```vue
-<!-- src/views/user/list.vue -->
-<template>
-  <div class="user-list">
-    <!-- 搜索区 -->
-    <el-card class="search-card">
-      <el-form :model="searchForm" inline>
-        <el-form-item label="邮箱">
-          <el-input v-model="searchForm.email" placeholder="请输入邮箱" clearable />
-        </el-form-item>
-        <el-form-item label="手机">
-          <el-input v-model="searchForm.phone" placeholder="请输入手机号" clearable />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
-            <el-option label="激活" value="ACTIVE" />
-            <el-option label="停用" value="INACTIVE" />
-            <el-option label="禁用" value="BANNED" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="loading" @click="handleSearch">
-            搜索
-          </el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+状态矩阵按适用范围建齐：default、hover、`focus-visible`、pressed 与 dragging、disabled、pending 与 loading、empty、error、success 与 undo。每个状态都要有能操作的反馈、恢复路径和稳定布局；判定为不适用的，得有任务或平台上的理由。
 
-    <!-- 用户表格 -->
-    <el-card class="table-card">
-      <el-table
-        v-loading="loading"
-        :data="userList"
-        stripe
-        border
-      >
-        <el-table-column prop="id" label="用户ID" width="180" />
-        <el-table-column prop="name" label="姓名" width="120" />
-        <el-table-column prop="email" label="邮箱" width="200" />
-        <el-table-column prop="phone" label="手机" width="120" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusLabel(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" width="180" />
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              type="primary"
-              size="small"
-              @click="handleEdit(row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              type="danger"
-              size="small"
-              @click="handleDelete(row)"
-            >
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <el-empty description="暂无数据" />
-        </template>
-      </el-table>
+<Aside type="caution">
+两条最容易被跳过的边界。
 
-      <!-- 分页 -->
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="handleSizeChange"
-        @current-change="handlePageChange"
-      />
-    </el-card>
+**权限**：前端路由、按钮、指令和 Store 里的权限只负责界面体验，服务端仍要校验每一次读写。按钮看不见不等于可以继续请求、预取或缓存未授权数据；租户、Token、角色一律复用项目认证链。
 
-    <!-- 编辑对话框 -->
-    <el-dialog
-      v-model="editDialogVisible"
-      title="编辑用户"
-      width="600px"
-    >
-      <el-form
-        ref="editFormRef"
-        :model="editForm"
-        :rules="editRules"
-        label-width="80px"
-      >
-        <el-form-item label="姓名" prop="name">
-          <el-input v-model="editForm.name" />
-        </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="editForm.email" />
-        </el-form-item>
-        <el-form-item label="手机" prop="phone">
-          <el-input v-model="editForm.phone" />
-        </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-select v-model="editForm.status">
-            <el-option label="激活" value="ACTIVE" />
-            <el-option label="停用" value="INACTIVE" />
-            <el-option label="禁用" value="BANNED" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          确定
-        </el-button>
-      </template>
-    </el-dialog>
-  </div>
-</template>
+**并发**：筛选、分页和联想请求必须用项目既有的取消、请求序号或查询库机制，旧响应不能盖掉新状态。提交、删除和批量操作要防重复触发；乐观更新必须有回滚或重新拉取的路径。
+</Aside>
 
-<script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance } from 'element-plus'
-import { userApi } from '@/api/user'
-import type { User, UserSearchParams } from '@/types/user'
+### 3. 落到工程结构里
 
-// 搜索表单
-const searchForm = reactive<UserSearchParams>({
-  email: '',
-  phone: '',
-  status: ''
-})
+布局壳负责导航、面包屑、页签容器和全局加载，业务页面不再重复实现一遍。菜单、面包屑或布局标题已经说明页面用途时，内容区不要再写一遍页面标题、用途副标题和显而易见的操作说明——直接进入当前任务、状态、操作和数据。只有限制、风险、不可逆影响或复杂的空态错态需要解释时，才在对应操作旁边放一句简短提示。
 
-// 用户列表
-const loading = ref(false)
-const userList = ref<User[]>([])
-
-// 分页
-const pagination = reactive({
-  page: 1,
-  pageSize: 10,
-  total: 0
-})
-
-// 编辑对话框
-const editDialogVisible = ref(false)
-const editFormRef = ref<FormInstance>()
-const editForm = reactive<Partial<User>>({
-  id: '',
-  name: '',
-  email: '',
-  phone: '',
-  status: 'ACTIVE'
-})
-const submitting = ref(false)
-
-// 表单验证规则
-const editRules = {
-  name: [
-    { required: true, message: '请输入姓名', trigger: 'blur' },
-    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
-  ],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
-  ],
-  phone: [
-    { required: true, message: '请输入手机号', trigger: 'blur' },
-    { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
-  ],
-  status: [
-    { required: true, message: '请选择状态', trigger: 'change' }
-  ]
-}
-
-// 获取用户列表
-const loadUserList = async () => {
-  try {
-    loading.value = true
-    const res = await userApi.list({
-      ...searchForm,
-      page: pagination.page,
-      pageSize: pagination.pageSize
-    })
-    userList.value = res.data.records
-    pagination.total = res.data.total
-  } catch (error) {
-    ElMessage.error('加载用户列表失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.page = 1
-  loadUserList()
-}
-
-// 重置
-const handleReset = () => {
-  searchForm.email = ''
-  searchForm.phone = ''
-  searchForm.status = ''
-  handleSearch()
-}
-
-// 分页
-const handleSizeChange = (size: number) => {
-  pagination.pageSize = size
-  loadUserList()
-}
-
-const handlePageChange = (page: number) => {
-  pagination.page = page
-  loadUserList()
-}
-
-// 编辑
-const handleEdit = (row: User) => {
-  Object.assign(editForm, row)
-  editDialogVisible.value = true
-}
-
-// 提交编辑
-const handleSubmit = async () => {
-  if (!editFormRef.value) return
-  
-  await editFormRef.value.validate()
-  
-  try {
-    submitting.value = true
-    await userApi.update(editForm.id!, editForm)
-    ElMessage.success('修改成功')
-    editDialogVisible.value = false
-    loadUserList()
-  } catch (error) {
-    ElMessage.error('修改失败')
-  } finally {
-    submitting.value = false
-  }
-}
-
-// 删除
-const handleDelete = async (row: User) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定删除用户 ${row.name} 吗？`,
-      '提示',
-      {
-        type: 'warning'
-      }
-    )
-    
-    await userApi.delete(row.id)
-    ElMessage.success('删除成功')
-    loadUserList()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
-
-// 状态相关
-const getStatusType = (status: string) => {
-  const map: Record<string, any> = {
-    ACTIVE: 'success',
-    INACTIVE: 'warning',
-    BANNED: 'danger'
-  }
-  return map[status] || 'info'
-}
-
-const getStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    ACTIVE: '激活',
-    INACTIVE: '停用',
-    BANNED: '禁用'
-  }
-  return map[status] || status
-}
-
-// 初始化
-onMounted(() => {
-  loadUserList()
-})
-</script>
-
-<style scoped>
-.user-list {
-  padding: 16px;
-}
-
-.search-card {
-  margin-bottom: 16px;
-}
-
-.table-card {
-  :deep(.el-pagination) {
-    margin-top: 16px;
-    justify-content: flex-end;
-  }
-}
-</style>
-```
-
-3. **定义 API 契约**：
-```typescript
-// src/api/user.ts
-import request from '@/utils/request'
-import type { User, UserSearchParams, PageResult } from '@/types/user'
-
-export const userApi = {
-  // 查询用户列表
-  list(params: UserSearchParams) {
-    return request.get<PageResult<User>>('/api/v1/users', { params })
-  },
-
-  // 更新用户
-  update(id: string, data: Partial<User>) {
-    return request.put<void>(`/api/v1/users/${id}`, data)
-  },
-
-  // 删除用户
-  delete(id: string) {
-    return request.delete<void>(`/api/v1/users/${id}`)
-  }
-}
-```
-
-4. **定义类型**：
-```typescript
-// src/types/user.ts
-export interface User {
-  id: string
-  name: string
-  email: string
-  phone: string
-  status: 'ACTIVE' | 'INACTIVE' | 'BANNED'
-  createTime: string
-}
-
-export interface UserSearchParams {
-  email?: string
-  phone?: string
-  status?: string
-  page?: number
-  pageSize?: number
-}
-
-export interface PageResult<T> {
-  records: T[]
-  total: number
-  page: number
-  pageSize: number
-}
-```
-
-5. **配置路由**：
-```typescript
-// src/router/index.ts
-{
-  path: '/user',
-  component: Layout,
-  meta: { title: '用户管理', icon: 'user' },
-  children: [
-    {
-      path: 'list',
-      name: 'UserList',
-      component: () => import('@/views/user/list.vue'),
-      meta: { title: '用户列表', permission: 'user:query' }
-    }
-  ]
-}
-```
-
-### 场景 2：实现数据看板
-
-**设计输入**：
-```yaml
-页面: 销售看板
-路由: /dashboard/sales
-功能: 关键指标、趋势图、Top 商品、地区分布
-图表: ECharts 或 VChart
-```
-
-**实现步骤**：
-
-1. **创建看板页面**：
-```vue
-<!-- src/views/dashboard/sales.vue -->
-<template>
-  <div class="sales-dashboard">
-    <!-- 关键指标卡片 -->
-    <el-row :gutter="16" class="metrics-row">
-      <el-col :span="6">
-        <el-card class="metric-card">
-          <div class="metric-label">今日销售额</div>
-          <div class="metric-value">¥ {{ formatNumber(metrics.todaySales) }}</div>
-          <div class="metric-change" :class="getChangeClass(metrics.salesGrowth)">
-            {{ formatPercent(metrics.salesGrowth) }} ↑
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card class="metric-card">
-          <div class="metric-label">订单数</div>
-          <div class="metric-value">{{ formatNumber(metrics.orderCount) }}</div>
-          <div class="metric-change" :class="getChangeClass(metrics.orderGrowth)">
-            {{ formatPercent(metrics.orderGrowth) }} ↑
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card class="metric-card">
-          <div class="metric-label">客单价</div>
-          <div class="metric-value">¥ {{ formatNumber(metrics.avgOrderValue) }}</div>
-          <div class="metric-change" :class="getChangeClass(metrics.avgGrowth)">
-            {{ formatPercent(metrics.avgGrowth) }} ↑
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card class="metric-card">
-          <div class="metric-label">环比增长</div>
-          <div class="metric-value">{{ formatPercent(metrics.totalGrowth) }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 销售趋势图 -->
-    <el-card class="chart-card">
-      <template #header>
-        <div class="card-header">
-          <span>销售趋势</span>
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            @change="handleDateChange"
-          />
-        </div>
-      </template>
-      <div ref="trendChartRef" class="chart" style="height: 400px"></div>
-    </el-card>
-
-    <el-row :gutter="16">
-      <!-- Top 10 商品 -->
-      <el-col :span="12">
-        <el-card class="chart-card">
-          <template #header>Top 10 商品</template>
-          <el-table :data="topProducts" stripe>
-            <el-table-column prop="name" label="商品名" />
-            <el-table-column prop="sales" label="销售额" width="120">
-              <template #default="{ row }">
-                ¥ {{ formatNumber(row.sales) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="quantity" label="销量" width="100" />
-            <el-table-column prop="percentage" label="占比" width="100">
-              <template #default="{ row }">
-                {{ formatPercent(row.percentage) }}
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-col>
-
-      <!-- 地区分布 -->
-      <el-col :span="12">
-        <el-card class="chart-card">
-          <template #header>地区分布</template>
-          <div ref="mapChartRef" class="chart" style="height: 400px"></div>
-        </el-card>
-      </el-col>
-    </el-row>
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import * as echarts from 'echarts'
-import type { ECharts } from 'echarts'
-import { dashboardApi } from '@/api/dashboard'
-import type { SalesMetrics, TrendData, TopProduct } from '@/types/dashboard'
-
-// 关键指标
-const metrics = reactive<SalesMetrics>({
-  todaySales: 0,
-  orderCount: 0,
-  avgOrderValue: 0,
-  salesGrowth: 0,
-  orderGrowth: 0,
-  avgGrowth: 0,
-  totalGrowth: 0
-})
-
-// 日期范围
-const dateRange = ref<[Date, Date]>([
-  new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-  new Date()
-])
-
-// Top 商品
-const topProducts = ref<TopProduct[]>([])
-
-// 图表实例
-const trendChartRef = ref<HTMLElement>()
-const mapChartRef = ref<HTMLElement>()
-let trendChart: ECharts | null = null
-let mapChart: ECharts | null = null
-
-// 加载数据
-const loadData = async () => {
-  try {
-    const [startDate, endDate] = dateRange.value
-    const res = await dashboardApi.getSalesData({
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0]
-    })
-    
-    Object.assign(metrics, res.data.metrics)
-    topProducts.value = res.data.topProducts
-    
-    renderTrendChart(res.data.trendData)
-    renderMapChart(res.data.regionData)
-  } catch (error) {
-    console.error('加载数据失败', error)
-  }
-}
-
-// 渲染趋势图
-const renderTrendChart = (data: TrendData[]) => {
-  if (!trendChart || !trendChartRef.value) {
-    trendChart = echarts.init(trendChartRef.value!)
-  }
-  
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' }
-    },
-    legend: {
-      data: ['销售额', '订单量']
-    },
-    xAxis: {
-      type: 'category',
-      data: data.map(d => d.date)
-    },
-    yAxis: [
-      {
-        type: 'value',
-        name: '销售额（元）',
-        position: 'left'
-      },
-      {
-        type: 'value',
-        name: '订单量',
-        position: 'right'
-      }
-    ],
-    series: [
-      {
-        name: '销售额',
-        type: 'line',
-        smooth: true,
-        data: data.map(d => d.sales),
-        yAxisIndex: 0
-      },
-      {
-        name: '订单量',
-        type: 'bar',
-        data: data.map(d => d.orders),
-        yAxisIndex: 1
-      }
-    ]
-  }
-  
-  trendChart.setOption(option)
-}
-
-// 渲染地图
-const renderMapChart = (data: Record<string, number>) => {
-  if (!mapChart || !mapChartRef.value) {
-    mapChart = echarts.init(mapChartRef.value!)
-  }
-  
-  const option = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: ¥{c}'
-    },
-    visualMap: {
-      min: 0,
-      max: Math.max(...Object.values(data)),
-      text: ['高', '低'],
-      realtime: false,
-      calculable: true,
-      inRange: {
-        color: ['lightskyblue', 'yellow', 'orangered']
-      }
-    },
-    series: [
-      {
-        name: '销售额',
-        type: 'map',
-        map: 'china',
-        roam: true,
-        data: Object.entries(data).map(([name, value]) => ({
-          name,
-          value
-        }))
-      }
-    ]
-  }
-  
-  mapChart.setOption(option)
-}
-
-// 日期变化
-const handleDateChange = () => {
-  loadData()
-}
-
-// 格式化
-const formatNumber = (num: number) => {
-  return num.toLocaleString('zh-CN')
-}
-
-const formatPercent = (num: number) => {
-  return `${(num * 100).toFixed(2)}%`
-}
-
-const getChangeClass = (value: number) => {
-  return value >= 0 ? 'positive' : 'negative'
-}
-
-// 窗口resize
-const handleResize = () => {
-  trendChart?.resize()
-  mapChart?.resize()
-}
-
-// 生命周期
-onMounted(() => {
-  loadData()
-  window.addEventListener('resize', handleResize)
-})
-
-onUnmounted(() => {
-  trendChart?.dispose()
-  mapChart?.dispose()
-  window.removeEventListener('resize', handleResize)
-})
-</script>
-
-<style scoped>
-.sales-dashboard {
-  padding: 16px;
-}
-
-.metrics-row {
-  margin-bottom: 16px;
-}
-
-.metric-card {
-  text-align: center;
-}
-
-.metric-label {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 8px;
-}
-
-.metric-value {
-  font-size: 32px;
-  font-weight: bold;
-  color: var(--el-text-color-primary);
-  margin-bottom: 4px;
-}
-
-.metric-change {
-  font-size: 14px;
-}
-
-.metric-change.positive {
-  color: var(--el-color-success);
-}
-
-.metric-change.negative {
-  color: var(--el-color-danger);
-}
-
-.chart-card {
-  margin-bottom: 16px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.chart {
-  width: 100%;
-}
-</style>
-```
-
-## 关键规则
-
-### 1. 发现真实项目
-
-```bash
-# 正确: 从实际文件发现
-rg --files | rg 'package.json'
-rg '"vue":|"react":' package.json
-rg --files | rg 'src/(views|pages|components)/'
-
-# 错误: 假设框架和路径
-假设使用 Vue 3 + Element Plus
-假设路径在 src/views/
-```
-
-### 2. 复用组件和状态
-
-```vue
-<!-- 正确: 复用项目组件 -->
-<el-button type="primary">提交</el-button>
-<el-table :data="list" />
-
-<!-- 错误: 自己实现 -->
-<button class="custom-button">提交</button>
-<div class="custom-table"></div>
-```
-
-### 3. 真实 API 契约
-
-```typescript
-// 正确: 明确类型
-interface User {
-  id: string  // Long 雪花 ID
-  name: string
-  status: 'ACTIVE' | 'INACTIVE' | 'BANNED'
-}
-
-// 错误: 模糊类型
-interface User {
-  id: number
-  name: string
-  status: string
-}
-```
-
-### 4. 完整状态处理
-
-```vue
-<!-- 正确: 覆盖全部状态 -->
-<el-table v-loading="loading" :data="list">
-  <template #empty>
-    <el-empty description="暂无数据" />
-  </template>
-</el-table>
-
-<!-- 错误: 只有正常态 -->
-<el-table :data="list">
-</el-table>
-```
-
-## 验证清单
-
-### 功能验证
-
-```markdown
-- [ ] 页面正常显示
-- [ ] 路由跳转正常
-- [ ] API 请求正常
-- [ ] 表单提交正常
-- [ ] 交互反馈明确
-```
-
-### 状态验证
-
-```markdown
-- [ ] Loading 状态正常
-- [ ] 空状态正常
-- [ ] 错误状态正常
-- [ ] 成功状态正常
-- [ ] 禁用状态正常
-```
-
-### 响应式验证
-
-```markdown
-- [ ] 1920×1080 显示正常
-- [ ] 1366×768 显示正常
-- [ ] 窄窗口显示正常
-- [ ] 主题切换正常
-- [ ] 长文本处理正常
-```
-
-### 代码质量
-
-```markdown
-- [ ] 类型检查通过
-- [ ] Lint 检查通过
-- [ ] 构建成功
-- [ ] 无控制台错误
-- [ ] 注释完整清晰
-```
-
-## Skill 协调
-
-`ui-pc` 与以下 Skill 配合：
-
-| 阶段 | Skill |
-|------|-------|
-| 设计基线 | frontend-design |
-| PC 实现 | ui-pc |
-| 状态管理 | store-pc |
-| 页面精修 | frontend-polish |
-| 代码审查 | code-review |
+多个业务模块不要堆进一个巨型页面文件。可复用的表格、筛选器、图表、弹窗和状态块进模块组件，页面文件只编排数据、布局和主要动作；API client、契约类型、Store、格式化工具和 storage 留在项目既有边界里，页面内不复制请求封装、Token、租户或原生 storage 调用。请求层确认是 alova 时按 [alova-client-usage](/skills/skills-reference/low/alova-client-usage/) 接入，页面只消费具名契约和已有的 Method 与 Hook。
 
 <Aside type="note">
-ui-pc 只负责 PC/管理端页面实现，不负责移动端、设计或后端。
+遇到"某个类型、格式化或业务口径会被两个以上页面、系统层或功能复用，但项目记忆里没记过它的 Owner 和复用边界"这种情况，正确做法是把后端 DTO、真实响应和既有实现交给 [project-details](/skills/skills-reference/high/project-details/)，由它原位补进 `PROJECT-MEMORY.md`。不要用页面里的 `Number(...)`、临时枚举字典、重复组件或一行注释把缺口掩过去。
 </Aside>
+
+### 4. 图表按既有栈实施
+
+仓库已经有图表封装时沿用它，连主题、resize、tooltip、空态、导出和数据转换约定一起沿用。没有既有栈时，比较具名候选、绑定版本与入口与验证与退出路径，是 `tech-decision` 在规划阶段的事，本 Skill 不在写页面时临时选库。图表自身必须封装指标口径、单位、tooltip、legend、加载与空与错、resize、销毁和主题适配；复杂聚合、阈值、时间窗口和联动逻辑要注释原因与边界。地图、3D、大量点和大屏动效先确认性能、降级和浏览器边界——装饰不能盖掉指标口径、更新时间、下钻和导出。
+
+### 5. 验证
+
+跑目标仓库里受影响范围的现有 formatter、类型检查、编译或构建命令。项目已启用国际化时，全部启用语言的固定文案键和插值参数要一起核对，运行时切换沿用既有加载链——只认出了 i18n 工具却留着硬编码文案，不算完成。
+
+能启动的话，把目标尺寸、窄窗口、主题、缩放、长文本和关键状态合并成一次真实浏览器主路径，顺带看键盘、焦点、reduced preferences 和资源清理。同一份 diff 只做一次完整 [code-review](/skills/skills-reference/high/code-review/)，修完只核对 findings 和受影响的那几条命令。默认不新增也不修改测试代码，除非你这一轮明确要求。
 
 ## 与其他 Skill 的关系
 
-### 选择决策
+**上游（before）**：[frontend-design](/skills/skills-reference/high/frontend-design/)、[api-development](/skills/skills-reference/high/api-development/)——一个给结构与交互结论，一个给字段与错误语义。
+
+**下游（after）**：[frontend-polish](/skills/skills-reference/high/frontend-polish/)、[store-pc](/skills/skills-reference/medium/store-pc/)、[code-review](/skills/skills-reference/high/code-review/)。
+
+**协作（complement）**：[review-animations](/skills/skills-reference/low/review-animations/)、[animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)——需要独立动效审查时用前者，把模糊的动效描述换成准确说法用后者。
 
 ```text
-PC/管理端页面 → ui-pc
-跨端应用页面 → ui-app
-设计基线 → frontend-design
-页面精修 → frontend-polish
+frontend-design（页面结构、交互、状态结论）
+api-development（字段、枚举、分页、错误语义）
+        ↓
+   ui-pc（路由 → 契约与类型 → 组件与令牌 → 状态矩阵 → 响应式 → 验证）
+        ├─ tech-decision（缺 UI 基线或图表栈时，在规划阶段选型）
+        ├─ store-pc（跨组件共享状态与持久化）
+        ├─ project-details（复用边界需要进项目记忆时）
+        └─ alova-client-usage（请求层确认是 alova 时）
+              ↓
+        code-review（一次完整 Review）→ frontend-polish（后续打磨）
 ```
 
-### Related Skills
+同一个功能同时有管理端和移动端交付面时，两端分别由本 Skill 和 [ui-app](/skills/skills-reference/high/ui-app/) 完成，契约与收口留给功能 owner。
 
-**前置依赖**:
-- `frontend-design` - 设计基线
-- `api-development` - 后端 API
+## 产出与验收
 
-**后续推荐**:
-- `store-pc` - 状态管理
-- `frontend-polish` - 页面精修
-- `code-review` - 代码审查
+留在仓库里的是真实的路由、页面与模块组件、具名契约类型，以及接进项目既有请求、认证和权限链的调用——不是一份实现报告。普通页面不产出设计规格、评分表、测试手册或完成收据。
 
-**协作 Skill**:
-- `review-animations` - 动效审查
-- `animation-vocabulary` - 动效术语
+交回给功能 owner 的是四样：用户能感知到的变化、实际改动的文件、验证命令与结果、剩余风险。
 
-## 最佳实践
+判断真的完成了：能把"从哪个菜单进得去、真实接口和权限对上了没有、各个状态和恢复路径都走过没有、宽屏和窄窗口分别看过没有、跑了哪些命令、还有什么只能等真实环境验"这几件事连起来讲完。契约、权限、租户、并发、可访问性或真实组件 API 里任何一条硬门禁没过，就不能声明 ready。
 
-### 1. 先发现后实现
-
-```bash
-# 正确: 先发现项目结构
-1. 查找 package.json 和依赖
-2. 查找路由和组件
-3. 查找相邻页面
-4. 基于事实实现
-
-# 错误: 直接写代码
-1. 不看项目结构
-2. 不看现有组件
-3. 直接开始写
-```
-
-### 2. 复用设计系统
-
-```vue
-<!-- 正确: 使用项目组件 -->
-<el-button type="primary">提交</el-button>
-<el-table :data="list" />
-<el-dialog v-model="visible" />
-
-<!-- 错误: 自己实现 -->
-<button class="btn-primary">提交</button>
-<div class="table"></div>
-<div class="modal"></div>
-```
-
-### 3. 真实数据类型
-
-```typescript
-// 正确: 明确具体类型
-interface Order {
-  id: string  // Long ID, 使用字符串
-  amount: number  // Decimal(10,2)
-  status: OrderStatus  // 枚举类型
-  createTime: string  // ISO 8601
-}
-
-enum OrderStatus {
-  PENDING = 'PENDING',
-  PAID = 'PAID',
-  SHIPPED = 'SHIPPED'
-}
-
-// 错误: 模糊类型
-interface Order {
-  id: any
-  amount: any
-  status: string
-  createTime: any
-}
-```
-
-### 4. 完整错误处理
-
-```typescript
-// 正确: 完整处理
-try {
-  loading.value = true
-  const res = await api.getData()
-  data.value = res.data
-} catch (error) {
-  ElMessage.error('加载失败')
-  console.error(error)
-} finally {
-  loading.value = false
-}
-
-// 错误: 缺少处理
-const res = await api.getData()
-data.value = res.data
-```
-
-## 下一步
-
-- [frontend-design](/skills/skills-reference/high/frontend-design) - 设计基线
-- [ui-app](/skills/skills-reference/high/ui-app) - App 实现
-- [frontend-polish](/skills/skills-reference/high/frontend-polish) - 页面精修
-- [store-pc](/skills/skills-reference/medium/store-pc) - 状态管理
-- [code-review](/skills/skills-reference/high/code-review) - 代码审查
+<Aside type="note">
+本 Skill 不创建也不更新 TODO、不改功能状态、不操作 Git。只有不改变已批准行为和业务契约的缺陷修复或纯技术维护才能跳过产品流程；实施过程中出现业务变化会立即停下来。
+</Aside>

@@ -1,0 +1,162 @@
+---
+title: Word 文档处理（docx）
+description: 创建、读取和编辑 DOCX，并在过程中保住格式、批注与修订痕迹
+order: 32
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+DOCX 不是文本文件，它是一个装着 XML 的 ZIP 包。这决定了处理它的全部麻烦：直接用文本工具改会破坏包结构，用通用库整文件重写会丢批注、修订和样式。`docx` Skill 给的是一条稳定路线——读取用现成工具、创建用 `docx-js`、编辑走"解包 → 改 XML → 重新打包"，每一步后面都跟一次结构验证。
+
+它只处理文档文件本身。`SKILL.md` 的流程边界写明：仅执行既有 TODO 的 DOCX 处理步骤，不维护任务状态。文档写什么内容由内容类 Skill 决定，它负责把内容安全地落到 `.docx` 里。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "把这份 Word 文档里的内容读出来" | 读取或分析既有 DOCX 内容 |
+| "生成一个 Word 文档" | 从零创建带样式、表格、列表的 DOCX |
+| "改一下这份合同的第三条" | 编辑现有文档且必须保留其余格式 |
+| "在这几处加上批注" | 需要写入 comments 相关 XML |
+| "把所有修订都接受掉" | 处理 tracked changes |
+| "表格宽度在 Google Docs 里错位了" | 单位与宽度设置问题排查 |
+
+触发词来自 `SKILL.md` 的 `triggers`：Word文档、DOCX。触发场景补充为：创建、读取和编辑 Word 文档，保留格式、批注或修订。
+
+## 什么时候不要用
+
+- **写代码、改代码** → [universal-development](/skills/skills-reference/low/universal-development/)。它只产出文档文件。
+- **产品 PRD、需求与验收** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **会议纪要、状态更新、发布说明** → [internal-comms](/skills/skills-reference/low/internal-comms/)。先把内容写对，再决定要不要导成 Word。
+- **用户手册、需要多轮共创的长文** → [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)。
+- **PDF 读写、OCR、表单填写** → [pdf](/skills/skills-reference/low/pdf/)。
+- **PowerPoint** → [pptx](/skills/skills-reference/low/pptx/)；**Excel / CSV** → [xlsx](/skills/skills-reference/low/xlsx/)。
+
+`not_for` 明确排除：代码实现、产品 PRD、会议纪要、用户手册。
+
+## 前置条件
+
+frontmatter 没有 `gates`，但正文的落盘规则和工具要求就是实际门槛：
+
+1. **输出路径必须先定下来**。用户已指定就直接用（不改写目录、不重复询问）；未指定时先看仓库有没有明确的文档目录约定；两者都没有时，在首次写文件前询问文档存储前缀，最终文件保存到 `<doc-prefix>/docx/`。
+2. **`$DOC_PREFIX` 需要真实值**。命令示例里的 `$DOC_PREFIX` 表示已确认的文档存储前缀，执行前要替换掉或设置同名环境变量。
+3. **创建新文档需要 `docx-js`**。`SKILL.md` 写的是 `npm install -g docx`。
+4. **原件保持原位**。解包目录和中间文件放临时目录，不要污染仓库。
+
+不满足会发生什么：文件被写到一个没人约定过的目录、`$DOC_PREFIX` 被当成字面量写进路径、或者原始文档在编辑过程中被就地覆盖而无法回退。
+
+## 怎么用
+
+核心流程只有三步：
+
+```text
+读取 → 创建/编辑 → 验证
+```
+
+### 1. 读取与分析
+
+| 任务 | 方法 |
+| --- | --- |
+| 读取/分析内容 | `pandoc`，或直接解压查看原始 XML |
+| 需要看清 XML 结构 | 用 `scripts/office/unpack.py` 解包后浏览 `unpacked/word/` |
+
+### 2. 创建新文档
+
+用 `docx-js` 生成，详细代码示例（页面大小、样式、列表、表格、图片、超链接）在 `references/docx-guide.md`。关键规则一条都不能省：
+
+- **页面大小显式设置**：`docx-js` 默认 A4，美式文档要写 12240×15840 DXA；
+- **表格需要双重宽度**：`columnWidths` 和每个 cell 的 `width` 都要设；
+- **用 DXA 单位**，不要用 PERCENTAGE（Google Docs 不兼容）；
+- **禁止 unicode bullet**，用 `LevelFormat.BULLET` 配置列表；
+- **禁止 `\n`**，换行用独立的 Paragraph 元素；
+- 创建完成后立刻验证：
+
+```bash
+python scripts/office/validate.py "$DOC_PREFIX/docx/output.docx"
+```
+
+### 3. 编辑现有文档
+
+```bash
+# 1 解包（自动 pretty-print XML，DOCX 还会合并相邻同格式 run）
+python scripts/office/unpack.py document.docx unpacked/
+
+# 2 编辑 unpacked/word/ 下的 XML 文件
+
+# 3 重新打包，--original 保留原包中未改动的部分
+python scripts/office/pack.py unpacked/ "$DOC_PREFIX/docx/output.docx" --original document.docx
+```
+
+tracked changes、comments、images 的 XML 写法见 `references/docx-xml-reference.md`。
+
+### 4. 批注与修订
+
+`scripts/` 下有两个针对性脚本，参数是脚本里真实定义的：
+
+```bash
+# 给解包目录里的段落加批注（comment_id 必须唯一）
+python scripts/comment.py unpacked/ 1 "这里的金额需要复核" --author "张三" --initials "Z"
+# 回复某条批注：追加 --parent <父批注 id>
+
+# 接受一份文档里的全部修订，输出一个干净副本
+python scripts/accept_changes.py input.docx output-clean.docx
+```
+
+`scripts/templates/` 下预置了批注体系需要的骨架 XML：`comments.xml`、`commentsExtended.xml`、`commentsExtensible.xml`、`commentsIds.xml`、`people.xml`。
+
+<Aside type="danger">
+`accept_changes.py` 的语义是"接受全部修订"——一旦接受，"谁在什么时候改了什么"就从文档里消失了。它要求同时给出输入和输出两个文件名，所以务必写成新文件，让原件留在原处。合同、评审稿这类需要留痕的文档，接受修订前先确认这是用户真正要的结果。
+</Aside>
+
+### 5. 验证
+
+```bash
+# 既可以验证解包目录，也可以直接验证打包好的文件
+python scripts/office/validate.py unpacked/ --original document.docx
+python scripts/office/validate.py output.docx --auto-repair
+```
+
+`validate.py` 用 XSD 校验 OOXML 结构与 tracked changes，`--auto-repair` 会修 paraId/durableId 超限、缺少 `xml:space="preserve"` 这类问题。结构通过不等于视觉效果通过——排版和兼容性仍需要真实打开确认。
+
+### 6. 真实可用的资源清单
+
+| 资源 | 用途 |
+| --- | --- |
+| `references/docx-guide.md` | 详细代码示例与操作指南 |
+| `references/docx-xml-reference.md` | XML 编辑参考（修订、批注、图片） |
+| `scripts/office/unpack.py` | 解包并 pretty-print，支持 `--merge-runs` |
+| `scripts/office/pack.py` | 重新打包，支持 `--original`、`--validate` |
+| `scripts/office/validate.py` | XSD 与修订校验，支持 `--auto-repair`、`--author` |
+| `scripts/office/soffice.py` | 调用 LibreOffice 做格式转换 |
+| `scripts/comment.py` | 向解包目录写入批注 |
+| `scripts/accept_changes.py` | 接受全部修订并输出干净副本 |
+| `scripts/templates/*.xml` | 批注体系骨架 XML |
+
+<Aside type="caution">
+脚本路径都相对于 `docx` Skill 目录。`scripts/office/` 下还有 `helpers/`（`merge_runs.py`、`simplify_redlines.py`）、`validators/` 和完整的 OOXML `schemas/`，它们由上面的入口脚本调用，一般不需要直接运行。
+</Aside>
+
+## 与其他 Skill 的关系
+
+`SKILL.md` 的 `related_skills` 是不分方向的列表：[doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)、[pdf](/skills/skills-reference/low/pdf/)、[pptx](/skills/skills-reference/low/pptx/)。按实际链路：
+
+- **上游**：文档内容先由内容类 Skill 定稿——[doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)、[internal-comms](/skills/skills-reference/low/internal-comms/)、[development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/)。
+- **协作/同族**：格式互转与同类办公文档处理是 [pdf](/skills/skills-reference/low/pdf/)、[pptx](/skills/skills-reference/low/pptx/)、[xlsx](/skills/skills-reference/low/xlsx/)，它们共用同一套 `scripts/office/` 工具组织方式。
+- **下游**：需要把 DOCX 转成 PDF 交付时转 [pdf](/skills/skills-reference/low/pdf/)。
+
+```text
+doc-coauthoring / internal-comms（内容定稿）
+        ↓
+docx（生成或编辑 .docx，validate.py 结构校验）
+        ↓
+pdf（需要 PDF 交付时）
+```
+
+## 产出与验收
+
+- **主产物**：目标 `.docx` 文件，位于用户指定路径、仓库既有约定目录，或确认过前缀的 `<doc-prefix>/docx/`。
+- **原件未动**：原始输入文件保持原位，解包目录与中间文件在临时目录。
+- **结构已验证**：`scripts/office/validate.py` 通过；如果做过修订或批注操作，验证包含 redlining 部分。
+- **状态不变**：TODO 状态未被改动，未经授权不操作 Git。
+
+判断真的完成了：文件能被 Word 正常打开；表格宽度、列表符号、分页与预期一致；需要保留的批注和修订还在，不需要的已经按用户要求处理掉。结构校验通过但没有真实打开过时，要在交付说明里写清这一条未验证边界。

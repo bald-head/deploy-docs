@@ -5,20 +5,43 @@ description: 95 个 Skill 的完整能力清单与使用指南
 
 import { Aside } from '@astrojs/starlight/components'
 
+## 如何使用这本手册
+
+**这本手册不是从头读的**，而是按需查询的工具书。三种查法：
+
+1. **知道要干什么，不知道用哪个 Skill**：看下面的「Skill 分类索引」，按你的领域找
+2. **知道 Skill 名字，想看详细规则**：用左侧导航或搜索框直接跳转
+3. **想了解整体有哪些能力**：快速浏览「Skill 优先级分层」表格
+
+<Aside type="tip">
+**场景示例**：你要「设计一个登录 API」
+1. 扫「开发实施」分类 → 看到 `api-development`
+2. 点进去看触发词：✅ "API 开发" 命中
+3. 看 gates：需要已有产品定义 ✅
+4. 直接说「设计登录 API」或 `/api-development`
+</Aside>
+
+---
+
 ## 概述
 
 Skills Framework 提供 95 个专业 Skill，覆盖产品管理、架构设计、前后端开发、质量保障、Git 工作流等全栈开发场景。每个 Skill 都是独立的能力单元，通过 frontmatter 元数据实现精确路由。
 
 ## Skill 优先级分层
 
-Skills Framework 按优先级分为四档，确保关键场景优先匹配：
+Skills Framework 按优先级分为四档，确保关键场景优先匹配。**左侧导航按这四档分组**，和下面的分类索引是同一批页面的两种查法。
 
 | 优先级 | 数量 | 适用场景 | 特征 |
 |--------|------|----------|------|
-| **Critical** | 1 个 | 需求变更影响分析 | 真实范围变化时定向触发，避免重复规划 |
-| **High** | 19 个 | 核心开发流程 | 产品、架构、实现、验证、Git 等主路径 |
-| **Medium** | 30 个 | 专业领域开发 | API、数据库、前端、安全、测试等细分领域 |
-| **Low/Fallback** | 45 个 | 辅助与兜底 | 文档、工具、分析、特定框架支持 |
+| **Critical** | 2 个 | 需求变更、新功能定义 | 一旦命中就抢占其他路由，避免漏做影响分析或重复规划 |
+| **High** | 25 个 | 核心开发流程 | 产品、架构、实现、验证、Git 等主路径 |
+| **Medium** | 30 个 | 专业领域开发 | 缓存、推送、部署、测试、文档等细分领域 |
+| **Low** | 38 个 | 扩展与兜底 | 文件处理、设计工具、第三方集成、提示词工程 |
+
+<Aside type="note">
+优先级只决定**话术模糊时谁先被选中**，不代表能力强弱。Low 优先级的 Skill 需要你说得更具体，例如"把这份 Excel 拆成三个 sheet"。
+</Aside>
+
 
 ## 核心工作流
 
@@ -64,163 +87,193 @@ update-status → next (领取下一项)
 
 ### 产品与规划 (7 个)
 
-专注产品定义、需求分析、优先级排序和发布计划：
+从"这事该不该做"到"写成可执行文档"：
 
-- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis) - 需求变更影响分析 ⭐ Critical
-- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义与验收
-- [product-discovery](/skills/skills-reference/medium/product-discovery) - 用户研究与机会验证
-- [product-strategy](/skills/skills-reference/medium/product-strategy) - 产品战略与商业模式
-- [product-execution](/skills/skills-reference/medium/product-execution) - PRD 与路线图
-- [product-analytics](/skills/skills-reference/medium/product-analytics) - 产品指标与数据分析
-- [go-to-market](/skills/skills-reference/medium/go-to-market) - 市场定位与增长策略
+- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) - 已批准范围真实变化时的影响闭包 ⭐ Critical
+- [product-manager](/skills/skills-reference/critical/product-manager/) - 新项目/新功能的完整产品定义 ⭐ Critical
+- [product-discovery](/skills/skills-reference/high/product-discovery/) - 用证据验证机会与假设
+- [product-strategy](/skills/skills-reference/high/product-strategy/) - 市场、竞争、商业模式与定价
+- [product-execution](/skills/skills-reference/high/product-execution/) - PRD、OKR、路线图、发布计划
+- [product-analytics](/skills/skills-reference/medium/product-analytics/) - 指标口径与行为数据分析
+- [go-to-market](/skills/skills-reference/low/go-to-market/) - ICP、定位、渠道与增长
 
-### 架构与设计 (4 个)
+### 项目与任务 (6 个)
 
-系统架构、模块边界、技术选型：
+TODO 是整个框架唯一的状态源，这一组负责建立、追加、领取、回写和统计：
 
-- [architecture-design](/skills/skills-reference/high/architecture-design) - 系统架构设计
-- [tech-decision](/skills/skills-reference/high/tech-decision) - 技术方案选择
-- [database-design](/skills/skills-reference/medium/database-design) - 数据库设计与迁移
-- [archify](/skills/skills-reference/low-fallback/archify) - 生成架构图与流程图
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) - 维护覆盖全部交付面的唯一 TODO
+- [project-manager](/skills/skills-reference/high/project-manager/) - 把完整结论写成功能+菜单 TODO
+- [add-todo](/skills/skills-reference/medium/add-todo/) - 去重追加功能或步骤
+- [next](/skills/skills-reference/medium/next/) - 挑出下一项可执行的完整功能
+- [update-status](/skills/skills-reference/medium/update-status/) - 按代码与 Git 事实回写状态
+- [progress](/skills/skills-reference/medium/progress/) - 只读统计功能进度
 
-### 前端开发 (8 个)
 
-UI/UX 设计、页面实现、状态管理、动效：
+### 开发实施 (6 个)
 
-- [frontend-design](/skills/skills-reference/high/frontend-design) - UI/UX 设计基线
-- [ui-pc](/skills/skills-reference/high/ui-pc) - PC/Web 页面实现
-- [ui-app](/skills/skills-reference/medium/ui-app) - 跨端 App 页面
-- [store-pc](/skills/skills-reference/medium/store-pc) - PC 状态管理
-- [frontend-polish](/skills/skills-reference/medium/frontend-polish) - 前端优化
-- [review-animations](/skills/skills-reference/low-fallback/review-animations) - 动效审查
-- [animation-vocabulary](/skills/skills-reference/low-fallback/animation-vocabulary) - 动效术语
-- [canvas-design](/skills/skills-reference/low-fallback/canvas-design) - 视觉设计
+真正动业务代码的入口，选错入口比写错代码更贵：
 
-### 后端开发 (15 个)
+- [crud-development](/skills/skills-reference/high/crud-development/) - 标准增删改查的纵向交付（数据+API+页面）
+- [crud](/skills/skills-reference/high/crud/) - 只在调用仓库现有 CRUD 生成器时使用
+- [dev](/skills/skills-reference/high/dev/) - 非 CRUD 的通用纵向功能
+- [api-development](/skills/skills-reference/high/api-development/) - 接口契约、校验、错误语义与文档
+- [code-generator](/skills/skills-reference/low/code-generator/) - 开发或使用代码生成器与模板
+- [universal-development](/skills/skills-reference/low/universal-development/) - 没有对口 Skill 时的兜底
 
-API、数据库、安全、中间件、微服务：
+### 数据与权限 (4 个)
 
-- [api-development](/skills/skills-reference/high/api-development) - API 契约与实现
-- [crud-development](/skills/skills-reference/high/crud-development) - CRUD 业务交付
-- [database-ops](/skills/skills-reference/medium/database-ops) - 数据库操作
-- [backend-annotations](/skills/skills-reference/medium/backend-annotations) - 后端注解
-- [error-handler](/skills/skills-reference/medium/error-handler) - 异常与错误处理
-- [security-guard](/skills/skills-reference/medium/security-guard) - 授权与安全
-- [data-permission](/skills/skills-reference/medium/data-permission) - 数据权限
-- [tenant-management](/skills/skills-reference/medium/tenant-management) - 多租户隔离
-- [redis-cache](/skills/skills-reference/medium/redis-cache) - Redis 缓存
-- [websocket-sse](/skills/skills-reference/medium/websocket-sse) - 实时推送
-- [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs) - 定时任务
-- [workflow-engine](/skills/skills-reference/medium/workflow-engine) - 工作流引擎
-- [file-oss-management](/skills/skills-reference/low-fallback/file-oss-management) - 文件存储
-- [sms-mail](/skills/skills-reference/low-fallback/sms-mail) - 短信邮件
-- [satoken-core](/skills/skills-reference/low-fallback/satoken-core) - Sa-Token 认证
+- [database-design](/skills/skills-reference/high/database-design/) - 表结构、迁移、索引、幂等与回滚
+- [database-ops](/skills/skills-reference/high/database-ops/) - 建表、ORM 映射与数据迁移实施
+- [data-permission](/skills/skills-reference/high/data-permission/) - 行级、字段级权限与租户边界
+- [redis-cache](/skills/skills-reference/medium/redis-cache/) - 缓存与分布式锁
 
-### 质量保障 (6 个)
 
-代码审查、测试策略、性能优化、缺陷排查：
+### 架构与基础设施 (10 个)
 
-- [code-review](/skills/skills-reference/high/code-review) - 代码审查
-- [check](/skills/skills-reference/medium/check) - 后端规范检查
-- [test-strategy](/skills/skills-reference/medium/test-strategy) - 测试策略设计
-- [test-development](/skills/skills-reference/medium/test-development) - 测试代码编写
-- [performance-doctor](/skills/skills-reference/low-fallback/performance-doctor) - 性能诊断
-- [bug-detective](/skills/skills-reference/low-fallback/bug-detective) - 缺陷排查
+- [architecture-design](/skills/skills-reference/high/architecture-design/) - 系统、模块、数据所有权与部署边界
+- [tech-decision](/skills/skills-reference/high/tech-decision/) - 每个 Feature 实现前的方案比较与冻结
+- [security-guard](/skills/skills-reference/high/security-guard/) - 授权、输入与数据安全
+- [error-handler](/skills/skills-reference/medium/error-handler/) - 异常、错误码、日志与事务响应
+- [satoken-core](/skills/skills-reference/medium/satoken-core/) - Sa-Token 认证会话
+- [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/) - 定时、延迟与分布式任务
+- [websocket-sse](/skills/skills-reference/medium/websocket-sse/) - 实时推送、重连与跨实例语义
+- [tenant-management](/skills/skills-reference/medium/tenant-management/) - 多租户隔离与跨租户运维
+- [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/) - SSH 连接、构建、验证与部署
+- [workflow-engine](/skills/skills-reference/low/workflow-engine/) - 审批流、流程实例与版本
 
-### 项目管理 (8 个)
+<Aside type="caution">
+任何业务生产编辑之前，当前 Feature 必须已经过 `tech-decision`。既有技术胜出时记录复用结论，不重复造材料。
+</Aside>
 
-TODO 管理、进度追踪、文档维护：
 
-- [project-manager](/skills/skills-reference/high/project-manager) - 生成功能 TODO
-- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
-- [add-todo](/skills/skills-reference/high/add-todo) - 追加 TODO 项
-- [update-status](/skills/skills-reference/high/update-status) - 更新 TODO 状态
-- [next](/skills/skills-reference/high/next) - 选择下一任务
-- [progress](/skills/skills-reference/high/progress) - 进度统计
-- [project-navigator](/skills/skills-reference/high/project-navigator) - 项目结构发现
-- [project-details](/skills/skills-reference/high/project-details) - 项目记忆维护
+### 前端 (7 个)
 
-### Git 工作流 (2 个)
+设计基线 → 页面实现 → 状态 → 优化 → 动效，各司其职：
 
-代码提交、分支管理、冲突解决：
-
-- [git-commit](/skills/skills-reference/high/git-commit) - Git 提交与推送
-- [git-workflow](/skills/skills-reference/medium/git-workflow) - Git 分支与历史
-
-### 开发工具 (10 个)
-
-代码生成、工具类、框架集成：
-
-- [dev](/skills/skills-reference/high/dev) - 通用功能开发
-- [universal-development](/skills/skills-reference/high/universal-development) - 兜底开发
-- [code-generator](/skills/skills-reference/medium/code-generator) - 代码生成器
-- [code-patterns](/skills/skills-reference/low-fallback/code-patterns) - 代码模式提取
-- [utils-toolkit](/skills/skills-reference/low-fallback/utils-toolkit) - 工具类选择
-- [crud](/skills/skills-reference/low-fallback/crud) - CRUD 生成器
-- [snowflake-id](/skills/skills-reference/low-fallback/snowflake-id) - 雪花 ID
-- [json-serialization](/skills/skills-reference/low-fallback/json-serialization) - JSON 契约
-- [worma-guidelines](/skills/skills-reference/low-fallback/worma-guidelines) - worma 配置
-- [real-browser-automation](/skills/skills-reference/low-fallback/real-browser-automation) - 浏览器自动化
-
-### 文档与沟通 (7 个)
-
-技术文档、设计文档、内部沟通：
-
-- [init-docs](/skills/skills-reference/high/init-docs) - 初始化团队文档
-- [doc-coauthoring](/skills/skills-reference/low-fallback/doc-coauthoring) - 文档协作
-- [development-process-doc-writer](/skills/skills-reference/low-fallback/development-process-doc-writer) - 开发文档
-- [daily-report-writer](/skills/skills-reference/low-fallback/daily-report-writer) - 日报生成
-- [internal-comms](/skills/skills-reference/low-fallback/internal-comms) - 内部沟通
-- [penpot](/skills/skills-reference/low-fallback/penpot) - Penpot 设计
-- [penpot-prototype](/skills/skills-reference/low-fallback/penpot-prototype) - Penpot 原型
-
-### 文件处理 (4 个)
-
-PDF、Office 文档、图表：
-
-- [pdf](/skills/skills-reference/low-fallback/pdf) - PDF 处理
-- [docx](/skills/skills-reference/low-fallback/docx) - Word 文档
-- [pptx](/skills/skills-reference/low-fallback/pptx) - PowerPoint 演示
-- [xlsx](/skills/skills-reference/low-fallback/xlsx) - Excel 表格
-- [mermaid](/skills/skills-reference/low-fallback/mermaid) - Mermaid 图表
-
-### Skill 系统 (6 个)
-
-Skill 创建、优化、演进：
-
-- [add-skill](/skills/skills-reference/high/add-skill) - 注册 Skill
-- [skill-creator](/skills/skills-reference/medium/skill-creator) - 创建 Skill
-- [skill-optimizer](/skills/skills-reference/medium/skill-optimizer) - 优化单个 Skill
-- [skill-evolution](/skills/skills-reference/medium/skill-evolution) - Skill 长期演进
-- [auto-optimizer](/skills/skills-reference/medium/auto-optimizer) - 自动识别优化点
-- [find-skills](/skills/skills-reference/low-fallback/find-skills) - 发现并安装 Skill
-
-### 其他工具 (19 个)
-
-框架集成、分析工具、特殊场景：
-
-- [brainstorm](/skills/skills-reference/medium/brainstorm) - 方案发散与收敛
-- [grilling](/skills/skills-reference/medium/grilling) - 需求追问
-- [experience-sedimentation](/skills/skills-reference/low-fallback/experience-sedimentation) - 经验沉淀
-- [start](/skills/skills-reference/low-fallback/start) - 未知仓库概览
-- [storage-analyzer](/skills/skills-reference/low-fallback/storage-analyzer) - 存储分析
-- [agent-optimizer](/skills/skills-reference/low-fallback/agent-optimizer) - Agent 架构
-- [algorithmic-art](/skills/skills-reference/low-fallback/algorithmic-art) - 生成艺术
-- [brand-guidelines](/skills/skills-reference/low-fallback/brand-guidelines) - 品牌规范
-- [humanizer-zh](/skills/skills-reference/low-fallback/humanizer-zh) - 文本人性化
-- [prompt-optimizer](/skills/skills-reference/low-fallback/prompt-optimizer) - 提示词优化
-- [mcp-builder](/skills/skills-reference/low-fallback/mcp-builder) - MCP 服务构建
-- [github-code-interpreter](/skills/skills-reference/low-fallback/github-code-interpreter) - GitHub 分析
-- [server-docker-deployment](/skills/skills-reference/low-fallback/server-docker-deployment) - Docker 部署
-- [alova-client-usage](/skills/skills-reference/low-fallback/alova-client-usage) - alova 客户端
-- [alova-server-usage](/skills/skills-reference/low-fallback/alova-server-usage) - alova 服务端
-- [alova-wormhole-usage](/skills/skills-reference/low-fallback/alova-wormhole-usage) - alova Wormhole
-- [computer-use](/skills/skills-reference/low-fallback/computer-use) - 计算机使用
-- 更多专业工具...
+- [frontend-design](/skills/skills-reference/high/frontend-design/) - 建立设计基线与页面契约，不写生产代码
+- [ui-pc](/skills/skills-reference/high/ui-pc/) - PC/管理端界面实现
+- [ui-app](/skills/skills-reference/high/ui-app/) - 跨端应用界面实现
+- [frontend-polish](/skills/skills-reference/high/frontend-polish/) - 已有页面的布局、交互与视觉优化
+- [store-pc](/skills/skills-reference/medium/store-pc/) - PC/Web 状态与 Hooks
+- [review-animations](/skills/skills-reference/low/review-animations/) - 只读审查动效系统
+- [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/) - 把模糊描述翻译成动效术语
 
 <Aside type="tip">
-使用左侧导航栏按优先级浏览 Skill 详细文档，每个 Skill 包含触发条件、使用场景、示例和相关 Skill 推荐。
+新页面从零设计走 `frontend-design`；已有页面要改得更好看走 `frontend-polish`。这是最容易选错的一对。
 </Aside>
+
+
+### 质量与排查 (4 个)
+
+- [code-review](/skills/skills-reference/high/code-review/) - 对指定 diff 做缺陷优先的完整 Review
+- [bug-detective](/skills/skills-reference/high/bug-detective/) - 用证据排查调用链故障
+- [check](/skills/skills-reference/medium/check/) - 按仓库已证明的后端规范自查
+- [performance-doctor](/skills/skills-reference/medium/performance-doctor/) - 按指标定位并优化性能
+
+### 测试 (3 个)
+
+- [test-strategy](/skills/skills-reference/medium/test-strategy/) - 设计最小测试策略与用例
+- [test-development](/skills/skills-reference/medium/test-development/) - 编写或修改最小测试代码
+- [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/) - 用真实浏览器跑端到端业务流程
+
+<Aside type="caution">
+测试类 Skill 只在你**本轮明确要求**时启动。覆盖率、Review 意见、CI 门禁都不构成自动写测试的授权。
+</Aside>
+
+
+### Git (2 个)
+
+- [git-commit](/skills/skills-reference/high/git-commit/) - 精确暂存、提交与授权后推送
+- [git-workflow](/skills/skills-reference/high/git-workflow/) - 分支、合并、rebase、stash 与冲突
+
+### 文档与沟通 (5 个)
+
+- [init-docs](/skills/skills-reference/medium/init-docs/) - 初始化最少团队共享文档，补齐项目记忆
+- [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/) - 长文档人机共写与校对
+- [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/) - 按源码生成开发过程文档
+- [daily-report-writer](/skills/skills-reference/low/daily-report-writer/) - 生成简洁中文日报
+- [internal-comms](/skills/skills-reference/low/internal-comms/) - 纪要、状态更新与发布说明
+
+
+### Skill 自身管理 (6 个)
+
+维护框架本身，日常业务开发一般用不到：
+
+- [find-skills](/skills/skills-reference/medium/find-skills/) - 发现、比较并安装 Skill
+- [skill-creator](/skills/skills-reference/medium/skill-creator/) - 创建 Skill 或实施已确认改动
+- [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) - 修改你点名的单个 Skill
+- [add-skill](/skills/skills-reference/medium/add-skill/) - 注册到 CLI 并校验 Hook 与路由
+- [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) - 判断一次纠正是否属于规则问题
+- [skill-evolution](/skills/skills-reference/low/skill-evolution/) - 把重复根因沉淀为长期规则
+
+
+### 工具与集成 (10 个)
+
+- [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) - 先找仓库已有工具类，避免重复封装
+- [file-oss-management](/skills/skills-reference/medium/file-oss-management/) - 文件与对象存储接入
+- [backend-annotations](/skills/skills-reference/low/backend-annotations/) - 限流、防重、脱敏、加密注解
+- [json-serialization](/skills/skills-reference/low/json-serialization/) - 精确兼容的 JSON 契约
+- [sms-mail](/skills/skills-reference/low/sms-mail/) - 短信、邮件与多渠道通知
+- [snowflake-id](/skills/skills-reference/low/snowflake-id/) - Java 雪花 ID 实现与配置
+- [alova-client-usage](/skills/skills-reference/low/alova-client-usage/) - 客户端与 SSR 请求层
+- [alova-server-usage](/skills/skills-reference/low/alova-server-usage/) - 服务端与 BFF 请求层
+- [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) - 从 OpenAPI 生成客户端
+- [worma-guidelines](/skills/skills-reference/low/worma-guidelines/) - worma 的生成、插件与迁移配置
+
+
+### 专项能力 (25 个)
+
+**项目发现与记忆**
+
+- [start](/skills/skills-reference/high/start/) - 建立未知仓库的可验证概览
+- [project-navigator](/skills/skills-reference/medium/project-navigator/) - 定位结构、入口、模块与参考实现
+- [project-details](/skills/skills-reference/high/project-details/) - 维护 `PROJECT-MEMORY.md` 的稳定事实与边界
+
+**需求澄清与方案发散**
+
+- [grilling](/skills/skills-reference/medium/grilling/) - 一次一个问题追问到约 95% 清晰
+- [brainstorm](/skills/skills-reference/medium/brainstorm/) - 在已确认约束内发散并收敛
+
+**图表、设计与视觉**
+
+- [archify](/skills/skills-reference/medium/archify/) - 生成可交互 HTML 架构图/时序图/状态图
+- [mermaid](/skills/skills-reference/low/mermaid/) - Mermaid 技术图源码
+- [penpot](/skills/skills-reference/low/penpot/) - 通过远程 MCP 读写 Penpot 设计
+- [penpot-prototype](/skills/skills-reference/low/penpot-prototype/) - 制作并验证 Penpot 原型
+- [canvas-design](/skills/skills-reference/low/canvas-design/) - 海报与静态视觉设计
+- [algorithmic-art](/skills/skills-reference/low/algorithmic-art/) - p5.js 生成艺术
+- [brand-guidelines](/skills/skills-reference/low/brand-guidelines/) - 应用既有品牌视觉规范
+
+**文件处理**
+
+- [docx](/skills/skills-reference/low/docx/) - Word 文档，保留格式与修订
+- [xlsx](/skills/skills-reference/low/xlsx/) - Excel 与表格文件
+- [pptx](/skills/skills-reference/low/pptx/) - PowerPoint 演示文稿
+- [pdf](/skills/skills-reference/low/pdf/) - 读取、编辑、OCR 或创建 PDF
+
+
+**代码理解与经验沉淀**
+
+- [code-patterns](/skills/skills-reference/low/code-patterns/) - 从真实代码提取后端模式
+- [github-code-interpreter](/skills/skills-reference/low/github-code-interpreter/) - 分析 GitHub 仓库源码
+- [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/) - 沉淀已验证的团队经验
+
+**AI、Agent 与提示词**
+
+- [prompt-optimizer](/skills/skills-reference/low/prompt-optimizer/) - 优化上下文、约束、示例与评测
+- [agent-optimizer](/skills/skills-reference/low/agent-optimizer/) - Agent 架构与治理设计
+- [mcp-builder](/skills/skills-reference/low/mcp-builder/) - 构建 MCP 服务与工具契约
+
+**文本与本机**
+
+- [humanizer-zh](/skills/skills-reference/low/humanizer-zh/) - 去掉中文文本的 AI 写作痕迹
+- [computer-use](/skills/skills-reference/low/computer-use/) - 读取并操作本机桌面应用
+- [storage-analyzer](/skills/skills-reference/low/storage-analyzer/) - 只读扫描 macOS 磁盘占用
+
+<Aside type="tip">
+左侧导航按 Critical / High / Medium / Low 四档列出全部 95 个 Skill 页面；本页按能力域索引同一批页面。每个 Skill 页面都包含触发条件、适用与不适用场景、使用示例和相关 Skill。
+</Aside>
+
 
 ## Skill 路由机制
 
@@ -250,13 +303,13 @@ related_skills:
 
 ### 2. 决策树路由
 
-`skill-router.yaml` 定义 74 个典型场景，587 个触发词，按优先级自动选择最佳 Skill。
+`skill-router.yaml` 定义 78 个典型场景、655 个触发词，按优先级自动选择最佳 Skill。
 
 ### 3. Runtime Hook 动态提示
 
 `UserPromptSubmit` 和 `SubagentStart` Hook 根据当前 TODO 状态和项目记忆提示适用 Skill。
 
-详细路由机制见 [核心概念 - Skill 发现与路由](/skills/core-concepts/skill-discovery)。
+详细路由机制见 [核心概念 - 路由机制](/skills/core-concepts/routing/)。
 
 ## 使用建议
 
@@ -312,7 +365,7 @@ related_skills:
 
 ## 下一步
 
-- [核心概念](/skills/core-concepts) - 理解 Skills Framework 设计原则
-- [使用指南](/skills/usage) - 学习如何高效使用 Skill
-- [Hooks 参考](/skills/hooks) - 了解 Runtime Hooks 工作原理
-- [Critical & High Skills](/skills/skills-reference/critical) - 查看高优先级 Skill 详细文档
+- [核心概念](/skills/core-concepts/) - 理解 Skills Framework 设计原则
+- [使用指南](/skills/usage/) - 学习如何高效使用 Skill
+- [Runtime Hooks](/skills/hooks/) - 让 Skill 在每一轮里真正被用上
+- [Skill 目录总览](/skills/catalog/) - 按优先级速查全部 95 个 Skill

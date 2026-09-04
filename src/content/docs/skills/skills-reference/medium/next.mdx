@@ -1,0 +1,222 @@
+---
+title: 选择下一项（next）
+description: 从当前开发者唯一 TODO、依赖状态和代码事实中，原子领取下一项真正可执行的完整功能
+order: 27
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"接着做什么"听起来是个一句话问题，但要给出一个不会返工的答案，得同时满足几件事：这一项依赖的东西真的完成并推上去了、没有别的执行实例正在做它、它要改的文件不和进行中的工作撞车、而且它的来源需求还没变。这个 Skill 把这几项查一遍，然后通过状态机把一项功能**原子领取**下来——领取动作走脚本加锁重读，不是手工去改 Markdown 上的方括号。
+
+它不改 TODO 的结构，不写实现代码，也不负责把完成状态写回去。它只回答两句话：下一项是哪个，第一个动作是什么。
+
+## 和相邻三个 Skill 的分工
+
+| 你想干的事 | 该走哪个 |
+| --- | --- |
+| 拿到下一项并开始做 | 本 Skill |
+| 只想看还剩多少、完成率多少 | [progress](/skills/skills-reference/medium/progress/)，纯只读，不领取也不改状态 |
+| 做完了，要把状态写回去 | [update-status](/skills/skills-reference/medium/update-status/) |
+| 要加条目、拆条目、重排顺序 | [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) |
+
+一句话：`progress` 看，`next` 领，`update-status` 结，`task-todo-workflow` 改结构。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "继续" | 当前实例名下那一项的下一个具体动作 |
+| "下一个任务" | 一次成功领取，加上第一个要动的文件 |
+| "接着做什么" | 候选判断结果，含依赖与冲突检查的依据 |
+| "现在有什么能做的" | 可执行项列表，以及为什么其他项还不能动 |
+| "继续开发" | 直接进入实施，而不是停在建议上 |
+
+## 什么时候不要用
+
+- 只是想知道进度 → [progress](/skills/skills-reference/medium/progress/)。
+- 要写实现代码 → [dev](/skills/skills-reference/high/dev/) 或 [universal-development](/skills/skills-reference/low/universal-development/)。这里负责选，那边负责做。
+- 要把某一项标成完成 → [update-status](/skills/skills-reference/medium/update-status/)。
+- 要往清单里加一条新功能 → [add-todo](/skills/skills-reference/medium/add-todo/)。
+- 要调整条目结构、拆分 Epic → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。
+- 清单还没建起来 → [product-manager](/skills/skills-reference/critical/product-manager/) 定义，[project-manager](/skills/skills-reference/high/project-manager/) 写成清单。
+
+## 前置条件
+
+当前开发者得有一份清单文件，而且只有一份。清单里得有可执行的条目，或者至少能看出现在还停在规划阶段。当前运行实例得可追溯——没有实例标识，就分不清"进行中"是自己的还是别人的，并发时两个人会同时做同一个功能。
+
+<Aside type="danger">
+翻出两份活动清单时，先把合并这件事解决掉，不要在两份状态源之间挑一份接着做。哪一份是真的这个问题，晚一天回答成本高一天。
+</Aside>
+
+## 使用示例
+
+### 示例 1：一次典型的"继续"
+
+清单里当时是这样：
+
+```markdown
+- [x] `ORDER-API` 订单查询接口；Owner: tanner
+  - 交付面: data / api
+- [x] `ORDER-LIST` 订单列表页；Owner: tanner
+  - 依赖: ORDER-API
+- [ ] `ORDER-EXPORT` 订单导出；Owner: tanner
+  - 来源锚点: `docs/prd.md#订单导出`
+  - 依赖: ORDER-API
+  - 并行写集: src/main/java/com/acme/order/export/, src/views/order/export/
+  - 交付面: api / backend / web
+- [ ] `SETTLE-REPORT` 结算报表；Owner: tanner
+  - 依赖: ORDER-EXPORT
+```
+
+你说："继续。"
+
+先确认依赖那一项不只是打了勾，而是真的推上去了：
+
+```bash
+git log --oneline origin/develop -3 -- src/main/java/com/acme/order
+# 9f3c1ab feat(order): 订单查询接口
+```
+
+然后自动领取下一项：
+
+```text
+ORDER-EXPORT  [ ] → [~]
+依赖已满足，开始实施
+```
+
+拿到的回答是这样的：
+
+```text
+当前 Feature   ORDER-EXPORT 订单导出
+下一动作       在 OrderExportController 加 POST /order/export，先只做同步小数据量路径
+原因           交付面 api / backend / web 三面都空，从接口这一面开始
+范围           src/main/java/com/acme/order/export/、src/views/order/export/
+执行实例       afix-7c21（本次领取成功）
+完成条件       财务能在列表页点导出拿到文件，字段与 AC-014 一致
+来源复核       docs/prd.md#订单导出 → 与锚点一致
+阻塞           无
+```
+
+### 示例 2：依赖打了勾，但还在本地
+
+`SETTLE-REPORT` 依赖 `ORDER-EXPORT`。`ORDER-EXPORT` 刚被标成完成，但提交还没推。这时候拿到的是拒绝，而不是一个候选：
+
+```text
+不领取 SETTLE-REPORT
+原因   依赖 ORDER-EXPORT 的提交只在本地（git log origin/develop 里没有）
+建议   先把 ORDER-EXPORT 推上去并确认远端有了，再回来
+```
+
+理由很实际：依赖还没推，接手的人拉不到你的代码；如果那边还要改，改动会落在别人已经写完的假设上。
+
+### 示例 3：写集撞车，改成串行
+
+```markdown
+- [~] `ORDER-EXPORT` 订单导出（执行实例 afix-7c21）
+  - 并行写集: src/main/java/com/acme/order/export/, src/views/order/export/
+- [ ] `ORDER-EXPORT-MAIL` 导出完成后邮件通知
+  - 并行写集: src/main/java/com/acme/order/export/, src/main/java/com/acme/notify/
+```
+
+两项的目录前缀重叠：
+
+```text
+不并行 ORDER-EXPORT-MAIL
+原因   与进行中的 ORDER-EXPORT 共享 order/export/ 目录
+处理   排在 ORDER-EXPORT 之后串行执行
+可并行的替代项  NOTIFY-TEMPLATE（写集只落在 notify/template/，无重叠）
+```
+
+共享数据库迁移、公共配置文件、端口、外部账号也算撞车——不只看目录。
+
+### 示例 4：还在规划阶段，不领取
+
+清单顶上有流程状态机，当前阶段还没走到实现：
+
+```markdown
+## 流程状态机
+- 当前阶段: technical-plan
+- 阶段 Owner: tanner
+- 门禁: 每个 Feature 有技术选型结论
+```
+
+```text
+不领取任何 Feature
+当前阶段   technical-plan
+还缺       ORDER-EXPORT 与 SETTLE-REPORT 尚无技术选型结论
+下一步     由阶段 Owner 先完成选型并推进阶段，然后再来领取
+```
+
+打了勾的 checkbox 或者聊天里的一句"设计已经聊过了"不算阶段完成。
+
+### 示例 5：来源已经变了
+
+领取前会回读来源锚点。PRD 那一节改过了：
+
+```diff
+  ## 订单导出
+- 导出当前筛选结果，最多 5000 行
++ 导出当前筛选结果，无行数上限；超过 2 万行走异步下载
++ 财务角色可导出全部部门，其他角色仅本部门
+```
+
+```text
+不领取 ORDER-EXPORT
+原因   docs/prd.md#订单导出 与清单里的验收不一致（新增异步路径与部门可见范围）
+下一步 转 change-impact-analysis，先把受影响的验收、接口和权限更新进清单
+```
+
+这一步存在的意义是省掉一次白做：照着旧验收把功能做完，再发现要加权限维度，改的是接口、查询、页面和测试四处。
+
+### 示例 6：外部条件不具备
+
+```text
+ORDER-EXPORT 需要对象存储的私有桶，运维尚未开通
+处理   标记阻塞，恢复条件=拿到桶名与访问凭据
+改选   NOTIFY-TEMPLATE（不依赖外部资源，可立即开始）
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [project-manager](/skills/skills-reference/high/project-manager/) | 先把规划结论写成清单 |
+| 后续 | [dev](/skills/skills-reference/high/dev/) | 领到之后实施 |
+| 后续 | [universal-development](/skills/skills-reference/low/universal-development/) | 没有对口专业 Skill 时的实施兜底 |
+| 协作 | [update-status](/skills/skills-reference/medium/update-status/) | 做完后把状态写回 |
+| 协作 | [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) | 结构要调时 |
+| 协作 | [project-details](/skills/skills-reference/high/project-details/) | 稳定事实只在聊天里时，先补记忆 |
+| 例外 | [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) | 来源与清单冲突时 |
+
+```text
+project-manager（写清单）
+      ↓
+    next（领取 + 找第一个缺口）→ dev / universal-development
+      ↑                                  ↓
+      └──── update-status ← code-review ─┘
+              ↑
+   project-details（记忆缺口）／change-impact-analysis（来源冲突）
+```
+
+## 常见坑
+
+**手工把 `[ ]` 改成 `[~]`。**  看起来一样，但少了加锁和重读这两步。并发时两个人都会认为自己领到了同一项，最后有一份工作要丢掉。
+
+**依赖只看勾。**  勾是人打的，推送是事实。差别在别人能不能拉到你的代码。
+
+**跳过来源回读。**  这是唯一能在动手前发现"需求已经改了"的机会，而它只花一次读文件的时间。
+
+**领了一项却顺手把相邻的也做了。**  相邻那项可能已经被别人领着，改动会撞在一起；就算没人领，它也没经过依赖和写集检查。
+
+**把它当进度报表用。**  只想看剩多少就用 [progress](/skills/skills-reference/medium/progress/)，那个不会改任何状态。
+
+## 下一步
+
+- [dev](/skills/skills-reference/high/dev/) — 领到之后开始实施
+- [update-status](/skills/skills-reference/medium/update-status/) — 完成后写回状态
+- [progress](/skills/skills-reference/medium/progress/) — 只看进度
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) — 调整清单结构
+- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) — 需求变了
+
+
+

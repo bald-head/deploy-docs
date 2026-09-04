@@ -1,0 +1,108 @@
+---
+title: 动效审查（review-animations）
+description: 只读审查现有动效、仓库动效系统和新增动效机会，输出带位置的 findings 和评分，不改一行代码
+order: 23
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+动效问题很少是"不够好看"，多半是它挡住了高频操作、丢了键盘路径，或者在系统开启"减少动态效果"时表现得不成样子。`review-animations` 是一个只读审查员：先把目标仓库真实的框架、动画库、动效 tokens 和输入方式查清楚，再给出带 `file:line` 的 findings、一个满分 10 分的动效评分，以及一个明确结论（通过或阻断）。
+
+它替你做的关键决定是**把审查和实现彻底分开**。你说"帮我审查这段动效"时它进入审查模式；你说"直接帮我修好"时它既不进审查模式也不改源码，而是说明这件事该由实现类 Skill 做，等改完再回来做一次范围内复审。这条边界不需要你额外声明"不要改代码"。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "review 一下这个动画" | 单个组件或明确文件 |
+| "这次 diff 的动效有没有问题" | 针对改动范围 |
+| "整个项目的动画有什么毛病" | 全仓清点、排优先级、给路线图 |
+| "哪些地方还值得加动效" | 只找尚未添加动画的候选点 |
+| "reduced motion 有没有做" | 无障碍与输入平等专项证据 |
+| "这个动效卡不卡" | 渲染成本审查（没有渲染证据时会降置信度） |
+
+触发词概括起来是两组：动效审查、动画检查。适用条件里还有一条很关键：**你没有要求它直接实现**。
+
+## 什么时候不要用
+
+- **"直接修好 / 帮我实现这个动画"** → [ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)、[frontend-polish](/skills/skills-reference/high/frontend-polish/)，或先由 [frontend-design](/skills/skills-reference/high/frontend-design/) 给方向。实现完成之后再回来做一次范围内复审。
+- **不知道这个效果叫什么** → [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)。术语映射不是审查。
+- **设计新的动效方向、写设计规格** → [frontend-design](/skills/skills-reference/high/frontend-design/)。
+- **同一 diff 的通用缺陷 Review** → [code-review](/skills/skills-reference/high/code-review/)。本 Skill 先消费它的结论，只补动效专项证据，不重复整页审查。
+
+不适用范围概括为四条：动效实现、术语映射、新动效设计、代码编写。
+
+<Aside type="danger">
+任何模式都不产生写操作。唯一例外是全仓审计在你明确确认之后落盘的实施计划——那也只写计划，不改源码。审查阶段不安装依赖、不格式化、不执行代码修改、不提交、不推送。
+</Aside>
+
+## 前置条件
+
+它没有声明 `gates`，但只读边界和前置勘察构成了事实上的门槛：
+
+1. **有明确范围**。文件、diff、组件或"整个仓库"都行，但必须是你指定的范围；一个实现请求不会被擅自扩大成全仓审计。
+2. **它先读真实上下文再下结论**，不假设框架、动画库、目录结构或产品性格，也会读仓库自己的约定文件和相邻的正确范例。
+3. **先消费覆盖当前 diff 的最新通用 Review 结论**，已有动效结论还新鲜时只补专项证据。
+4. **每条正式 finding 必须能指到实际 `file:line`**。没有位置的说法不算 finding。
+5. **没有目标仓库或可渲染证据时只做静态审查**，并降低置信度——不会声称实际帧率或真机手感通过。
+6. **同一范围只审查一次**。修复之后只确认结论关闭，不重启完整审计。
+
+## 怎么用
+
+### 1. 说清范围，它选模式
+
+| 模式 | 范围 | 是否可能落盘 |
+| --- | --- | --- |
+| Scoped Review（范围内审查） | 单个 diff、组件或明确文件 | 否 |
+| Repository Audit（全仓审计） | 整个仓库或较大 UI 范围，含优先级与路线图 | 你确认后可写计划 |
+| Opportunity Scan（机会扫描） | 只找尚未添加动画但有明确价值的候选点 | 否，始终只读 |
+
+请求同时包含多种目标时，以你明确给出的范围为准。
+
+### 2. 它按固定维度检查
+
+检查覆盖八个方面：动效目的与使用频率、时长与曲线、空间来源与物理性、可中断性与手势衔接、渲染成本、键盘与触控与精确指针的平等性、减少动态效果与其他无障碍要求、以及动效 tokens 与产品性格是否一致。
+
+判断"该不该动"的第一把尺是**使用频率**：每天上百次的快捷键类操作要求即时反馈、不加可见延迟；偶发的弹窗与提示才适合标准动画；只出现一次的引导和庆祝才允许做惊喜。
+
+<Aside type="caution">
+硬门禁会覆盖总分：功能或输入回归、缺失必需的"减少动态效果"等价体验、焦点或状态不可达、破坏控制的手势不连续、可复现的严重性能问题——出现任一项就是阻断，即使总分很高。反过来，主观的精致度问题永远不构成阻断。
+</Aside>
+
+### 3. 你拿到评分和结论
+
+评分满分 10 分，8.5 分是"动效可交付"的质量门槛，但分数不替代结论——阻断与否由硬门禁决定。低于门槛时它会列出达到门槛的最小返工集，主观精致度单独列。只有静态证据的维度会被标注出来并降低置信度，不会用整数分伪装精确性。
+
+### 4. 全仓审计会停下来等你
+
+全仓审计输出清点结果、优先级排序和未覆盖范围之后**硬停**。只有你明确回复要为哪几项生成计划，它才会把计划写进仓库约定的计划目录。计划要求自包含——含基准提交、精确终态和减少动态效果下的行为，让没有当前对话上下文的人也能安全实施。
+
+<Aside type="tip">
+修复建议有固定优先级：先删掉无目的或频率不合适的动效，再恢复键盘、触控、焦点和减少动态效果的等价路径，然后才是缩短时长、修正曲线与可中断性，最后才轮到堆叠精致效果。按这个顺序做，返工量最小。
+</Aside>
+
+## 与其他 Skill 的关系
+
+它的相关列表是平铺的：[animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)、[frontend-polish](/skills/skills-reference/high/frontend-polish/)，没有前置或后续分组。实际链路里上下游很清晰：
+
+- **上游**：[code-review](/skills/skills-reference/high/code-review/) 的结论先被消费；范围由你或当前 diff 给定。
+- **下游（修复）**：[ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)、[frontend-polish](/skills/skills-reference/high/frontend-polish/)、[frontend-design](/skills/skills-reference/high/frontend-design/)。
+- **协作**：[animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/) 提供 finding 里要用的准确术语。
+
+```text
+code-review（通用缺陷结论）
+        ↓
+review-animations（动效专项，只读）
+        ↓
+ui-pc / ui-app / frontend-polish（实施修复）
+        ↓
+review-animations（只确认结论关闭，不重启全量审计）
+```
+
+## 产出与验收
+
+普通审查的产出**只在当前回复里**：findings 表、评分、证据置信度和结论。不创建 TODO、不写审计报告、不建平行任务、不改任务状态。全仓审计在你明确确认后才会在仓库里留下一份计划文件，这是唯一的写操作。
+
+它必须写清四件边界事实：审查了哪些文件、哪些目录未覆盖、有哪些真实渲染证据又缺哪些、结论的置信度。
+
+判断真的完成了：每条 finding 都能指到 `file:line`，结论明确，无法用代码判断的手感和帧率被标成"需要视觉或真机验证"而不是被猜成结论。"动效已合理"、"未达门槛但无阻断项"、"没有值得新增的动效"都是有效且完整的结论。

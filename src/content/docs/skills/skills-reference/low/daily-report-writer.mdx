@@ -1,0 +1,134 @@
+---
+title: 日报生成（daily-report-writer）
+description: 把零散的工作事项、验证结果和阻塞整理成可直接粘贴的中文日报，不编造业务细节
+order: 29
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+日报难写不是因为字少，而是"今天到底做完了什么"散在提交记录、聊天记录和自己的脑子里。`daily-report-writer` 把这件事收成一个固定动作：按优先级取真实输入，套上一份稳定的中文日报结构，产出可以直接粘进工作汇报、或者存成 Markdown 的文本。
+
+它只负责"整理成日报"这一步。`SKILL.md` 的流程边界写得很直接：仅执行既有 TODO 的日报整理步骤，不维护任务状态。所以它不会替你把某个功能标成完成，不会替你算项目进度，也不会在没有授权的情况下提交 Git。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "写个今天的日报" | 手上有一堆已完成事项，需要整理成规范格式 |
+| "帮我把这些整理成工作总结" | 已经口述或粘贴了工作明细，只缺结构 |
+| "按这个格式再出一份报告" | 对话里已有既有报告样例，需要照同一风格续写 |
+| "从这几个 commit 推一下今天做了什么" | 明确要求从仓库记录推断当天工作 |
+| "这周的周报也一起出" | 同一结构扩展到周报或阶段完成摘要 |
+| "补一份完成摘要给我" | 功能验证结束后需要一段可汇报的结论 |
+
+触发词来自 `SKILL.md` 的 `triggers`：日报、工作总结、报告。`SKILL.md` 的触发场景还补了一条：用户提供工作事项、验证结果或阻塞信息时适用。
+
+<Aside type="caution">
+"从 git 推断今天的工作"只有在用户明确要求时才允许。默认优先级是用户显式给出的工作项，其次是对话里已有的报告样例，再次是仓库文档，最后才是 commit 与变更文件。
+</Aside>
+
+## 什么时候不要用
+
+- **会议纪要、决定与行动项** → [internal-comms](/skills/skills-reference/low/internal-comms/)。会议内容有自己的事实门槛（没有明确决定必须写"未形成决定"），不能压进日报格式。
+- **产品 PRD、需求定义与验收** → [product-manager](/skills/skills-reference/critical/product-manager/)。日报是回顾已发生的事，不是定义要做什么。
+- **API 文档、接口契约** → [api-development](/skills/skills-reference/high/api-development/)。接口字段和错误语义属于实现产物，不是汇报文本。
+- **用户手册、对外文档** → [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)。读者不同，语气和结构都不同。
+- **需要可追溯的开发过程文档（背景、接口、核心代码、验证记录）** → [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/)。日报是摘要，过程文档才带证据链。
+- **想知道功能级完成度数字** → [progress](/skills/skills-reference/medium/progress/)。进度统计读 TODO 事实，日报只描述当天产出。
+
+`not_for` 明确排除：会议纪要、产品 PRD、API 文档、用户手册。
+
+## 前置条件
+
+`SKILL.md` 的 frontmatter 没有 `gates` 字段，也就是说没有流程性门槛——但正文对输入有硬要求：
+
+1. **必须有真实输入来源**。用户给的工作项、对话里的既有报告、仓库文档，或者用户点名要读的 git 记录。四者全无时不该硬写。
+2. **不得编造业务细节**。缺细节时的正确做法是省略；只有用户明确要"模板"时，才允许用中性占位符。
+3. **项目名必须来自用户的请求**。质量检查里专门列了一条：报告不能出现不相关的示例项目名。
+4. **完成时长缺失就不写**。不允许猜。
+
+不满足会发生什么：日报会混进上一个项目的名字、写出无法追溯到任何输入的条目，或者用"优化代码"这种没有目标和结果的模糊描述——这三项恰好是 `SKILL.md` 写作规则里点名要避免的。
+
+## 怎么用
+
+### 1. 交出输入，Skill 按优先级取材
+
+```text
+优先级 1  用户直接给的工作事项、项目名、时长、完成情况
+优先级 2  对话里已有的报告样例（用来对齐风格）
+优先级 3  仓库中的既有文档（用户要求从文件或目录生成时）
+优先级 4  近期 commit 与变更文件（仅当用户要求从仓库推断）
+```
+
+### 2. 套用默认结构
+
+用户没指定格式时使用这份结构：
+
+```markdown
+# YYYY-MM-DD 日报
+项目：<项目名称>（完成时长：<时长>，完成情况：<完成百分比>）
+
+1. <一级工作模块>
+	- <具体完成内容>
+	- <具体完成内容>
+2. <一级工作模块>
+	- <具体完成内容>
+今日整体完成情况：完成
+```
+
+不想要标题时，去掉 `# YYYY-MM-DD 日报`，直接从 `项目：...` 开始。
+
+### 3. 按写作规则填内容
+
+| 规则 | 具体做法 |
+| --- | --- |
+| 中文优先 | 默认输出简体中文 |
+| 条目要有结果 | 每条聚焦具体产出，不写"优化代码"这类空描述 |
+| 相关工作归组 | 用编号模块聚合，下挂具体条目 |
+| 保留用户原话 | 用户表述已经清楚时不改写 |
+| 完成情况缺省 | 描述为已完成时写 `完成情况：100%` 与 `今日整体完成情况：完成` |
+| 时长缺省 | 直接省略 `完成时长`，不估不猜 |
+
+### 4. 需要落盘时才写文件
+
+`SKILL.md` 的 File Output 规定了四步：目录不存在就创建、默认文件名用 `daily-report.md`（用户指定则用用户的）、不主动提交、写完回报创建路径。
+
+<Aside type="note">
+写入位置遵循仓库的个人产物约定：日报、周报这类个人报告写到 `docs/<developer-id>/` 下对应子目录，`<developer-id>` 由当前仓库的 Git `user.name` 决定。仓库级 `docs/` 根目录只放团队共享文档，其他开发者的目录只读。用户已经明确指定路径时，直接用用户给的路径。
+</Aside>
+
+### 5. 交付前跑一遍质量检查
+
+- 项目名与用户要求的项目一致；
+- 没有夹带不相关的示例项目；
+- 每一条都能对回提供的上下文或文件；
+- 输出符合用户既有的日报风格。
+
+## 与其他 Skill 的关系
+
+`SKILL.md` 的 `related_skills` 是一个不分方向的列表：[internal-comms](/skills/skills-reference/low/internal-comms/)、[progress](/skills/skills-reference/medium/progress/)。按实际用法可以这样理解：
+
+- **上游**：真实状态来自 TODO 体系，由 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 维护、[update-status](/skills/skills-reference/medium/update-status/) 依据代码与 Review 事实更新；日报只是把已确认的事实换一种表述。
+- **协作**：需要功能级完成度数字时先用 [progress](/skills/skills-reference/medium/progress/) 取统计口径。
+- **下游**：同一批内容要发给团队、做成状态更新或发布说明时转 [internal-comms](/skills/skills-reference/low/internal-comms/)；要变成带代码与验证记录的过程文档时转 [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/)。
+
+```text
+update-status（状态事实） → daily-report-writer（当天日报）
+                                  ↘ internal-comms（对外/对团队沟通）
+                                  ↘ development-process-doc-writer（可追溯过程文档）
+progress（功能级进度数字，按需并行）
+```
+
+## 产出与验收
+
+完成时留下的东西很少，正因为少所以每一项都要对：
+
+- **主产物**：一段可直接粘贴的中文日报文本；用户要求落盘时，多一个文件（默认 `daily-report.md`，个人报告放 `docs/<developer-id>/` 下），并且回复里报出了绝对路径。
+- **TODO 状态不变**：本 Skill 不改任何任务状态，验收时应确认 TODO 没被顺手改动。
+- **Git 干净**：没有 add / commit / push，除非用户明确要求。
+
+判断真的完成了：把日报发给没参与这次开发的人，对方读完能说出"做了哪几块、每块的具体产出、整体是否完成"；同时你能为每一条指出它来自哪个输入——用户的话、哪份文档，还是哪次变更。
+
+<Aside type="tip">
+反复要同一个项目的日报时，把上一份日报留在对话里。它会被当成优先级 2 的风格样例，比每次重复描述格式要求更省事，也更容易保持前后一致。
+</Aside>

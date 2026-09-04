@@ -1,453 +1,104 @@
 ---
-title: progress
+title: 进度统计 - progress
 description: 进度统计 - 只读统计当前开发者唯一 TODO 的功能进度
 order: 13
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+import { Aside } from '@astrojs/starlight/components';
 
 ## 概述
 
-`progress` 是 **Medium 优先级** Skill，负责只读统计当前开发者唯一 TODO 的功能进度。
+TODO 里的 checkbox 最容易骗人的地方在于：它是人写上去的，不是算出来的。`progress` 只做一件事——读，然后把 checkbox 和真实事实对一遍。
 
-**适用场景**：
-- 查看当前任务进度
-- 统计功能完成情况
-- 检查验收证据
-- 了解任务状态
+它按可执行的 Feature 统计未开始、进行中、已完成、阻塞四态，按菜单与入口汇总覆盖面并检查项目文档承诺的能力是不是都有映射，对当前项和可疑的已完成项定向核对源码、接口、页面、数据库、权限、集成、Review 和 Git 原生事实，再逐条检查每个 `AC-*` 有没有匹配声明等级的证据。对不上的地方它报告为状态失真，指出精确的 Feature 和缺失的交付面——但它不改。
 
-**不适用场景**：
-- 产品定义 → 使用 `product-manager`
-- 代码实现 → 使用 `dev` 或 `universal-development`
-- TODO 创建 → 使用 `task-todo-workflow`
-- 状态更新 → 使用 `update-status`
+只读是它的定义，不是它的谦让：不创建或修改 TODO，不动代码，不碰 Git，也不为了统计重新构建或跑测试，只复用 TODO、代码、Git 和已有命令的结果。
 
-<Aside type="note">
-这是只读操作，不会修改 TODO、代码或 Git。
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "现在做到哪了" | 四态计数加菜单覆盖面的短结论 |
+| "这几个真做完了吗" | 定向核对可疑已完成项的代码、页面、权限和 Git 事实 |
+| "还剩哪些没覆盖" | 按菜单/入口找缺失映射 |
+| "下一个能开工的是哪个" | 计算 Ready：依赖已进远端、未被领取、写集互斥 |
+| "为什么这个开不了工" | 区分依赖未满足、并行写集冲突和外部阻塞 |
+| "验收证据齐了吗" | 逐条统计 `AC -> evidence` 与 `unverified` |
+
+触发面覆盖进度查询、完成量汇总和验收证据核对这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。在 Claude Code 里可以直接按名字调用（`/progress`）；Codex 走自己的原生发现，问一句"现在做到哪了"就够。
+
+## 什么时候不要用
+
+- **要让状态真的变化** → [update-status](/skills/skills-reference/medium/update-status/)。这是本页最要紧的一条分工：`progress` 只算不写，`update-status` 才按代码、Review 和 Git 事实回写原 TODO。它发现失真也只报告，因为改一个 checkbox 需要的原子锁、完成摘要和 Review 结论都不在这个 Skill 手里。
+- **建立或修改 TODO 结构** → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)、[project-manager](/skills/skills-reference/high/project-manager/)；只追加一项 → [add-todo](/skills/skills-reference/medium/add-todo/)。
+- **挑下一件事去做** → [next](/skills/skills-reference/medium/next/)。它会告诉你哪些是 Ready，但按依赖和代码事实真正选定下一项，是 next 的活。
+- **把事实写成日报或对外文本** → [daily-report-writer](/skills/skills-reference/low/daily-report-writer/)、[internal-comms](/skills/skills-reference/low/internal-comms/)。
+- **写代码** → [dev](/skills/skills-reference/high/dev/)。
+
+## 它数出来的五种状态
+
+TODO 里只有四种 checkbox，但它报出来是五档——多的那一档是最容易被高估的部分：
+
+| 它报的 | 对应什么 | 容易误读成 |
+| --- | --- | --- |
+| 未开始 | `[ ]`，还没有实例领取 | 与"可以开工"混为一谈，但能不能开工要看 Ready 条件 |
+| 进行中 | `[~]`，有唯一执行实例在做 | 把"等外部条件"也算进来 |
+| 已完成 | `[x]`，且对应功能提交已核验进远端 | 只看本地那个勾 |
+| 待交付 | 本地已经是 `[x]`，功能提交还没核验进远端 | 直接计入已完成，于是完成数虚高 |
+| 阻塞 | `[!]`，写明了原因和恢复条件 | 与"暂时没人做"混为一谈 |
+
+"待交付"这一档单独存在的原因很实际：本地勾上不等于别人能看到，也不等于依赖它的事项可以开工。很多"已经完成 8 个"最后只交付了 6 个，差额全在这里。
+
+## 前置条件
+
+**当前开发者有那份唯一 TODO。** 归属按当前 Git identity 动态解析，路径固定在 `docs/<developer-id>/tasks/todo/`。别人目录里的 TODO 不计入你的进度——把两个人的进度混在一起算，得到的百分比对谁都没有意义。文件缺失或者存在多份时它直接报告目录事实，不猜哪份才算数。
+
+**这一轮就是只读。** 这既是门槛也是承诺：你可以随时问进度，不用担心它顺手改了什么。
+
+## 怎么用
+
+问就行。它的第一步是解析当前 `<developer-id>` 并定位那份唯一 TODO，然后按下面的顺序算：
+
+1. 按 Feature checkbox 统计四态。平铺 Feature 和 Epic 的子 Feature 各计一次；Epic 聚合项单独报告"已完成子项 / 全部子项"，不重复进 Feature 分母。
+2. 已经标成完成、但对应功能提交还没核验进远端的，单列成一档待交付，不计入已交付。
+3. 按菜单与入口汇总三态，检查项目文档承诺的能力是否都有映射。
+4. 对当前项和可疑的完成项定向核对代码与 Git 事实，逐条检查 `AC -> evidence` 是否与声明等级一致。
+5. 分开报告"Agent 可以继续做的"和"卡在人工、设备、账号或外部服务上的"。
+
+多个进行中项本身合法，但每一项都必须显示唯一的执行实例。它还会校验几条并发不变量：同一 Feature 只有一个实例、同一实例只有一个进行中项、每个进行中项的依赖都已完成、所有活动的并行写集两两互斥。Epic 另有一套：不带执行字段、不用进行中或阻塞状态、它的完成必须能由全部直接子 Feature 重算出来——子 Feature 依赖自己的 Epic，或者父项比子项先勾上，都算状态冲突。任一条不成立，受影响的项就不会被算成健康的进行中。
+
+<Aside type="danger">
+它明确拒绝几种看起来像进度的东西：文件数、代码行数、源码里 TODO/FIXME 的数量，以及"某条命令跑通了"，都不是功能完成率。后端有页面入口但前端还没接真实接口，不算完整完成；静态页面、mock、原型、孤立接口、迁移文件和交接文档，任何一项单独存在都不能证明功能完成。等外部条件不是进行中，取消或改用替代方案不是已实现。
 </Aside>
 
-## 快速开始
-
-### 查看进度的方式
-
-```bash
-# 方式 1: 直接询问
-"当前进度如何？"
-"任务完成情况"
-"查看进度"
-
-# 方式 2: 使用 Skill
-/progress
-
-# 方式 3: 查看 TODO 文件
-cat docs/<developer-id>/tasks/todo/*.md
-```
-
-## 使用示例
-
-### 场景 1：查看整体进度
-
-**用户输入**：
-```
-查看当前进度
-```
-
-**进度统计结果**：
-```markdown
-## 项目进度统计
-
-项目: 用户管理系统
-Owner: alice-chen
-TODO: docs/alice-chen/tasks/todo/user-system.md
-
-### 整体进度
-
-- 总功能数: 12
-- 已完成: 5 (42%)
-- 进行中: 2 (17%)
-- 未开始: 5 (42%)
-- 阻塞: 0
-
-### 按状态分类
-
-#### 已完成 ✅ (5)
-- [x] USER-LOGIN 用户登录
-- [x] USER-REG 用户注册
-- [x] USER-INFO-API 用户信息 API
-- [x] USER-INFO-PAGE 用户信息页面
-- [x] USER-LIST 用户列表
-
-#### 进行中 🔄 (2)
-- [~] USER-EDIT 用户编辑 (执行实例: abc123)
-  - 交付面: api / backend / web
-  - 依赖: 全部完成 ✓
-  - 验收: AC-001 ✓, AC-002 待验证, AC-003 待验证
-  
-- [~] USER-DELETE 用户删除 (执行实例: def456)
-  - 交付面: api / backend
-  - 依赖: 全部完成 ✓
-  - 验收: AC-001 待验证
-
-#### 未开始 📋 (5)
-- [ ] USER-ROLE 用户角色管理
-- [ ] USER-PERMISSION 用户权限管理
-- [ ] USER-EXPORT 用户导出
-- [ ] USER-IMPORT 用户导入
-- [ ] USER-AUDIT 用户审计日志
-
-### 按菜单/入口分类
-
-- /user/list: 已完成 (USER-LIST)
-- /user/info: 已完成 (USER-INFO-PAGE)
-- /user/edit: 进行中 (USER-EDIT)
-- /user/delete: 进行中 (USER-DELETE)
-- /user/role: 未开始 (USER-ROLE)
-- /user/permission: 未开始 (USER-PERMISSION)
-- /user/export: 未开始 (USER-EXPORT)
-- /user/import: 未开始 (USER-IMPORT)
-- /user/audit: 未开始 (USER-AUDIT)
-```
-
-### 场景 2：检查验收证据
-
-**用户输入**：
-```
-检查验收证据
-```
-
-**证据检查结果**：
-```markdown
-## 验收证据检查
-
-### 已完成功能
-
-#### USER-LOGIN 用户登录 ✅
-- AC-001: 用户可以输入邮箱密码 ✓
-  - 证据: 手工测试通过
-- AC-002: 登录成功返回 Token ✓
-  - 证据: DevTools 验证
-- AC-003: Token 存储在 localStorage ✓
-  - 证据: 验证通过
-
-#### USER-REG 用户注册 ✅
-- AC-001: 用户可以填写注册表单 ✓
-  - 证据: 手工测试通过
-- AC-002: 系统发送验证邮件 ✓
-  - 证据: 邮件日志验证
-- AC-003: 用户点击链接激活账号 ✓
-  - 证据: 激活流程验证通过
-
-### 进行中功能
-
-#### USER-EDIT 用户编辑 🔄
-- AC-001: 管理员可以编辑用户信息 ✓
-  - 证据: 手工测试通过
-- AC-002: 编辑后数据立即生效 ⚠️
-  - 证据: unverified
-- AC-003: 操作有审计日志 ⚠️
-  - 证据: unverified
-
-### 证据缺失汇总
-- USER-EDIT: 2/3 已验证 (67%)
-- USER-DELETE: 0/1 已验证 (0%)
-
-建议: 完成验证后再提交
-```
-
-### 场景 3：检查依赖关系
-
-**用户输入**：
-```
-检查依赖关系
-```
-
-**依赖检查结果**：
-```markdown
-## 依赖关系检查
-
-### 依赖已满足 ✅
-
-- USER-INFO-PAGE
-  - 依赖: USER-INFO-API ✓
-  
-- USER-EDIT
-  - 依赖: USER-INFO-API ✓
-  
-- USER-DELETE
-  - 依赖: USER-INFO-API ✓
-
-### 依赖未满足 ⚠️
-
-- USER-EXPORT
-  - 依赖: USER-LIST ✓, USER-PERMISSION ✗ (未开始)
-  - 状态: 阻塞
-  
-- USER-IMPORT
-  - 依赖: USER-PERMISSION ✗ (未开始)
-  - 状态: 阻塞
-
-### 可开始的功能
-
-- USER-ROLE (无依赖)
-- USER-PERMISSION (无依赖)
-- USER-AUDIT (依赖已满足)
-```
-
-### 场景 4：检查并行写集冲突
-
-**用户输入**：
-```
-检查并行冲突
-```
-
-**冲突检查结果**：
-```markdown
-## 并行写集检查
-
-### 当前进行中
-
-#### USER-EDIT (执行实例: abc123)
-- 并行写集: `src/api/user/`, `src/pages/user/edit.vue`
-
-#### USER-DELETE (执行实例: def456)
-- 并行写集: `src/api/user/`, `src/pages/user/delete.vue`
-
-### 冲突检测 ⚠️
-
-共享路径: `src/api/user/`
-- USER-EDIT 正在写入 `src/api/user/edit.ts`
-- USER-DELETE 正在写入 `src/api/user/delete.ts`
-
-结论: 存在并行写集冲突
-
-建议:
-1. 等待 USER-EDIT 完成后再继续 USER-DELETE
-2. 或调整 USER-DELETE 的并行写集为 `src/api/user-delete/`
-```
-
-### 场景 5：Epic 进度统计
-
-**用户输入**：
-```
-查看 Epic 进度
-```
-
-**Epic 进度结果**：
-```markdown
-## Epic 进度统计
-
-### Epic: USER-AUTH 【用户认证】
-
-Owner: alice-chen
-目标: 用户注册、登录功能全部可用
-进度: 2/2 (100%) ✅
-
-子功能:
-- [x] USER-LOGIN 用户登录
-- [x] USER-REG 用户注册
-
-### Epic: USER-MANAGE 【用户管理】
-
-Owner: alice-chen
-目标: 用户增删改查功能全部可用
-进度: 3/5 (60%) 🔄
-
-子功能:
-- [x] USER-LIST 用户列表
-- [x] USER-INFO-PAGE 用户信息页面
-- [~] USER-EDIT 用户编辑 (进行中)
-- [~] USER-DELETE 用户删除 (进行中)
-- [ ] USER-EXPORT 用户导出
-
-### Epic: USER-PERMISSION 【用户权限】
-
-Owner: alice-chen
-目标: 角色权限管理功能可用
-进度: 0/3 (0%) 📋
-
-子功能:
-- [ ] USER-ROLE 用户角色管理
-- [ ] USER-PERMISSION 用户权限管理
-- [ ] USER-AUDIT 用户审计日志
-```
-
-## 关键规则
-
-### 1. 只读操作
-
-```markdown
-<!-- 正确 -->
-progress 只读取 TODO 和代码
-→ 不修改任何文件
-
-<!-- 错误 -->
-progress 发现问题后自动修复 TODO
-→ 不能修改 TODO
-```
-
-### 2. 功能完整性检查
-
-```markdown
-完整完成的标准:
-- ✅ 数据库表已创建
-- ✅ API 接口已实现
-- ✅ 前端页面已实现
-- ✅ 前后端联调通过
-- ✅ 权限控制已实现
-- ✅ 验收证据完整
-- ✅ Review 已通过
-- ✅ 代码已提交
-
-不完整的情况:
-- ❌ 只有静态页面（无 API 调用）
-- ❌ 只有 mock 数据
-- ❌ 只有孤立接口（无前端）
-- ❌ 只有迁移文件（无代码）
-```
-
-### 3. 验收证据要求
-
-```markdown
-有效证据:
-- ✅ 手工测试截图
-- ✅ 自动测试通过
-- ✅ 真实数据验证
-- ✅ DevTools 验证
-
-无效证据:
-- ❌ unverified
-- ❌ "已实现"（无证据）
-- ❌ "测试通过"（无日志）
-```
-
-### 4. 并行写集互斥
-
-```markdown
-合法并行:
-- Feature A: src/api/user/
-- Feature B: src/api/order/
-→ 写集互斥 ✓
-
-非法并行:
-- Feature A: src/api/user/
-- Feature B: src/api/user/
-→ 写集冲突 ✗
-```
-
-## 进度统计指标
-
-### 基础指标
-
-```markdown
-- 总功能数: 所有 Feature checkbox 数量
-- 已完成: [x] 的数量
-- 进行中: [~] 的数量
-- 未开始: [ ] 的数量
-- 阻塞: [!] 的数量
-- 完成率: 已完成 / 总功能数
-```
-
-### 质量指标
-
-```markdown
-- 验收完整率: 有证据的 AC / 全部 AC
-- 依赖满足率: 满足依赖的 Feature / 全部 Feature
-- 写集冲突数: 冲突的写集对数
-- Epic 完成率: 完成的 Epic / 全部 Epic
-```
-
-### 健康检查
-
-```markdown
-- [ ] 无状态冲突（同一 Feature 只有一个实例）
-- [ ] 无依赖冲突（所有 [~] 的依赖全部 [x]）
-- [ ] 无写集冲突（所有活动写集两两互斥）
-- [ ] 无验收缺失（所有 [x] 的 AC 有证据）
-- [ ] 无 Epic 冲突（Epic 的 [x] 能由子 Feature 重算）
-```
-
-## Skill 协调
-
-`progress` 与以下 Skill 配合：
-
-| Skill | 关系 |
-|-------|------|
-| task-todo-workflow | 读取 TODO 结构 |
-| update-status | 进度发现后更新状态 |
-| code-review | 读取 Review 结果 |
-| git-commit | 读取提交历史 |
-
-<Aside type="note">
-progress 只负责统计和报告，不负责创建、修改或更新任何内容。
+<Aside type="caution">
+Ready 有四个条件要同时成立：自身还没开工、全部依赖的完成状态已经进入远端、尚未被任何实例领取、并行写集与所有进行中项互斥。所以 A 还在做，或者 A 只有一个尚未推送的本地完成标记时，依赖 A 的 B 都不是 Ready——本地勾上了不等于依赖满足。
 </Aside>
 
 ## 与其他 Skill 的关系
 
-### 选择决策
+它没有固定上游或下游——任何时候都能问。真正的关系是配合：[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 负责 TODO 的结构，[update-status](/skills/skills-reference/medium/update-status/) 负责状态写入，它自己负责把两者的结果和代码事实对一遍。
 
 ```text
-查看进度 → progress
-更新状态 → update-status
-创建 TODO → task-todo-workflow
-代码实现 → dev
+task-todo-workflow / project-manager（建立 TODO 结构）
+      ↓
+dev 实施 → code-review → git-commit → update-status（写回状态）
+      ↓
+progress（只读重算：四态、菜单覆盖、AC 证据、Ready、状态失真）
+      ├─ 发现失真 → 报告精确 Feature 和缺失交付面 → 交给 update-status 修
+      └─ 需要挑下一件事 → next
 ```
 
-### Related Skills
+发现 TODO 和代码不一致时的正确接法是：它报告，你确认，`update-status` 改。它不会为了让报表好看而自己动手。
 
-**协作 Skill**:
-- `task-todo-workflow` - TODO 工作流
-- `update-status` - 更新状态
-- `code-review` - 代码审查
-- `git-commit` - Git 提交
+## 产出与验收
 
-## 最佳实践
+默认给一份短结论，覆盖这几项：统计范围（TODO 文件、分支、HEAD、时间）；四态计数；Epic 的完成情况与每项的子 Feature 比例；菜单覆盖与缺失映射；每个进行中项的 Feature、执行实例、写集、目标、已完成面、缺失面和阻塞；验收证据的已验证数、未验证数和等级不匹配数；下一个可原子领取的 Feature，以及因依赖或写集冲突而不可领取的；状态失真项及建议修正；未验证边界。
 
-### 1. 定期检查进度
+你只问"做了多少"时，它给上面这个短结论，不生成一份固定的大报告。
 
-```bash
-# 每天检查
-"查看今天的进度"
+判断这次统计可信：每个 checkbox 都能由 TODO、实现、Git、Review 和新鲜验证事实重算出来。有任何一条 AC 找不到匹配的证据、或者仍然写着未验证，对应的完成标记就会被报成状态失真，而不是默认算它通过。
 
-# 每周汇总
-"本周完成了哪些功能？"
-
-# 里程碑前
-"距离 v1.0 还有多少功能？"
-```
-
-### 2. 关注验收证据
-
-```bash
-# 检查证据完整性
-"哪些功能缺少验收证据？"
-
-# 补充证据
-"USER-EDIT 的 AC-002 需要验证"
-```
-
-### 3. 解决依赖阻塞
-
-```bash
-# 发现依赖问题
-"哪些功能被依赖阻塞？"
-
-# 调整优先级
-"先完成 USER-PERMISSION，解除阻塞"
-```
-
-### 4. 避免并行冲突
-
-```bash
-# 检查冲突
-"当前有并行写集冲突吗？"
-
-# 调整并行策略
-"等 USER-EDIT 完成后再开始 USER-DELETE"
-```
-
-## 下一步
-
-- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
-- [update-status](/skills/skills-reference/high/update-status) - 更新状态
-- [code-review](/skills/skills-reference/high/code-review) - 代码审查
-- [git-commit](/skills/skills-reference/high/git-commit) - Git 提交
+<Aside type="note">
+Git、CI 和环境状态一律按各自的原生事实报告，它不建立第二份交付状态数据。评估 Skill 工作流本身的效果是另一件事：只有你明确问跨任务效果时，它才汇总目标完成率、AC 未验证率、路由纠偏、重复失败率和 context 成本这类指标，并且缺少真实观测数据时标成未观测，不填 0 凑数。这条路径只读，不安装遥测、不每轮生成报告。
+</Aside>

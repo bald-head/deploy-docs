@@ -1,432 +1,124 @@
 ---
-title: update-status
+title: 状态更新 - update-status
 description: 状态更新 - 按代码、Review 和 Git 事实直接更新唯一 TODO
 order: 14
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+import { Aside } from '@astrojs/starlight/components';
 
 ## 概述
 
-`update-status` 是 **Medium 优先级** Skill，负责按代码、Review 和 Git 事实直接更新当前开发者唯一 TODO。
+`update-status` 是唯一有权改那份 TODO 状态行的 Skill。它做的不是"帮你打勾"，而是先重算：读当前项、它的来源锚点、目标 diff、每条 `AC-*` 的新鲜证据、Review 结论和 Git 状态，然后决定状态该不该变。
 
-**适用场景**：
-- 功能开始时标记 `[~]`
-- 功能完成时标记 `[x]`
-- 功能阻塞时标记 `[!]`
-- 释放功能回到 `[ ]`
+它接受的事实很具体——真实生产文件和调用链、跑过的一次最小编译或类型检查加 `git diff --check`、当前完整 diff 的一次 Review、commit 与 upstream 与远端 ref 的原生状态、明确的人工设备或外部系统阻塞。聊天里的摘要、压缩过的上下文、以及"上一个 checkbox 已经勾了"，都不能代替这个 Feature 的原始来源复核。
 
-**不适用场景**：
-- 创建新 TODO → 使用 `task-todo-workflow`
-- 追加新功能 → 使用 `add-todo`
-- 统计进度 → 使用 `progress`
-- 代码实现 → 使用 `dev` 或 `universal-development`
+写入本身也不是直接编辑文本。有 runtime instance 在时，领取、完成、阻塞和释放这四个动作一律走既有的原子写入通道，由它用临时互斥锁重读并原子写回——多个进程抢着改同一行状态，是这套流程最不能接受的事。
 
-## 快速开始
+它不改业务代码，不执行 Git 写操作，也不建第二份任务状态。
 
-### 更新状态的完整流程
+## 什么时候用
 
-```bash
-# 1. 开始功能
-"开始实现 USER-LOGIN 功能"
-# TODO 更新: [ ] → [~]
+| 你会这样说 | 场景 |
+| --- | --- |
+| "开始做这个功能" | 原子领取一个进行中项 |
+| "这个做完了" | 按完成摘要契约重算并写回完成 |
+| "卡住了，等对方开接口" | 写阻塞原因、已完成边界和恢复条件 |
+| "先放一放，去做别的" | 由主 Agent 确认旧实例已停止后显式释放 |
+| "刚提交推上去了" | 回读远端事实，确认交付边界后再往下走 |
+| "需求确认完了，进下一阶段" | 推进 TODO 内的流程状态机 |
 
-# 2. 实现代码
-# ... 编写代码 ...
+触发面覆盖状态回写、开始与完成标记、阻塞登记和流程阶段推进这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。在 Claude Code 里可以直接按名字调用（`/update-status`）；Codex 走自己的原生发现。
 
-# 3. 完成功能
-"USER-LOGIN 功能已完成"
-# TODO 更新: [~] → [x]
+## 什么时候不要用
 
-# 4. 遇到阻塞
-"USER-LOGIN 被阻塞了"
-# TODO 更新: [~] → [!]
+- **只想看看进度** → [progress](/skills/skills-reference/medium/progress/)。这是本页最要紧的分工：`progress` 只读、只算、只报告，本 Skill 才是写入方。想知道"做到哪了"不需要动状态；只有事实真的变化了才该走到这边。
+- **建立或改 TODO 的结构** → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。它管生命周期和结构，本 Skill 只管现有事项的执行状态。
+- **追加一个新功能** → [add-todo](/skills/skills-reference/medium/add-todo/)。
+- **挑下一件事** → [next](/skills/skills-reference/medium/next/)。
+- **写代码** → [dev](/skills/skills-reference/high/dev/)、[universal-development](/skills/skills-reference/low/universal-development/)。它们只把执行事实交回来，状态由这边写。
+- **写日报或对外沟通文本** → [daily-report-writer](/skills/skills-reference/low/daily-report-writer/)、[internal-comms](/skills/skills-reference/low/internal-comms/)。
+- **规则或流程本身反复出问题** → [auto-optimizer](/skills/skills-reference/low/auto-optimizer/)。那是规则根因，不是任务状态。
 
-# 5. 恢复阻塞
-"USER-LOGIN 恢复了"
-# TODO 更新: [!] → [~]
-```
+## 前置条件
 
-## 使用示例
+**当前开发者已有一份活动 TODO。** 归属先按 Git `user.name` 解析，其次系统登录用户名，最后才接受显式 fallback；能改的只有 `docs/<developer-id>/tasks/todo/` 里那唯一一份。别人的 Owner 目录永远只读——状态是有主的，跨人改会让两边都失去可信度。
 
-### 场景 1：开始功能
+**这一轮确实需要状态变化。** 开始、阻塞、完成、释放。仅仅想了解情况不该走到这里。
 
-**TODO 当前状态**：
-```markdown
-- [ ] `USER-LOGIN` 用户登录；Owner: alice-chen
-  - 来源: PRD#用户登录
-  - 目标: 用户可以通过邮箱密码登录
-  - 验收: AC-001, AC-002, AC-003
-  - 依赖: 无
-  - 交付面: data / api / backend / web
-```
+**有明确的代码、Review 或 Git 事实支撑。** 没有事实就只能凭印象打勾，而 checkbox 一旦失真，下游的依赖判断、Ready 计算和交付结论全部跟着错。
 
-**用户输入**：
-```
-开始实现 USER-LOGIN 功能
-```
+## 完成摘要契约
 
-**自动更新 TODO**：
-```markdown
-- [~] `USER-LOGIN` 用户登录；Owner: alice-chen；执行实例: abc123
-  - 来源: PRD#用户登录
-  - 目标: 用户可以通过邮箱密码登录
-  - 验收: AC-001, AC-002, AC-003
-  - 依赖: 无
-  - 交付面: data / api / backend / web
-  - 开始时间: 2026-09-03 10:30
-```
+这是最容易卡住的一步，值得单独讲。调用完成之前，必须一次性把最终摘要组装好，先原样写进当前 Feature 的结果字段，然后传给状态机的字符串必须和它完全一致——不能指望 Hook 逐项报错、你再回来补字段。
 
-### 场景 2：完成功能
+所有档位都要先写来源复核（哪个章节、与锚点一致还是变化已复核），再为每条稳定验收写出证据，不允许包含未验证，并写明 Review 通过。在此之上按档位追加：
 
-**TODO 当前状态**：
-```markdown
-- [~] `USER-LOGIN` 用户登录；Owner: alice-chen；执行实例: abc123
-  - 开始时间: 2026-09-03 10:30
-```
+| 档位 | 摘要里额外必须有的 |
+| --- | --- |
+| `Test-first` | 修复前证据与修复后证据两项 |
+| `Regression-required` | 修复前基线与修复后证据两项 |
+| `High-risk` | 在验证档位字段之外，再加风险边界、回滚方式、方案复核通过，以及发布检查通过或不适用 |
 
-**代码事实**：
-```bash
-# 代码已实现
-git diff
-# modified: src/main/java/controller/AuthController.java
-# modified: src/main/java/service/AuthService.java
-# modified: src/pages/login.vue
+人工、设备和外部环境的边界可以如实保留在摘要里，但不能和已经声明完成的验收自相矛盾。摘要只保存已有事实和真实的未验证边界，不为了凑满字段去虚构测试、真机、外部系统或发布证据。
 
-# Review 已通过
-/code-review
-# ✅ Review PASS
+## 怎么用
 
-# 代码已提交
-git log -1
-# commit a1b2c3d
-# feat: 实现用户登录功能
-```
+**开始。** 确认事项的 Owner 就是当前开发者，从 Hook 取当前实例 id，再请求状态机原子领取。目标项要同时满足三条才能从未开始变成进行中：全部依赖已完成、没有被其他实例领取、并行写集与所有进行中项互斥。一个实例已经有进行中项时不能再领第二项。
 
-**用户输入**：
-```
-USER-LOGIN 功能已完成
-```
+**实施期间不更新。** 内部的数据、接口、后端、Web 或桌面步骤都留在执行上下文里，不逐步回写 TODO。
 
-**自动更新 TODO**：
-```markdown
-- [x] `USER-LOGIN` 用户登录；Owner: alice-chen
-  - 来源: PRD#用户登录
-  - 目标: 用户可以通过邮箱密码登录
-  - 验收证据:
-    - AC-001: 用户可以输入邮箱密码 ✓ (手工测试通过)
-    - AC-002: 登录成功返回 Token ✓ (DevTools 验证)
-    - AC-003: Token 存储在 localStorage ✓ (验证通过)
-  - 交付面: data / api / backend / web
-  - 完成时间: 2026-09-03 14:30
-  - Review: pass
-  - Commit: a1b2c3d
-```
+**阻塞。** 只有领取它的那个实例能提这个请求，要写清三件事：卡在什么上、已经做完到哪、什么条件下能恢复。它被阻塞期间，依赖它的事项照样不可领取；其他实例只能去领与它没有依赖关系、且写集和所有活动项互斥的 Ready Feature。
 
-### 场景 3：功能阻塞
+**完成。** 重算的依据是五样东西：TODO 当前项、回到来源锚点原始章节做的复核、这个 Feature 写集范围内的实现与 diff、Review 结论，以及新鲜的验证证据。按完成摘要契约一次写齐，然后由状态机在锁内改状态。随后主 Agent 把业务改动、必要契约和这段 TODO hunk 一次提交并推送。收口时发现了后续会复用的 Owner、组件、工具或契约，就原位更新项目记忆里的复用地图，不额外生成 JSON 或文档。
 
-**TODO 当前状态**：
-```markdown
-- [~] `ORDER-PAYMENT` 订单支付；Owner: alice-chen；执行实例: abc123
-  - 目标: 集成第三方支付
-```
+**续作。** push 之后重新读 Git 原生的本地、upstream、远端 OID 和远端 TODO。只有当前的完成标记已经随同一个功能提交进入远端，才重新走原子领取。B 依赖 A 时，A 还在做、或者 A 只有一个尚未推送的本地完成标记，都不能提前把 B 改成进行中。
 
-**用户输入**：
-```
-ORDER-PAYMENT 被阻塞了，等待支付接口开通
-```
+**回收。** 实例异常退出时不按超时自动释放。主 Agent 确认旧实例确实已经停止之后，才可以用显式的 supervisor 释放把状态恢复成未开始，再由新实例重新领取——任何时刻仍然只有一个执行实例。
 
-**自动更新 TODO**：
-```markdown
-- [!] `ORDER-PAYMENT` 订单支付；Owner: alice-chen
-  - 目标: 集成第三方支付
-  - 阻塞原因: 等待第三方支付接口开通
-  - 阻塞时间: 2026-09-03 11:00
-  - 恢复条件: 收到支付接口开通邮件
-  - 预计恢复: 2 天
-```
+Epic 不接受上面这些命令。最后一个未完成的子 Feature 通过相同的完成门禁之后，状态机在同一次原子写回里把 Epic 汇总为完成；这不新增 Review、不新增 Git 提交、也不引入第二种状态。依赖 Epic 的后继，只有在这个汇总能由全部子项重算出来时才解锁。
 
-### 场景 4：恢复阻塞
-
-**TODO 当前状态**：
-```markdown
-- [!] `ORDER-PAYMENT` 订单支付；Owner: alice-chen
-  - 阻塞原因: 等待第三方支付接口开通
-  - 阻塞时间: 2026-09-03 11:00
-  - 恢复条件: 收到支付接口开通邮件
-```
-
-**用户输入**：
-```
-ORDER-PAYMENT 恢复了，支付接口已开通
-```
-
-**自动更新 TODO**：
-```markdown
-- [~] `ORDER-PAYMENT` 订单支付；Owner: alice-chen；执行实例: abc123
-  - 目标: 集成第三方支付
-  - 阻塞历史: 等待支付接口开通 (2026-09-03 11:00 - 2026-09-05 09:00)
-  - 恢复原因: 支付接口已开通，测试连接成功
-  - 恢复时间: 2026-09-05 09:00
-```
-
-### 场景 5：释放功能
-
-**TODO 当前状态**：
-```markdown
-- [~] `USER-EXPORT` 用户导出；Owner: alice-chen；执行实例: abc123
-  - 开始时间: 2026-09-03 14:00
-```
-
-**用户输入**：
-```
-暂停 USER-EXPORT，先做优先级更高的任务
-```
-
-**自动更新 TODO**：
-```markdown
-- [ ] `USER-EXPORT` 用户导出；Owner: alice-chen
-  - 目标: 导出用户列表为 Excel
-  - 暂停原因: 优先级调整，先完成 USER-IMPORT
-  - 暂停时间: 2026-09-03 15:00
-```
-
-## 关键规则
-
-### 1. 状态转换规则
-
-```text
-状态转换:
-[ ] → [~]  开始功能
-[~] → [x]  完成功能
-[~] → [!]  功能阻塞
-[!] → [~]  恢复功能
-[~] → [ ]  释放功能
-
-禁止转换:
-[ ] → [x]  不能跳过实施
-[x] → [~]  不能重新打开已完成
-[!] → [x]  不能直接完成阻塞功能
-```
-
-### 2. 完成条件
-
-```markdown
-可以标记 [x] 的条件:
-- ✅ 全部适用生产代码已完成
-- ✅ API、权限、错误处理与验收一致
-- ✅ 前端页面完成真实接入
-- ✅ 外部集成闭环
-- ✅ 构建检查通过
-- ✅ 每条 AC 都有证据
-- ✅ Review 无未关闭严重/重要 finding
-- ✅ 代码已授权 commit&push
-
-不能标记 [x]:
-- ❌ 静态页面（无 API 调用）
-- ❌ mock 数据
-- ❌ 原型
-- ❌ 孤立接口（无前端）
-- ❌ 只有迁移文件
-```
-
-### 3. 阻塞必须明确
-
-```markdown
-阻塞时必须记录:
-- 阻塞原因（具体是什么阻塞）
-- 阻塞时间
-- 恢复条件（什么条件下可以恢复）
-- 预计恢复时间
-
-例子:
-- 阻塞原因: 等待第三方支付接口开通
-- 恢复条件: 收到支付接口开通邮件
-- 预计恢复: 2 天
-```
-
-### 4. 只更新自己的 TODO
-
-```bash
-# 正确: 更新自己的 TODO
-当前开发者: alice-chen
-更新: docs/alice-chen/tasks/todo/user-system.md
-
-# 错误: 更新其他人的 TODO
-当前开发者: alice-chen
-更新: docs/bob-zhang/tasks/todo/order-system.md  # 不允许
-```
-
-## 状态更新检查清单
-
-### 开始功能前
-
-```markdown
-- [ ] 依赖全部完成
-- [ ] 无并行写集冲突
-- [ ] 功能范围明确
-- [ ] 技术选型已完成
-```
-
-### 完成功能前
-
-```markdown
-- [ ] 代码已实现
-- [ ] 前后端已联调
-- [ ] 验收证据完整
-- [ ] Review 已通过
-- [ ] 代码已提交
-```
-
-### 阻塞功能前
-
-```markdown
-- [ ] 阻塞原因明确
-- [ ] 恢复条件明确
-- [ ] 预计恢复时间
-- [ ] 通知相关方
-```
-
-## 自动更新 vs 手动更新
-
-### 自动更新（推荐）
-
-```bash
-# 由 Runtime Hook 自动管理
-# 开始时自动标记 [~]
-# 完成时自动标记 [x]
-# 阻塞时自动标记 [!]
-
-# 使用 todo-continuation.cjs
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --claim <feature-id>  # 开始
-  
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --complete <feature-id>  # 完成
-  
-node runtime-hooks/scripts/todo-continuation.cjs \
-  --block <feature-id> \
-  --reason "阻塞原因"  # 阻塞
-```
-
-### 手动更新（不推荐）
-
-```bash
-# 直接编辑 TODO 文件
-vim docs/alice-chen/tasks/todo/user-system.md
-
-# 风险:
-- 可能产生状态冲突
-- 可能破坏状态机
-- 可能丢失执行实例信息
-```
-
-<Aside type="caution">
-推荐使用自动更新，避免手动编辑 TODO 文件产生状态冲突。
+<Aside type="danger">
+勾不上去的几种情况，都是设计如此：页面或客户端在批准范围内时，后端做完但 Web、App、桌面端还没接入，不能勾；设计稿、原型、静态页面、mock 和孤立接口不能冒充功能完成；Git 未授权、真实环境、人工设备或外部账号还没完成时，如实写边界，不伪造通过。
 </Aside>
 
-## Skill 协调
-
-`update-status` 与以下 Skill 配合：
-
-| 阶段 | Skill | update-status 操作 |
-|------|-------|--------------------|
-| 功能追加后 | add-todo | 保持 `[ ]` 状态 |
-| 开始实现 | dev/universal-development | 标记 `[~]` |
-| Review 通过后 | code-review | 记录 Review 结果 |
-| 提交后 | git-commit | 记录 Commit OID |
-| 完成后 | - | 标记 `[x]` |
-| 阻塞时 | - | 标记 `[!]` |
-| 统计进度 | progress | 读取最新状态 |
+<Aside type="caution">
+完成门禁因为缺少路径写集而阻断时，正确做法是在主 checkout、生产编辑或首次业务提交之前补齐当前 Feature 的精确路径前缀。几条路都被明确堵住了：不能凭最近的 commit 猜，不能把 TODO 复制到临时 clone 或 worktree，不能用 alternate index、`assume-unchanged`、`skip-worktree` 隐藏路径，也不能生成一份证明用的 JSON。业务如果历史上已经单独提交过，只在结果摘要覆盖全部验收、Review 通过并且能匹配到明确的功能提交时，才做一次轻量对账把遗留状态补上，随后这次修复照正常流程交付。
+</Aside>
 
 <Aside type="note">
-update-status 只负责更新状态，不负责代码实现、Review 或 Git 操作。
+证据对象不按 Skill、命令、阶段、文件或 finding 逐个建立——一个 Feature 最多留一条合并的实现结果，外加 Git 原生引用。证据不足时保持进行中或阻塞，把恢复条件写清楚。Git 的 index、提交和 ref 不允许多实例并发写入，最终 Review 与 Git 都由主 Agent 串行收口。push 之后不再补一笔状态提交——交付边界直接看 Git、provider 和远端 TODO。
 </Aside>
 
 ## 与其他 Skill 的关系
 
-### 选择决策
+**上游（before）**：[add-todo](/skills/skills-reference/medium/add-todo/)（先有事项）、[universal-development](/skills/skills-reference/low/universal-development/) 与 [dev](/skills/skills-reference/high/dev/)（先有实现）、[code-review](/skills/skills-reference/high/code-review/)（先有结论）、[git-commit](/skills/skills-reference/high/git-commit/)（先有远端事实）。
+
+**下游（after）**：[progress](/skills/skills-reference/medium/progress/)——状态写回之后统计才有意义。
+
+**协作（complement）**：[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)、[git-workflow](/skills/skills-reference/high/git-workflow/)。
 
 ```text
-创建 TODO → task-todo-workflow
-追加功能 → add-todo
-更新状态 → update-status
-统计进度 → progress
+add-todo / task-todo-workflow（事项存在）
+      ↓
+update-status（原子领取 → 进行中）
+      ↓
+dev / universal-development（实施，期间不回写）
+      ↓
+code-review（一次审查，finding 关闭）
+      ↓
+update-status（按完成摘要契约重算 → 锁内写完成）
+      ↓
+git-commit（业务改动 + TODO hunk 同一提交，推送后核验 OID）
+      ↓
+update-status（回读远端，确认交付边界后才领取下一项）
+      ↓
+progress（只读重算与核对）
 ```
 
-### Related Skills
+新项目或新功能还要维护同一份 TODO 里的流程状态机：阶段推进、等待确认、阻塞和恢复都用对应的原子写回命令，不能只改回复文本。阶段产物或门禁证据缺失时，不能推进到下一个 Owner。
 
-**前置依赖**:
-- `add-todo` - 追加功能
-- `universal-development` - 代码实现
-- `code-review` - 代码审查
-- `git-commit` - Git 提交
+## 产出与验收
 
-**后续推荐**:
-- `progress` - 进度统计
+产出就是那份 TODO 本身的变化：状态位、当前 Feature 的合并结果（来源复核、每条验收的证据、验证档位与风险档位字段、Review 结论）、阻塞原因与恢复条件、以及 Git 原生引用。除此之外不生成状态产物。
 
-**协作 Skill**:
-- `task-todo-workflow` - TODO 工作流
-- `git-workflow` - Git 工作流
-
-## 最佳实践
-
-### 1. 及时更新状态
-
-```bash
-# 正确: 及时更新
-开始功能 → 立即标记 [~]
-完成功能 → 立即标记 [x]
-遇到阻塞 → 立即标记 [!]
-
-# 错误: 延迟更新
-完成多个功能后 → 一起更新状态
-```
-
-### 2. 完整记录证据
-
-```markdown
-<!-- 正确: 完整证据 -->
-- [x] USER-LOGIN 用户登录
-  - 验收证据:
-    - AC-001: 用户可以输入邮箱密码 ✓ (手工测试通过)
-    - AC-002: 登录成功返回 Token ✓ (DevTools 验证)
-  - Review: pass
-  - Commit: a1b2c3d
-
-<!-- 错误: 缺少证据 -->
-- [x] USER-LOGIN 用户登录
-  - 已完成
-```
-
-### 3. 明确阻塞原因
-
-```markdown
-<!-- 正确: 明确原因 -->
-- [!] ORDER-PAYMENT 订单支付
-  - 阻塞原因: 等待第三方支付接口开通
-  - 恢复条件: 收到支付接口开通邮件
-  - 预计恢复: 2 天
-
-<!-- 错误: 模糊原因 -->
-- [!] ORDER-PAYMENT 订单支付
-  - 阻塞了
-```
-
-### 4. 使用自动化脚本
-
-```bash
-# 正确: 使用脚本
-node runtime-hooks/scripts/todo-continuation.cjs --claim USER-LOGIN
-
-# 错误: 手动编辑
-vim docs/alice-chen/tasks/todo/user-system.md
-```
-
-## 下一步
-
-- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
-- [add-todo](/skills/skills-reference/medium/add-todo) - 追加功能
-- [progress](/skills/skills-reference/medium/progress) - 进度统计
-- [code-review](/skills/skills-reference/high/code-review) - 代码审查
-- [git-commit](/skills/skills-reference/high/git-commit) - Git 提交
+判断这次更新站得住：状态位能由 TODO、实现、Git、Review 和新鲜验证重算出来；摘要里每条验收都有匹配等级的证据、没有留下未验证；写入是通过状态机在锁内完成的，而不是手改文本；完成之后的交付判断来自远端事实，不是本地那个勾。

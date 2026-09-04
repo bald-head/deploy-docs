@@ -143,20 +143,6 @@ import { Aside } from '@astrojs/starlight/components'
 - 技术选型时参考现有技术栈
 - 确保新代码符合项目约定
 
-**按需加载示例**：
-
-```markdown
-用户问题: "如何实现用户登录？"
-
-相关事实（注入上下文）:
-- 技术栈: Vue 3.4 + Spring Boot 3.1
-- 架构: RESTful API + JWT 身份验证
-- 开发约定: Composition API
-
-不相关事实（不注入）:
-- 数据库: PostgreSQL 15（登录不直接涉及数据库操作）
-```
-
 ### Reuse map - 复用地图
 
 记录可复用的组件、工具类、API，避免重复造轮。
@@ -173,7 +159,7 @@ import { Aside } from '@astrojs/starlight/components'
 
 **示例**：
 
-```markdown
+````markdown
 ### API 请求工具
 - 路径: `src/utils/request.ts`
 - 用途: 封装 axios，统一处理请求/响应、错误、Loading
@@ -201,27 +187,13 @@ import { Aside } from '@astrojs/starlight/components'
     @change="handlePageChange" 
   />
   ```
-```
+````
 
 **使用场景**：
 
 - 实现新功能前查找可复用组件
 - 避免重复封装已有工具类
 - 确保项目内使用统一的工具和组件
-
-**按需加载示例**：
-
-```markdown
-用户问题: "实现用户列表的分页功能"
-
-相关复用项（注入上下文）:
-- 分页组件: src/components/Pagination.vue
-- API 请求工具: src/utils/request.ts（处理分页请求）
-
-不相关复用项（不注入）:
-- 表单验证 Hook（分页不涉及表单）
-- 上传组件（分页不涉及上传）
-```
 
 ### Boundaries - 边界
 
@@ -268,18 +240,6 @@ import { Aside } from '@astrojs/starlight/components'
 - Code Review 时检查是否违反边界
 - 新成员了解项目约束
 
-**按需加载示例**：
-
-```markdown
-用户问题: "如何处理日期格式化？"
-
-相关边界（注入上下文）:
-- 不使用 Moment.js，使用 Day.js 替代
-
-不相关边界（不注入）:
-- 数据权限边界（日期格式化不涉及权限）
-```
-
 ### Project context - 项目上下文（可选）
 
 记录业务背景、关键决策、已知问题等补充信息。
@@ -301,99 +261,17 @@ import { Aside } from '@astrojs/starlight/components'
 Project context 是可选章节，不是所有项目都需要。如果项目简单，可以省略。
 </Aside>
 
-## 按需加载机制
+## 按需加载
 
-Runtime Hook 不会注入整个记忆文件，而是根据当前问题选择相关事实。
+每轮请求不会把整份记忆文件塞进上下文，只带上与当前问题相关的那几条事实。你观察到的现象是：问前端页面时出现的是前端技术栈和相关组件，问数据权限时出现的是隔离规则。
 
-### 加载流程
+这带来两条写法上的要求：
 
-```
-1. 用户输入
-   "实现用户登录功能"
-   
-2. 分析问题关键词
-   关键词: "用户登录", "实现"
-   
-3. 读取完整 PROJECT-MEMORY.md
-   
-4. 计算相关性
-   Quick facts:
-     - 技术栈 ✓ (需要知道用什么框架)
-     - 架构 ✓ (需要知道认证方式)
-     - 开发约定 ✓ (需要遵循代码风格)
-   
-   Reuse map:
-     - API 请求工具 ✓ (登录需要调用 API)
-     - 表单组件 ✓ (登录页面需要表单)
-     - 上传组件 ✗ (登录不涉及上传)
-   
-   Boundaries:
-     - 不使用的技术 ✓ (避免引入禁止的技术)
-     - 数据权限边界 ✗ (登录不直接涉及数据权限)
-   
-5. 注入相关事实（控制在 3000 bytes）
-```
-
-### 相关性计算
-
-**高相关**：
-
-- 问题直接涉及的技术（"Vue 页面" → 技术栈.前端）
-- 需要复用的组件（"表单" → 表单组件）
-- 需要遵循的约定（"API" → 开发约定.API路径）
-
-**中相关**：
-
-- 间接相关的技术（"页面" → 架构）
-- 可能复用的工具（"请求" → API 请求工具）
-
-**低相关**：
-
-- 不直接涉及的技术（"前端页面" → 后端框架）
-- 无关的复用项（"表单" → 上传组件）
-
-### 注入示例
-
-**完整记忆文件**（约 5000 bytes）：
-
-```markdown
-## Quick facts
-- 技术栈: Vue 3, Spring Boot, PostgreSQL
-- 架构: 前后端分离, RESTful API, JWT
-- 开发约定: Composition API, /api/v1 前缀
-
-## Reuse map
-- API 请求工具: src/utils/request.ts
-- 表单组件: src/components/Form/
-- 上传组件: src/components/Upload/
-- 分页组件: src/components/Pagination.vue
-
-## Boundaries
-- 不使用 jQuery, Moment.js, class 组件
-- 禁止直接修改 props, 硬编码 API
-- 数据权限: RLS 隔离
-```
-
-**实际注入**（约 1500 bytes）：
-
-```markdown
-<project_memory path="PROJECT-MEMORY.md" status="present">
-Quick facts: 
-- 技术栈: Vue 3 + TypeScript, Spring Boot 3.1, JWT 身份验证
-- 开发约定: Composition API, /api/v1 前缀
-
-Reuse map:
-- API 请求工具: src/utils/request.ts（自动添加 Authorization）
-- 表单组件: src/components/Form/（参考 register.vue）
-
-Boundaries:
-- 不使用 class 组件，统一使用 Composition API
-- 不硬编码 API 地址，使用环境变量
-</project_memory>
-```
+- **一条事实写成一条**，不要把技术栈、复用项和边界混在一段里——混在一起的段落要么整段进、要么整段不进。
+- **每条事实自带定位信息**（路径、组件名、约束对象），单独被取出来时仍然读得懂。
 
 <Aside type="tip">
-**预算控制**：项目记忆注入控制在 3000 bytes 内，超过预算时自动截断并提示直接读取文件。
+需要完整背景时直接说"读取 PROJECT-MEMORY.md 的完整内容"。记忆文件本身一直在仓库里，注入摘要只是省上下文，不是限制访问。
 </Aside>
 
 ## 自动维护机制
@@ -410,39 +288,16 @@ Boundaries:
 **自动流程**：
 
 ```
-1. Runtime Hook 检测到记忆文件缺失或为空
+检测到记忆文件缺失或主要章节为空
    ↓
-2. 自动路由 init-docs Skill
+init-docs 采集项目事实（技术栈、目录结构、代码约定、可复用的工具与组件）
    ↓
-3. init-docs 采集项目事实:
-   - 读取 package.json / pom.xml（技术栈）
-   - 扫描目录结构（架构）
-   - 分析代码模式（开发约定）
-   - 提取工具类和组件（复用地图）
+project-details 核对并归并到 PROJECT-MEMORY.md
    ↓
-4. 生成初始记忆内容
-   ↓
-5. 自动路由 project-details Skill
-   ↓
-6. project-details 核对并归并到 PROJECT-MEMORY.md
+继续执行你原本的请求
 ```
 
-**示例**：
-
-```bash
-用户首次运行: "实现用户登录"
-
-系统检测:
-  PROJECT-MEMORY.md 不存在
-  ↓
-自动路由:
-  init-docs → 采集项目事实
-  ↓
-  project-details → 归并到 PROJECT-MEMORY.md
-  ↓
-继续执行:
-  实现用户登录功能
-```
+你不需要为此单独发起一次"初始化"——第一次提出开发需求时它就顺带做完了。
 
 ### 增量更新
 
@@ -457,36 +312,11 @@ Boundaries:
 **更新流程**：
 
 ```
-1. 当前 Skill 确认新事实
-   例如: tech-decision 确认使用 Day.js
+当前 Skill 确认新事实（例如 tech-decision 定下用 Day.js）
    ↓
-2. 当轮交由 project-details 归并
+当轮交由 project-details 归并
    ↓
-3. project-details 读取 PROJECT-MEMORY.md
-   ↓
-4. 原位归并新事实:
-   - Quick facts 增加新技术栈
-   - Reuse map 增加新组件
-   - Boundaries 增加新约束
-   ↓
-5. 写回 PROJECT-MEMORY.md
-```
-
-**示例**：
-
-```markdown
-# tech-decision 确认使用 Day.js
-
-当轮交由 project-details:
-  新事实: "使用 Day.js 处理日期（不使用 Moment.js）"
-  
-project-details 归并:
-  读取 PROJECT-MEMORY.md
-  ↓
-  更新 Boundaries:
-    - Moment.js（体积大，使用 Day.js 替代）  # 新增
-  ↓
-  写回 PROJECT-MEMORY.md
+原位写进对应章节：Quick facts / Reuse map / Boundaries
 ```
 
 <Aside type="tip">
@@ -509,14 +339,7 @@ project-details 归并:
 - 上下文压缩、换设备后可以恢复背景
 - 不能只靠聊天摘要或 checkbox 继续
 
-**检查流程**：
-
-```bash
-每轮继续 [~] Feature 时:
-  检查来源锚点:
-    存在 → 回读对应章节，确认边界和复用
-    不存在 → 调用 project-details 检查当前 Feature 的真实 Owner、边界和细节
-```
+每轮继续一个 `[~]` Feature 时都会回读锚点指向的章节，确认边界和复用；锚点缺失时先用 `project-details` 把这个 Feature 的真实 Owner、边界和细节补出来，再继续写代码。
 
 ## 不保存的内容
 
@@ -639,51 +462,16 @@ tech-decision → project-details 归并
 
 ## 故障排查
 
-### 记忆文件未创建
-
-```bash
-# 检查路径
-ls -la docs/PROJECT-MEMORY.md
-
-# 手动触发初始化
-"初始化项目记忆"
-
-# 或直接调用
-node <skills-root>/init-docs/scripts/init-project-memory.mjs
-```
-
-### 记忆内容过时
-
-```bash
-# 手动触发更新
-"更新项目记忆"
-
-# 或通过 project-details
-"调用 project-details 归并最新事实"
-```
-
-### 记忆注入不完整
-
-```bash
-# 检查上下文预算
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 如果超过预算，直接读取文件
-"读取 PROJECT-MEMORY.md 的完整内容"
-```
-
-### 多人协作冲突
-
-```bash
-# 项目记忆是共享的，多人可能同时修改
-# 解决方案：
-1. 使用 Git 合并（project-details 自动处理）
-2. 最新的归并覆盖旧的
-3. 冲突时手动解决（罕见）
-```
+| 现象 | 怎么处理 |
+|---|---|
+| 记忆文件不存在 | 先确认路径：`ls docs/PROJECT-MEMORY.md`、`ls PROJECT-MEMORY.md`。确实没有就直接说"初始化项目记忆"，采集和归并会自动串起来 |
+| 内容过时 | 说"更新项目记忆"，或点名"调用 project-details 归并最新事实" |
+| 该出现的事实没被带上 | 说"读取 PROJECT-MEMORY.md 的完整内容"；同时检查这条事实是不是和别的内容挤在同一段里 |
+| 完全没有项目记忆上下文 | 确认当前工作目录在 Git 仓库内——找不到 Git 根目录时不会注入 |
+| 多人同时改记忆 | 它是仓库内的共享文件，按普通 Git 冲突处理；归并是原位的，不会产生副本文件 |
 
 ## 下一步
 
-- [使用指南](/skills/usage/feature-development) - 在实际开发中使用项目记忆
-- [TODO 管理](/skills/usage/todo-management) - 结合 TODO 和项目记忆
-- [最佳实践](/skills/best-practices) - 项目记忆的最佳实践
+- [使用指南](/skills/usage/feature-development/) - 在实际开发中使用项目记忆
+- [TODO 管理](/skills/usage/todo-management/) - 结合 TODO 和项目记忆
+- [最佳实践](/skills/best-practices/) - 项目记忆的最佳实践

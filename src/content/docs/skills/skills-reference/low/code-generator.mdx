@@ -1,0 +1,276 @@
+---
+title: 代码生成器（code-generator）
+description: 开发或使用通用代码生成器、模板与脚手架，负责生成工具本身及其受控产物，不承担业务规则与页面实现
+order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+生成器翻车的方式很少变化：模板里留着上一个项目的包名；生成时把整个目录刷掉，顺手带走别人手写的那两个方法；产出的代码引用了一个本仓库并不存在的基类，编译一片红。这个 Skill 处理的就是这一层——生成工具、模板、它吃什么输入、它会写哪些文件、写之前你能不能先看一眼。
+
+它负责工具本身和工具受控产出的那些文件。业务规则怎么定、页面怎么做，都不在它手上。
+
+## 和 crud 系列的分工
+
+三个 Skill 的描述里都出现"生成代码"，但落点完全不同：
+
+| Skill | 它动的是什么 | 什么时候选它 |
+| --- | --- | --- |
+| `code-generator`（本页） | 生成器程序、模板文件、输入格式、写入策略 | 模板要改、生成器有 bug、要从零做一个生成工具 |
+| [crud](/skills/skills-reference/high/crud/) | 用仓库里已有的那个生成器，产出一个模块 | 生成器现成可用，你只是要跑它 |
+| [crud-development](/skills/skills-reference/high/crud-development/) | 手写完整的增删改查交付 | 没有生成器，或需求已经超出模板能覆盖的范围 |
+
+一句话：模板长什么样归这里，跑模板出来的模块归 `crud`，跑不出来的归 `crud-development`。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "生成器出来的代码编译不过" | 定位到具体模板行，改模板后重新预览的对比 |
+| "改一下模板里的分页写法" | 模板改动 + 一次隔离目录预览 + 受影响文件清单 |
+| "给项目做个脚手架" | 输入格式定义、模板骨架、CLI 入口、预览与写入两条路径 |
+| "这十张表批量生成一下" | 一次批量预览，逐文件确认冲突后再落盘 |
+| "生成器入口在哪、怎么调" | 真实入口、模板根目录、写入规则的核对结果 |
+| "codegen 这块要加个字段" | 输入格式与模板同步改，附带兼容性说明 |
+
+## 什么时候不要用
+
+- 生成器现成的，你只想跑它出一个模块 → [crud](/skills/skills-reference/high/crud/)。
+- 要手写完整的增删改查业务 → [crud-development](/skills/skills-reference/high/crud-development/)。
+- 只想知道这个仓库现在的写法是什么样 → [code-patterns](/skills/skills-reference/low/code-patterns/)。它整理现状，这里把整理好的现状固化成模板。
+- 只是想复用已有的工具方法 → [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)。
+- 产品要做什么还没定 → [product-manager](/skills/skills-reference/critical/product-manager/)；模块边界还没划 → [architecture-design](/skills/skills-reference/high/architecture-design/)。
+
+<Aside type="caution">
+如果用户说"用生成器生成一下"，但仓库里翻不出任何生成器入口，正确动作是把这件事说清楚并换条路走，而不是当场造一个生成器充数。
+</Aside>
+
+## 前置条件
+
+要么仓库里确实有一个能跑的生成器，要么用户明确说了"做一个新的"。除此之外还得先说清模板用什么引擎渲染、生成器吃什么输入、结果写到哪个目录、遇到同名文件怎么办。这四样有一样含糊就动手，最直接的后果是覆盖掉别人的手写代码——而这种覆盖往往不会在 diff 审查里被注意到，因为整个文件看起来"就是生成的"。
+
+## 使用示例
+
+### 示例 1：模板出的代码编译不过
+
+你说："生成器出来的 Service 报找不到 `BaseService`，我们仓库里没这个类。"
+
+先找到入口和模板，不猜路径：
+
+```bash
+# 生成器入口通常挂在脚本或子命令上
+rg -n '"(gen|codegen|generate|scaffold)"' package.json pom.xml build.gradle*
+# 模板文件按扩展名找，别假定叫 templates/
+rg --files -g '*.hbs' -g '*.ejs' -g '*.vm' -g '*.mustache' -g '*.tpl'
+```
+
+定位到问题行：
+
+```hbs
+{{!-- templates/service.java.hbs --}}
+- public class {{className}}Service extends BaseService<{{className}}> {
++ public class {{className}}Service {
++     private final {{className}}Mapper mapper;
+```
+
+<Aside type="danger">
+这里的关键动作是改模板，然后重新生成。不要生成完再去手工补那三个文件——下一个人跑一次生成器，你补的东西全没了，而且他不会知道发生过什么。
+</Aside>
+
+### 示例 2：先预览，再落盘
+
+同一份输入，先输出到一个临时目录，跟工作区比对：
+
+```bash
+OUT=$(mktemp -d)
+node scripts/codegen.mjs --input specs/order.yaml --out "$OUT" --dry-run
+
+# 看它想写哪些文件、和现有文件差多少
+diff -rq src/main/java/com/acme/order "$OUT/java/com/acme/order"
+diff -u src/main/java/com/acme/order/OrderService.java \
+        "$OUT/java/com/acme/order/OrderService.java"
+```
+
+预览结果整理出来大致是这样：
+
+```text
+新增   OrderController.java   OrderMapper.java   OrderQuery.java
+覆盖   OrderService.java      与工作区有差异（手写了 exportExcel 方法）
+跳过   OrderMapper.xml        模板未变，内容一致
+```
+
+`OrderService.java` 这一行就是需要人做决定的地方——它不能整文件盖过去。
+
+### 示例 3：冲突逐个处理
+
+已经存在的文件按块合并，只把模板真正改动的部分搬过去：
+
+```diff
+  public class OrderService {
+      private final OrderMapper mapper;
+
++     // 来自模板：新增的分页方法
++     public PageResult<OrderVO> page(OrderQuery query) {
++         return PageResult.of(mapper.selectPage(query));
++     }
++
+      // 手写：保留
+      public void exportExcel(OrderQuery query, OutputStream out) { ... }
+  }
+```
+
+另一种做法是让模板本身留出扩展位，把"生成的"和"手写的"分成两个文件，从此不再需要合并：
+
+```java
+// 生成，每次可覆盖
+public abstract class OrderServiceGen { ... }
+
+// 手写，生成器永不触碰
+public class OrderService extends OrderServiceGen {
+    public void exportExcel(OrderQuery q, OutputStream out) { ... }
+}
+```
+
+### 示例 4：从零做一个生成器
+
+你说："给我们的模块做个脚手架，输入一个 yaml，出后端三层加前端 API 文件。"
+
+会先落一份输入格式，让它能被校验：
+
+```yaml
+# specs/order.yaml
+module: order
+title: 订单
+table: biz_order
+fields:
+  - { name: orderNo,  type: string,  label: 订单号, query: like, required: true }
+  - { name: amount,   type: decimal, label: 金额,   query: range }
+  - { name: status,   type: enum,    label: 状态,   enum: [DRAFT, PAID, CLOSED] }
+pages: [list, detail, edit]
+```
+
+```ts
+// scripts/codegen/schema.ts —— 输入先过校验，模板里不再做兜底判断
+import { z } from 'zod'
+
+export const FieldSpec = z.object({
+  name: z.string().regex(/^[a-z][A-Za-z0-9]*$/),
+  type: z.enum(['string', 'int', 'decimal', 'bool', 'datetime', 'enum']),
+  label: z.string(),
+  query: z.enum(['eq', 'like', 'range', 'in']).optional(),
+  required: z.boolean().default(false),
+  enum: z.array(z.string()).optional(),
+})
+
+export const ModuleSpec = z.object({
+  module: z.string(),
+  title: z.string(),
+  table: z.string(),
+  fields: z.array(FieldSpec).min(1),
+  pages: z.array(z.enum(['list', 'detail', 'edit'])).default([]),
+})
+```
+
+CLI 入口默认走预览，写盘要显式开：
+
+```ts
+// scripts/codegen/cli.ts
+const argv = parseArgs(process.argv.slice(2))
+const spec = ModuleSpec.parse(YAML.parse(readFileSync(argv.input, 'utf8')))
+
+const files = render(spec) // [{ path, content }]
+
+if (!argv.write) {
+  const dir = argv.out ?? mkdtempSync(join(tmpdir(), 'codegen-'))
+  files.forEach((f) => writeFileSync(ensureDir(join(dir, f.path)), f.content))
+  console.log(`预览输出：${dir}`)
+  console.log(report(files, process.cwd())) // 新增 / 覆盖 / 一致
+  process.exit(0)
+}
+
+const collisions = files.filter((f) => existsSync(f.path) && changed(f))
+if (collisions.length && !argv.force) {
+  console.error('以下文件已存在且有差异，请逐个确认：')
+  collisions.forEach((f) => console.error(`  ${f.path}`))
+  process.exit(2)
+}
+```
+
+生成器自己也要有测试，一份输入锁一份产出：
+
+```ts
+it('相同输入产出稳定', () => {
+  const files = render(ModuleSpec.parse(load('fixtures/order.yaml')))
+  expect(files.map((f) => f.path).sort()).toMatchSnapshot()
+  expect(files.find((f) => f.path.endsWith('OrderQuery.java'))!.content).toMatchSnapshot()
+})
+```
+
+### 示例 5：收尾时你会看到的回复
+
+```text
+生成器
+  scripts/codegen/cli.ts（本轮改动：schema 增加 enum 字段）
+  templates/service.java.hbs（去掉 BaseService 继承）
+
+预览
+  临时目录 /var/folders/.../codegen-Xk29
+  新增 4 个，覆盖 1 个（OrderService.java，已逐块合并保留 exportExcel）
+
+跑过的验证
+  pnpm vitest run scripts/codegen  快照通过
+  mvn -q compile                   通过
+  手工核对：GET /api/order/page 返回分页结构正确
+
+回滚
+  git checkout -- src/main/java/com/acme/order 即可退回本轮生成前
+
+没验证的
+  另外 9 张表尚未生成，本轮只跑了 order
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [project-navigator](/skills/skills-reference/medium/project-navigator/) | 先把真实入口和模板根目录找出来 |
+| 前置 | [tech-decision](/skills/skills-reference/high/tech-decision/) | 新做生成器之前，先比过要不要做 |
+| 协作 | [code-patterns](/skills/skills-reference/low/code-patterns/) | 拿仓库现有写法约束模板的输出形状 |
+| 协作 | [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) | 让生成的代码复用已有工具，而不是各生成一份 |
+| 后续 | [crud](/skills/skills-reference/high/crud/) | 生成器可用之后，跑它出模块 |
+| 后续 | [code-review](/skills/skills-reference/high/code-review/) | 生成器与产物一起走一次审查 |
+
+```text
+project-navigator（找入口）
+  → tech-decision（新建时先选型）
+  → code-patterns（用现状约束模板）
+  → code-generator（输入 → 模板 → 预览 → 合并 → 验证）
+  → crud（跑生成器出模块）
+  → code-review（一次完整审查）
+```
+
+数据层还常牵到 [snowflake-id](/skills/skills-reference/low/snowflake-id/)（主键怎么生成）和 [json-serialization](/skills/skills-reference/low/json-serialization/)（长整型 ID 传给浏览器时的精度）。
+
+## 常见坑
+
+**"生成成功"当成"功能完成"。**  模板能覆盖的是结构性代码。状态流转、权限判断、并发与幂等、数据迁移，这些每次都得单独写和单独验。
+
+**在生成后手工修，而不是回去改模板。**  修一次很快，但这个修改活不过下一次生成。判断标准很简单：这个改动要不要在下次生成后重做一遍？要，就说明改错了地方。
+
+**模板里带着上一个项目的痕迹。**  写死的包名、内网域名、某人的邮箱、固定端口，甚至一段测试用的凭据——通用模板里出现这些，等于每个新模块都继承一遍。
+
+**假定目标仓库有某个基类或统一响应。**  模板引用了什么，就得先确认仓库里真有什么。这类问题在生成时不报错，在编译时才炸，而且一次炸一片。
+
+**整目录覆盖当成"重新生成"。**  只要生成目录里可能存在手写内容，覆盖前就必须逐文件看过。见示例 2 和示例 3。
+
+## 下一步
+
+- [crud](/skills/skills-reference/high/crud/) — 用现成生成器产出模块
+- [crud-development](/skills/skills-reference/high/crud-development/) — 没有生成器时手写交付
+- [code-patterns](/skills/skills-reference/low/code-patterns/) — 先摸清仓库现有写法
+- [code-review](/skills/skills-reference/high/code-review/) — 生成器与产物一并审查
+- [snowflake-id](/skills/skills-reference/low/snowflake-id/) — 主键生成方案
+
+
+
+

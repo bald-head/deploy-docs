@@ -1,0 +1,243 @@
+---
+title: worma 配置与迁移（worma-guidelines）
+description: 用 worma 这个通用 OpenAPI 代码生成器配置生成流水线、选模板装插件，并从 @alova/wormhole、axios、ky 迁移过来
+order: 13
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+worma 是个通用的 OpenAPI 代码生成器：喂一份 OpenAPI/Swagger 规范进去，出来的是请求函数、TypeScript 类型、编辑器里能悬停看的文档，甚至还能顺带产一份给编码 Agent 读的接口说明。生成的代码用 alova、axios、fetch 还是 ky 发请求，由你选的模板决定。
+
+`worma-guidelines` 管的是它的配置面：配置文件怎么写、装哪些插件、用哪套模板，以及被问得最多的那件事——手上已经在用别的方案，怎么迁过来。
+
+它的形态是**一张场景索引加一条迁移工作流**，不是把官方文档抄一遍。大多数问题它给你的是官方文档里那一篇的准确入口，省掉你自己翻站点的时间；只有从上一代 `@alova/wormhole` 迁过来这条链路，它自己带了完整的分步命令——因为那条路径官方文档拆得比较散。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到 |
+| --- | --- |
+| "配一下 worma" | 安装与配置那一篇的入口，加一份能跑的最小配置 |
+| "从 @alova/wormhole 换成 worma" | 一条自带的分步迁移工作流，含依赖替换和残留清理 |
+| "从 axios 迁过来" / "从 ky 迁过来" | 对应那篇官方迁移指南的准确位置 |
+| "worma 怎么生成代码" | `init` 和 `gen` 两条命令，以及什么时候该重新生成 |
+| "生成的接口名想改规则" | 改名类插件，以及它作用在链路的哪一段 |
+| "只想生成一部分接口" | 按 URL 或 tag 筛选的插件用法 |
+| "Knife4j 的地址怎么填" | 平台插件——不用你手拼 OpenAPI 地址 |
+| "想生成给 AI 用的接口文档" | 产 AI 可读接口说明的那个插件 |
+| "monorepo 里怎么配" | Monorepo 那一篇，以及多包场景下配置放哪儿 |
+
+## 什么时候不要用
+
+- **你用的还是上一代 `@alova/wormhole`，只是日常配置和跑生成** → [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/)。只有"要迁走"这一件事归本页。
+- **代码已经生成好了，问的是运行时怎么调** → [alova-client-usage](/skills/skills-reference/low/alova-client-usage/)（客户端）、[alova-server-usage](/skills/skills-reference/low/alova-server-usage/)（服务端 / BFF）。
+- **要设计接口本身——路径怎么分、字段叫什么、错误怎么表达** → [api-development](/skills/skills-reference/high/api-development/)。生成器只忠实翻译规范里已有的东西，规范本身写错了它照样生成出来。
+- **要自己造一个代码生成器** → [code-generator](/skills/skills-reference/low/code-generator/)。
+- **要定义产品做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+
+## 前置条件
+
+**这个项目得确实在用 worma，或者你确实决定要换过来。** 否则拿到的配置键都是对的，只是跟你的工程无关。
+
+**先知道生成输出落在哪儿。** 配置文件位置、用的哪套模板、`output` 指向哪个目录——这三样定了，之后所有讨论才有具体对象。不知道就先在仓库里找一遍，别照着示例配置猜。
+
+**规范得有来源。** 一个能访问的 OpenAPI/Swagger 地址，或者一份本地规范文件。规范还没有的时候，配置写得再对也生成不出东西。
+
+**已有的事实优先复用，别每次都把整套文档拉进来。** 仓库里、任务里已经写清楚的配置和插件事实直接用；只有版本或某个具体行为还不确定，才去取对应那一篇官方文档。这是为了不让上下文被文档挤满。
+
+**迁移场景还有一个隐含前提**：你得先确认现在用的是哪一代。上一代 `@alova/wormhole`、axios、ky，三条路径的第一步完全不同——第一条要换依赖和删旧配置，后两条更接近"换请求库模板"。
+
+<Aside type="tip">
+本页和场景索引都没覆盖的主题，先取文档索引 `https://worma.js.org/llms.txt` 定位到相关那一篇，再读它。带 `llms.mdx` 的链接是给模型直接读的纯文本版，比抓渲染后的页面干净。凭记忆猜配置键是这里最容易出错的地方。
+</Aside>
+
+## 使用示例
+
+### 场景 1：首次配起来
+
+**你的输入**：
+
+```text
+给这个项目配一下 worma，后端是 Knife4j。
+```
+
+**你会拿到的产出**：
+
+```bash
+# 1. 生成配置骨架
+npx wormajs init
+
+# 2. 补一条可复跑的 script（package.json）
+#    "gen": "worma gen"
+
+# 3. 生成
+worma gen
+```
+
+配置文件可以是 `worma.config.js` 这种形态，也可以用 `.wormarc`。Knife4j 的地址不用自己拼，交给平台插件按约定组装——你只给它服务地址。
+
+### 场景 2：从 @alova/wormhole 迁过来
+
+这是唯一一条自带完整命令序列的路径：
+
+```bash
+# 1. 搭 worma 配置，并把现有 alova.config 迁进去
+npx wormajs init --template alovaGlobals
+rm alova.config.{js,ts}
+
+# 2. 直接换依赖，不用先去查版本号
+pnpm remove @alova/wormhole
+pnpm add wormajs -D
+
+# 3. 重新生成（顺手把 "gen": "worma gen" 加进 scripts）
+worma gen
+```
+
+中间还有两步不能省：
+
+**按官方那篇迁移指南处理剩下的配置与代码细节。** 模板插件怎么对应、包名和 import 怎么映射，这些不是删依赖能自动解决的。
+
+**全库搜一遍旧包名。** `package.json`、配置文件、各处 import 里都可能留着引用，漏一处下次装依赖就报错：
+
+```bash
+rg -n '@alova/wormhole'
+```
+
+**你会拿到的产出**：
+
+```text
+## 已改
+alova.config.ts        已删除
+worma.config.ts        新建，模板 alovaGlobals，output 沿用原目录
+package.json           -@alova/wormhole  +wormajs(devDep)  +scripts.gen
+
+## 全库残留检查
+rg '@alova/wormhole' → 命中 2 处，都在 output/ 下的生成文件里
+                       重新生成后自动消失，不手改
+
+## 验收
+rm -rf output && worma gen  → 配置加载成功，output 完整重建，业务代码零改动
+
+## 未验证
+接口调用行为只做了类型层面核对，没有跑真实请求
+```
+
+<Aside type="caution">
+`output` 目录里的东西是生成产物，不是需要你逐行手工迁移的业务源码。判断迁移成没成的动作很简单：把生成目录清掉，重跑一次生成，看配置能不能加载、产物能不能完整重建、业务代码有没有被迫改动。
+</Aside>
+
+### 场景 3：接口太多，只想要一部分
+
+```text
+你：后端一个 Swagger 里塞了三百多个接口，我只要订单相关的，
+    而且生成出来的函数名太长。
+
+它：两个插件叠着用。筛选那个按 URL 或 tag 把范围收窄，改名那个负责把
+    URL 和参数转成你想要的命名。两者都加进 generator.plugins，顺序有讲究——
+    先筛再改名，省掉给不需要的接口算名字。
+```
+
+## 选模板
+
+worma 自带若干请求库模板，装在 `generator.plugins` 里，决定生成出来的调用代码长什么样：
+
+| 模板 | 生成的代码用什么发请求 |
+| --- | --- |
+| `alova` | alova 实例，带它的缓存与策略体系 |
+| `axios` | axios 实例 |
+| `fetch` | 原生 fetch，不引入额外依赖 |
+| `ky` | ky 实例 |
+
+上面迁移命令里的 `--template alovaGlobals` 就是模板的一种写法。
+
+用 alova 模板的项目值得顺带把 alova 自己那两份用法指导装上：
+
+```bash
+npx skills add https://github.com/alovajs/skills --skill alova-client-usage
+npx skills add alovajs/skills --skill alova-server-usage
+```
+
+在本仓库里这两份已经就位：[alova-client-usage](/skills/skills-reference/low/alova-client-usage/) 和 [alova-server-usage](/skills/skills-reference/low/alova-server-usage/)。
+
+## 装插件定制流水线
+
+同样加进 `generator.plugins`。按你想解决的问题挑：
+
+| 你的问题 | 用哪个 |
+| --- | --- |
+| 想让编码助手看得懂这套接口 | `aiDoc()` — 产一份 AI 读得动的接口说明 |
+| 不想手拼规范地址 | `platform()` — 认得 Knife4j、Swagger、YApi 和 FastAPI 几种来源，按服务地址推出规范地址 |
+| 接口文档托管在 Apifox | `apifox()` — 直接从那儿取 |
+| 生成的函数名或参数名不合口味 | `rename()` — 转换命名规则 |
+| 后端的 tag 分组太乱，影响生成结构 | `tagModifier()` — 生成前先把分组理一遍 |
+| 后端漏字段、或想给请求响应加公共字段 | `payloadModifier()` — 增删改参数类型 |
+| 三百个接口只要一部分 | `filterApi()` — 按 URL 或 tag 收窄范围 |
+| 某几个类型想用手写的，不要自动生成的那份 | `importType()` — 引外部类型并把生成版排除掉 |
+
+自己写插件是另一条路，官方有自定义插件和插件 API 两篇，需要的时候再去读。
+
+## 与其他 Skill 的关系
+
+**上游**：[api-development](/skills/skills-reference/high/api-development/) — 规范里有哪些接口、字段叫什么、错误怎么表达，由它定。生成器只负责忠实翻译。
+
+**下游**：[alova-client-usage](/skills/skills-reference/low/alova-client-usage/) / [alova-server-usage](/skills/skills-reference/low/alova-server-usage/) 消费生成物；改完之后走一次完整的 [code-review](/skills/skills-reference/high/code-review/)——迁移会同时动依赖、配置和生成产物，这是必须过 Review 的改动面。
+
+**上一代**：[alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/)，迁移的起点。
+
+**边界相邻**：[code-generator](/skills/skills-reference/low/code-generator/)（自建生成器）、[json-serialization](/skills/skills-reference/low/json-serialization/)（生成类型的序列化兼容）。
+
+```text
+api-development（接口契约）
+        ↓
+alova-wormhole-usage（旧方案）──迁移──→ worma-guidelines（配置 + 模板 + 插件 + 生成）
+                                              │
+                                              ├─ alova 模板   → alova-client-usage / alova-server-usage
+                                              ├─ axios / fetch / ky 模板 → 对应请求库的调用代码
+                                              ▼
+                                          code-review
+```
+
+## 产出与验收
+
+- 仓库里有一份能加载的 worma 配置，里面的模板和插件跟实际需求对得上，不是从示例里抄来的一串。
+- 迁移场景下：旧包已经移除、`wormajs` 装成了开发依赖、旧配置文件已删、全库搜旧包名只剩生成产物这类预期结果。
+- `package.json` 里有一条能反复跑的生成 script。
+- 说清哪些行为只是照官方文档配的、还没在这个项目里真实验证过。
+
+判断真的完成了：清掉生成目录，重跑一次生成，配置加载成功、产物完整重建、业务代码一行不用手改。
+
+## 常见坑
+
+**手改生成目录里的文件。** 下一次生成就没了。要改行为改配置和插件，不改产物。
+
+**旧包名只在 `package.json` 里删了。** 配置文件和各处 import 里还留着引用，下次装依赖直接报错。搜一遍全库比事后排查便宜。
+
+**先去查依赖版本号再装。** 直接装就行，版本号查一遍多花时间，还容易钉死在一个过期版本上。
+
+**规范有问题，去改生成的代码。** 生成器只翻译。字段类型不对、错误结构不统一，去规范和后端那边解决，改产物等于每次生成都要改一遍。
+
+**插件顺序随便放。** 筛选和改名叠用时顺序影响结果，先筛再改名，反过来是白算。
+
+**凭记忆猜配置键。** worma 的配置面不小，猜错的表现往往不是报错而是静默不生效。先取文档索引定位到那一篇。
+
+## 最佳实践
+
+**把生成命令写成 script。** `worma gen` 藏在某人的终端历史里，等于这套东西只有他能重新生成。
+
+**生成目录不要手工纳入 review 视线之外。** 它是产物，但它变了说明配置变了，值得在 diff 里被看到。
+
+**平台插件优先于手拼地址。** 手拼的地址在环境切换时第一个坏掉。
+
+**迁移和功能改动分开提交。** 换生成器会带来一大片产物 diff，混在业务改动里没人看得清。
+
+**先跑一次全量生成再动业务代码。** 确认产物形状符合预期，再去接调用点，顺序反了会返工。
+
+## 下一步
+
+- [api-development](/skills/skills-reference/high/api-development/) - 接口契约本身怎么设计
+- [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) - 上一代生成方案
+- [alova-client-usage](/skills/skills-reference/low/alova-client-usage/) - 生成物在客户端怎么调
+- [alova-server-usage](/skills/skills-reference/low/alova-server-usage/) - 服务端 / BFF 侧用法
+- [code-review](/skills/skills-reference/high/code-review/) - 迁移改动过一次完整 Review
+- [code-generator](/skills/skills-reference/low/code-generator/) - 需要自己造生成器时

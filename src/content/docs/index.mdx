@@ -1,38 +1,110 @@
 ---
-title: deploy-docs
-description: deploy
+title: Skills Framework & 部署文档
+description: 研发 SOP 与部署实操的完整手册：95 个 Skill 让 Coding Agent 按流程干活，Docker/Linux/Java 配置照抄就能跑
 template: splash
 hero:
-  tagline: 更快的 deploy
+  tagline: 让 AI Agent 按你的规则写代码，让服务按你的配置跑起来
   image:
     file: ../../assets/houston.webp
   actions:
-    - text: Docker
+    - text: 5分钟快速上手
+      link: /skills/getting-started/
+      icon: rocket
+      variant: primary
+    - text: Skills Framework
+      link: /skills/
+      icon: document
+      variant: secondary
+    - text: Docker 部署
       link: /docker/
       icon: seti:docker
-    - text: Linux
-      link: /linux/
-      icon: linux
-    - text: JAVA
-      link: /java/
-      icon: seti:java
+      variant: secondary
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-## Next steps
+## 30秒了解这个站点
+
+**这是什么？** 两套独立的技术文档：
+
+1. **Skills Framework**（主要内容）：95个 Skill + Runtime Hook，让 Claude Code/Codex 按固定流程写代码——自动路由 Skill、TODO 状态机、项目记忆、Git 交付门禁
+2. **部署文档**（实操手册）：Docker/Linux/Java 的开箱即用配置，复制粘贴就能起服务
+
+**适合谁？** 
+- 想让 AI Agent 按规范干活的开发者 → 看 Skills Framework
+- 需要快速部署服务的运维 → 看 Docker 部署
+
+**从哪开始？**
+- 新手：[5分钟快速上手](/skills/getting-started/) → [核心概念](/skills/core-concepts/)
+- 老手：直接查 [Skill 参考手册](/skills/skills-reference/) 或 [按问题直接找](#按问题直接找)
+
+## 按问题直接找
+
+| 你现在要做什么 | 去这一页 |
+|---|---|
+| Agent 选错 Skill、命令被拦、TODO 没更新 | [故障排查](/skills/troubleshooting/) · [Runtime Hooks](/skills/hooks/) |
+| 查某个 Skill 的触发词和产出 | [Skill 参考手册](/skills/skills-reference/) |
+| 新机器装 Docker（联网 / 离线 / 树莓派） | [Docker 快速开始](/docker/) |
+| 起 MySQL / Nginx / ElasticSearch | [MySQL](/docker/use/mysql/) · [Nginx](/docker/use/nginx/) · [ES](/docker/use/elasticsearch/) |
+| 日志收集选 ELK / EFK / ELFK | [ELK](/docker/use/elk/) · [EFK](/docker/use/efk/) · [ELFK](/docker/use/elfk/elfk/) |
+| 容器日志把磁盘吃满 | [docker 日志过大](/docker/fqa/logs-too-large/) |
+| Spring Boot 日志分文件、带颜色 | [logback 配置](/java/logging/) |
+| 摄像头 rtsp 转 webrtc | [webrtc-stream](/docker/use/webrtc-stream/) |
+
+---
+
+## 快速导航
 
 <CardGrid stagger>
-	<Card title="Update content" icon="pencil">
-        暂无内容
+	<Card title="Skills Framework" icon="rocket">
+        **95 个 Skill + Runtime Hook**，让 Claude Code / Codex 按固定流程写代码。
+
+        **5分钟上手**：[快速开始](/skills/getting-started/) → 装 Hook → 试一个 Skill  
+        **深入理解**：[核心概念](/skills/core-concepts/) → 路由机制 → TODO 状态机  
+        **日常查询**：[Skill 参考手册](/skills/skills-reference/) → 按需查触发词
+
+        [完整文档 →](/skills/)
 	</Card>
-	<Card title="Add new content" icon="add-document">
-        暂无内容
+	<Card title="Docker 部署" icon="seti:docker">
+        **11 个组件开箱即用**：MySQL、Nginx、ActiveMQ、ES、ELK/EFK/ELFK、Filebeat、FastDFS、PowerJob、webrtc-stream。
+
+        docker-compose 配置 + 必要说明，复制粘贴就能起服务。附 CentOS/Ubuntu/树莓派/离线安装步骤。
+
+        [进入 Docker →](/docker/)
 	</Card>
-	<Card title="Configure your site" icon="setting">
-        暂无内容
+	<Card title="Java 后端" icon="seti:java">
+        **生产级日志配置**：按级别和类型分文件、控制台着色、滚动策略、异步输出。
+
+        一份 `logback-spring.xml` 解决 Spring Boot 日志需求。
+
+        [进入 Java →](/java/logging/)
 	</Card>
-	<Card title="Read the docs" icon="open-book">
-        暂无内容
+	<Card title="Linux 运维" icon="linux">
+        换源、装机、开机自启——目前内容散在 Docker 部分，独立章节建设中。
+
+        [进入 Linux →](/linux/)
 	</Card>
 </CardGrid>
+---
+
+## 使用建议
+
+**Skills Framework 部分**：
+- **新手路径**：[5分钟快速上手](/skills/getting-started/) → [核心概念](/skills/core-concepts/) → 试着用一次
+- **熟练用户**：直接查 [Skill 参考手册](/skills/skills-reference/)，按需查触发词
+- **遇到问题**：[故障排查](/skills/troubleshooting/) 有按症状分类的诊断命令
+
+**部署部分**：按需查阅，每篇独立。看完就能执行，不需要先读其他篇章。
+
+<Aside type="caution">
+部署部分的命令带着写下来时的系统版本（CentOS 7/8、Ubuntu、树莓派），镜像地址和软件源会随时间失效。**照抄前先确认版本号和源地址是否还在**；命令顺序、参数含义和排错思路仍然有效。
+</Aside>
+
+## 站点结构
+
+左上角下拉菜单在四个方向间切换：Skills Framework / Docker / Java / Linux，每个方向有独立的左侧目录，切换后不会丢失当前位置。
+
+- **Skills Framework**：95 个 Skill 的完整文档，Runtime Hook 的 6 个事件说明，路由机制、项目记忆、TODO 状态机的详细解释
+- **Docker**：11 个组件的 docker-compose 配置，附安装步骤和常见问题
+- **Java**：日志配置（logback-spring.xml），更多内容建设中
+- **Linux**：建设中，目前相关内容散在 Docker 部分

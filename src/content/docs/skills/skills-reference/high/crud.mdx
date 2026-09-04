@@ -1,0 +1,249 @@
+---
+title: CRUD 生成器调用（crud）
+description: 只在目标仓库确实存在 CRUD 生成器时调用它出码，并把生成结果补齐成可交付的业务模块
+order: 20
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+这个 Skill 的入口比名字窄很多。它要成立，前提是仓库里真的躺着一个能跑的 CRUD 生成器——命令、插件或脚本都算——而且表已经建好了。满足这两条，它才接手；接手之后做的事也不只是"跑一下"：产物先进预览目录，核对清单和差异，确认没有把手写代码卷进去，才写到工作区；然后把生成器交不出来的那部分业务补齐。
+
+它不设计表，不改生成器本身。日常那句"帮我做个用户管理的增删改查"，绝大多数时候该走 [crud-development](/skills/skills-reference/high/crud-development/)——那边是手写一条完整纵向切片，不依赖仓库里有没有生成器。
+
+## 三个 Skill 的分工
+
+| Skill | 它做什么 | 判断依据 |
+| --- | --- | --- |
+| `crud`（本页） | 跑现成生成器，再补业务 | 生成器入口确实找到了，表也在 |
+| [crud-development](/skills/skills-reference/high/crud-development/) | 手写完整增删改查 | 没生成器，或需求超出模板覆盖范围 |
+| [code-generator](/skills/skills-reference/low/code-generator/) | 改生成器和模板本身 | 问题出在模板，或要做一个新的生成工具 |
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "用生成器把这张表的增删改查生成出来" | 预览清单 → 受控写入 → 业务补齐 → 一次验证 |
+| "调一下代码生成器" | 入口核对结果，以及这次会写哪些文件 |
+| "`sys_notice` 这张表生成一下" | 按真实列、索引、逻辑删除配出的模块 |
+| "脚手架出一个基础模块" | 字典、树表这类标准结构的成套文件 |
+| "这十张表批量生成" | 一次批量预览，逐个确认冲突后落盘 |
+
+<Aside type="caution">
+用户嘴里的"生成 CRUD"不等于仓库里有生成器。得先真的翻到入口——命令怎么调、模板在哪、写到哪个目录、同名文件怎么处理——才轮到这个 Skill。翻不到，这就是一次 `crud-development` 任务。
+</Aside>
+
+## 什么时候不要用
+
+- 仓库里没有生成器，或者需求里已经有状态流转、审批、复杂校验 → [crud-development](/skills/skills-reference/high/crud-development/)。这是最常见的误判。
+- 要改模板、修生成器 → [code-generator](/skills/skills-reference/low/code-generator/)。
+- 表还没设计，字段和索引都没定 → 先 [database-design](/skills/skills-reference/high/database-design/)，再让 [database-ops](/skills/skills-reference/high/database-ops/) 落迁移。模板盖不住缺失的设计。
+- 业务本身不是增删改查（工作流、对账、状态机）→ [dev](/skills/skills-reference/high/dev/) 或 [universal-development](/skills/skills-reference/low/universal-development/)。
+- 页面要重新设计 → [frontend-design](/skills/skills-reference/high/frontend-design/)；需求还没定 → [product-manager](/skills/skills-reference/critical/product-manager/)。
+
+## 前置条件
+
+生成器要真的存在且能跑；表要真的建好，字段类型、默认值、索引和逻辑删除语义都能读到；需求要还停在标准的查询、新增、看详情、修改、删除这几件事上；写入范围要用户点过头。
+
+前三条不满足，生成出来的东西不是"差一点"，而是从模型开始就错——字段类型猜错一个，后面每一层都跟着错。最后一条不满足，等于对仓库做了一次没人批准的批量写入。
+
+## 使用示例
+
+### 示例 1：一张表跑一遍完整流程
+
+你说："`biz_notice` 这张表用生成器出一个公告管理模块。"
+
+**先读表，不猜结构：**
+
+```sql
+SHOW FULL COLUMNS FROM biz_notice;
+SHOW INDEX FROM biz_notice;
+```
+
+```text
+notice_id    bigint      NOT NULL  主键
+title        varchar(200) NOT NULL 公告标题
+notice_type  char(1)     NOT NULL  类型 1通知 2公告
+content      longtext    NULL      正文
+status       char(1)     NOT NULL  DEFAULT '0'  0正常 1关闭
+del_flag     char(1)     NOT NULL  DEFAULT '0'
+create_by / create_time / update_by / update_time
+索引：idx_notice_type、idx_status_create_time
+```
+
+**再预览，不直接落盘：**
+
+```bash
+OUT=$(mktemp -d)
+mvn -q gen:module -Dtable=biz_notice -Dpreview="$OUT"
+find "$OUT" -type f | sed "s|$OUT/||"
+```
+
+```text
+新增   NoticeController.java  NoticeService.java  NoticeMapper.java
+新增   Notice.java  NoticeQuery.java  NoticeVO.java  NoticeMapper.xml
+新增   src/views/system/notice/index.vue  src/api/system/notice.ts
+覆盖   NoticeService.java  ← 工作区已存在，且有手写方法
+```
+
+最后一行就是必须停下来看一眼的地方：整目录复制过去，那个手写方法就没了。
+
+### 示例 2：字段配置按业务语义，不按名字后缀
+
+生成器默认会按字段名猜查询方式，猜出来的东西看着能跑，用起来不对：
+
+| 字段 | 按名字猜的 | 实际业务需要的 |
+| --- | --- | --- |
+| `title` | 精确等于 | 模糊匹配，运营就是拿关键词找的 |
+| `notice_type` | 模糊匹配（因为是字符串） | 下拉多选，值域固定两个 |
+| `create_time` | 精确等于 | 区间，前端给的是起止两个值 |
+| `status` | 下拉单选 | 列表默认只看 `0`，关闭的进独立入口 |
+| `content` | 出现在列表列里 | 列表不查不显示，正文只在详情里 |
+
+这一步的产出是一份字段配置，而不是一句"按默认生成"：
+
+```yaml
+title:       { query: like,  list: true,  form: true,  required: true }
+noticeType:  { query: in,    list: true,  form: true,  dict: sys_notice_type }
+createTime:  { query: range, list: true,  form: false }
+status:      { query: eq,    list: true,  form: true,  default: '0' }
+content:     { query: none,  list: false, form: true,  widget: richtext }
+```
+
+### 示例 3：生成器交不出来的那部分
+
+模板给的是结构。下面这些每次都得自己写，也正是这个 Skill 在"生成"之后的主要工作量：
+
+```java
+public void update(NoticeUpdateRequest req) {
+    // 1. 存在性 + 归属校验：模板不会知道公告有部门归属
+    Notice current = mapper.selectById(req.getNoticeId());
+    if (current == null) {
+        throw new BizException("公告不存在或已被删除");
+    }
+    if (!deptService.isVisibleTo(current.getCreateDept(), SecurityUtils.getDeptId())) {
+        throw new BizException("无权修改其他部门的公告");
+    }
+
+    // 2. 状态规则：已关闭的不允许改正文
+    if (STATUS_CLOSED.equals(current.getStatus()) && req.getContent() != null) {
+        throw new BizException("公告已关闭，不能修改正文");
+    }
+
+    // 3. 幂等：同一份内容重复提交不产生新版本
+    if (Objects.equals(sign(current), sign(req))) {
+        return;
+    }
+
+    mapper.updateById(toEntity(req));
+}
+```
+
+对外提示统一用中文，且不要把内部细节漏出去：
+
+```java
+// 不要这样
+throw new RuntimeException("update biz_notice failed, id=" + id);
+// 这样
+throw new BizException("公告保存失败，请稍后重试");
+```
+
+### 示例 4：模板把 SQL 生成到了 Service 里
+
+偶尔会碰到模板输出这种代码：
+
+```java
+// NoticeService.java —— 生成出来的
+String sql = "select * from biz_notice where status = '" + status + "' order by " + orderBy;
+return jdbcTemplate.query(sql, rowMapper);
+```
+
+两个问题：拼接的字符串，和跑到业务层的 SQL。修法是回到模板，让它把这段落到该去的地方：
+
+```xml
+<!-- NoticeMapper.xml —— 复杂查询留在这里，有具名方法 -->
+<select id="selectVisiblePage" resultMap="NoticeVOMap">
+  select n.notice_id, n.title, n.notice_type, n.status, n.create_time, d.dept_name
+    from biz_notice n
+    left join sys_dept d on d.dept_id = n.create_dept
+   where n.del_flag = '0'
+     <if test="q.status != null">and n.status = #{q.status}</if>
+     <if test="q.title != null">and n.title like concat('%', #{q.title}, '%')</if>
+   order by n.create_time desc
+</select>
+```
+
+改完模板重新预览一次，这批和后面每一批都干净了；生成完再手工挪一遍，只对这一批有效。
+
+### 示例 5：验证与收尾
+
+```bash
+mvn -q spotless:apply && mvn -q compile     # 格式化 + 编译
+mvn -q test -Dtest=NoticeServiceTest        # 已有测试
+curl -s -X POST localhost:8080/system/notice/page \
+     -H 'Content-Type: application/json' -d '{"pageNum":1,"pageSize":10,"title":"停机"}'
+```
+
+最终回复大致是这样：
+
+```text
+表与生成器
+  biz_notice；入口 mvn gen:module，模板 src/main/resources/gen/*.vm
+
+生成/修改文件
+  新增 9 个（后端 7 + 前端 2）
+  NoticeService.java 逐块合并，保留手写 pushToApp()
+
+业务补齐
+  部门归属校验、关闭态不可改正文、重复提交幂等、中文提示
+
+验证
+  spotless + compile 通过；NoticeServiceTest 5 项通过
+  /system/notice/page 分页正确；越权修改返回中文提示
+
+回滚
+  迁移未新增；代码 git checkout 即可退回
+
+没验证的
+  批量导入路径本轮未生成，前端富文本组件在 IE 模式下未测
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [database-design](/skills/skills-reference/high/database-design/) | 表先设计好 |
+| 前置 | [database-ops](/skills/skills-reference/high/database-ops/) | 迁移先落地 |
+| 前置 | [tech-decision](/skills/skills-reference/high/tech-decision/) | 用生成器还是手写，在这里定 |
+| 协作 | [code-generator](/skills/skills-reference/low/code-generator/) | 模板要改时转它 |
+| 后续 | [code-review](/skills/skills-reference/high/code-review/) | 生成物加手写补齐，一起审一次 |
+| 后续 | [test-development](/skills/skills-reference/medium/test-development/) | 用户明确要求补测试时 |
+| 替代 | [crud-development](/skills/skills-reference/high/crud-development/) | 生成器不存在或需求超范围 |
+
+```text
+database-design → database-ops → tech-decision ─┬→ crud（有生成器）→ code-review
+                                                └→ crud-development（手写）
+```
+
+## 常见坑
+
+**把"生成完成"当成"功能完成"。**  文件都在、编译也过，但越权能改别人的数据、重复提交产生两条记录、关闭的公告还能编辑。这些正是需要人写的部分。
+
+**整目录覆盖。**  预览清单里出现"覆盖"字样就得停下来看。被盖掉的手写方法不会报错，它只是消失了，通常在几周后由一个"这个功能什么时候没的"的问题被发现。
+
+**拿字段名后缀当业务语义。**  `xxx_name` 一定模糊查、`xxx_id` 一定精确等——这类默认在演示时看不出问题，上线后运营会立刻反馈"搜不到"。
+
+**用生成器绕过缺失的设计。**  表还没定就先生成，等于把设计缺口复制到每一层。回头改字段类型，改的是九个文件而不是一个。
+
+**在生成物上手工修模板级问题。**  同一个毛病下次还会出现。判断标准还是那句：这个改动下次生成后要不要重做？要，就回去改模板。
+
+## 下一步
+
+- [crud-development](/skills/skills-reference/high/crud-development/) — 手写完整增删改查
+- [code-generator](/skills/skills-reference/low/code-generator/) — 改生成器与模板
+- [database-design](/skills/skills-reference/high/database-design/) — 表结构设计
+- [code-review](/skills/skills-reference/high/code-review/) — 完整审查
+- [snowflake-id](/skills/skills-reference/low/snowflake-id/) — 新项目的主键生成
+
+
+
+

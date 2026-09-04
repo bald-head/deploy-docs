@@ -1,0 +1,92 @@
+---
+title: 异常与错误契约（error-handler）
+description: 在接口形态已定之后补齐异常类型、参数校验、错误码、日志与事务回滚，并用真实入口验证契约确实生效
+order: 31
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+一个接口"能跑通"和"失败时行为可预期"是两件事。`error-handler` 负责第二件：把散落各层的裸 `catch`、随手 `return null`、把数据库报错原样丢给前端这些做法，收敛成一份可回读的错误契约——每个入口、每种失败条件，对外算哪一类、给用户什么提示，服务端记什么日志、能不能重试、要不要告警、事务到底回不回滚。
+
+它不查"为什么会错"（那是 [bug-detective](/skills/skills-reference/high/bug-detective/)），也不定义接口长什么样（那是 [api-development](/skills/skills-reference/high/api-development/)）。它只在接口形态确定之后补失败路径，并用真实入口验证这份契约生效。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这个接口加个异常处理" | 主流程已实现，失败路径缺失或只有裸 `catch` |
+| "报错怎么处理" / "错误提示不对" | 客户端拿到的提示不可读，或暴露了技术细节 |
+| "定义一下错误码" | 需要稳定可识别的对外错误类别与业务码 |
+| "加参数校验" | 边界层缺少结构、格式和组合规则校验 |
+| "日志怎么打" | 日志级别、关联 ID、cause 保留和脱敏没有统一做法 |
+| "事务回滚不生效" | 异常穿过代理、异步或线程切换边界后没触发回滚 |
+
+触发面覆盖异常处理、错误码、日志、参数校验、错误提示和事务回滚这一类说法，中英文触发词都在 Skill 自己的 frontmatter 里维护。
+
+## 什么时候不要用
+
+- **还不知道为什么报错** → [bug-detective](/skills/skills-reference/high/bug-detective/)。根因未定时先写映射，只会把问题藏得更深。
+- **接口路径、请求响应结构还没定** → [api-development](/skills/skills-reference/high/api-development/)。先有接口形态，才有错误契约。
+- **要写的是业务逻辑本身** → [universal-development](/skills/skills-reference/low/universal-development/)。
+- **前端的错误展示、兜底页、toast** → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/)。
+- **设计日志采集、存储、检索体系** → [architecture-design](/skills/skills-reference/high/architecture-design/)。本 Skill 只按已有日志框架打日志。
+- **配监控告警规则** → 属于运维与可观测基础设施，不在本 Skill 范围。
+
+## 前置条件
+
+三条门槛合起来是一句话：**不给还不存在的东西设计错误语义**——需要已有真实接口或业务实现、需要对外契约和响应格式已经稳定、需要能列出真实会发生的失败场景。三者缺一，产出就会变成一堆永远走不到的分支。
+
+<Aside type="danger">
+它另有一条更硬的要求：业务异常基类、全局处理器、校验框架、事务边界、日志框架和多语言来源必须在目标仓库里实际找到定义和生产调用，才会写出具体类名与签名。只找到依赖、没找到调用时，它只输出候选设计和验证方法，不会给你一段"看起来能用"的代码。
+</Aside>
+
+## 怎么调用
+
+直接说要做的事就行——"这个接口补一下异常处理"、"错误提示改成用户能看懂的"、"事务没回滚查一下"。它会按下面的顺序推进，你在中途主要提供两类信息：哪些失败场景是真实存在的，以及对外契约有没有已定版本。
+
+1. **还原真实异常链路**。先在构建文件、配置和相邻源码里定位异常基类、全局处理器、校验框架、事务边界、日志框架和多语言文案来源，确认哪些能力已经存在、哪些确实缺失。
+2. **产出错误契约**。对每个入口的每种失败条件，说清由哪一层抛出、对外归为哪一类、业务码是什么、给用户的中文提示是什么、日志记到什么级别、能否重试、是否告警。业务冲突、参数错误、认证授权、资源不存在、限流和系统故障会被分成可稳定识别的类别，而不是一律 200 或一律 500。
+3. **复用现有体系**。优先接到仓库已有的异常类和全局处理器上；确实没有时只补当前需求所需的最小契约。平行错误体系的代价是两套状态码、两套文案、两份日志格式。
+4. **分层转换并保留 cause**。参数校验负责结构、格式和可声明的组合规则；需要查库、看权限或走状态机的规则放业务层。
+5. **核对事务是否真的回滚**。异常穿过代理、异步和线程切换边界之后是否触发了真实回滚、补偿或重试，按目标框架的异常分类确认，而不是套用某个注解参数。
+6. **用真实入口跑正负场景**。覆盖参数类、资源与状态冲突类、数据库类、第三方类、异步传播类，以及提示文案与敏感信息检查。
+
+<Aside type="caution">
+两件它会明确拦住的事：一是把 SQL、堆栈、包名、服务器路径、密钥、Token 或第三方原始错误暴露给客户端；二是"捕获后静默返回成功"。需要降级时要求写清降级结果、指标和告警，而不是让失败悄悄消失。
+</Aside>
+
+<Aside type="note">
+只做了静态检查时，它不会声称全局响应和事务回滚已经通过，而是写清实际运行范围。更细的实现细节按主题放在 Skill 自己的条件化参考里，普通任务不整份加载。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游（before）**：[api-development](/skills/skills-reference/high/api-development/)、[universal-development](/skills/skills-reference/low/universal-development/)
+
+**下游（after）**：[code-review](/skills/skills-reference/high/code-review/)、[test-development](/skills/skills-reference/medium/test-development/)
+
+**协作（complement）**：[bug-detective](/skills/skills-reference/high/bug-detective/)、[utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)
+
+```text
+api-development（定接口形态）
+  → error-handler（补错误契约、校验、日志、事务）
+    → code-review（一次回归 Review）
+         ↑
+   bug-detective（根因未定时先来这里）
+```
+
+## 期望产出与验证
+
+你会拿到代码和一份可回读的结论，不会拿到新文档：
+
+- 修改后的异常类、全局处理器、校验注解或分组、日志与事务调整，全部落在已授权的写集内；
+- 一份能对照的错误契约：入口、失败条件、对外类别、业务码、中文提示、日志级别、重试与告警；
+- 事务、重试和补偿的处理方式；
+- 验证命令与结果；
+- 明确列出的未验证边界（网关、集群、第三方）。
+
+判断真的完成了：拿契约里任意一条失败条件去打真实入口，返回的状态码、业务码、中文提示、日志内容和数据状态都对得上。
+
+<Aside type="note">
+本 Skill 不创建或更新 TODO、不改功能状态、不操作 Git，只把路由顺序、修改结论、验证和未覆盖边界返回给 feature owner。用户结果、菜单、验收或交付边界无法从当前任务和源码确定时，它会停下来报告范围变化，而不是自行扩大范围。
+</Aside>

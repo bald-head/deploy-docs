@@ -1,0 +1,217 @@
+---
+title: Skill 发现与安装（find-skills）
+description: 在开放 Agent Skill 生态里搜索、比较并安装现成能力，避免把已经有人做好的事情重写一遍
+order: 24
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+有些能力不该自己写。`find-skills` 把"这件事有没有现成的 Skill"变成一次可执行的检索：先弄清你真正要的领域和任务，去 skills.sh 榜单看有没有公认方案，再用 Skills CLI 搜一遍，然后拿安装量、来源和仓库 star 把候选筛一遍，最后连安装命令一起摆到你面前。
+
+它只负责从外部生态发现和安装。找到之后要让当前 CLI 真的能调起来，那是 [add-skill](/skills/skills-reference/medium/add-skill/) 的事；生态里没有、只能自己写，去 [skill-creator](/skills/skills-reference/medium/skill-creator/)。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "有没有 Skill 能做这个" | 碰上一个专业领域任务，怀疑生态里已有成熟方案 |
+| "帮我找找" / "找个 Skill" | 直接点名要检索 |
+| "Skill 推荐" | 同一领域好几个候选，需要有人帮你比 |
+| "怎么做 X" | X 是常见任务（PR 审查、changelog、E2E）时，先看有没有现成的 |
+| "你能做 X 吗" | X 是专业能力（设计、部署、文档处理），得先确认能力边界 |
+| "能力扩展" / "安装 Skill" | 你要的是把能力沉淀下来，不是这一次做完就算 |
+
+## 什么时候不要用
+
+- **要新建一个 Skill** → [skill-creator](/skills/skills-reference/medium/skill-creator/)。一个找现成的，一个从零写。
+- **要改已有 Skill 的行为** → [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)。
+- **装完了但当前客户端调不起来** → [add-skill](/skills/skills-reference/medium/add-skill/)。装进磁盘和被 CLI 索引到是两件事，后者要验证。
+- **想搞清楚当前项目里已经有什么能力** → [project-navigator](/skills/skills-reference/medium/project-navigator/)。那是仓库内部的发现，跟生态检索无关。
+- **只想把这件事做完，不在乎能力留不留下** → 直接找对应的开发 Skill 更快。
+- **要定义产品做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+
+## 前置条件
+
+**你要的得是一项具体领域能力。** "帮我写点代码"这种没法检索——生态里没有一个 Skill 叫"写代码"。React 性能优化、PR 审查、changelog 生成有；你们公司某个内部系统的私有流程没有。
+
+**这件事得够常见。** 判断标准很朴素：够多人重复做过，才会有人把它做成 Skill。一个只有你们团队会遇到的流程，搜到的一定是不相关的东西。
+
+**你的目标得是把能力留下来。** 如果只想要这一次的结果，检索、评估、安装、验证这一串加起来比直接做完更慢。
+
+它通常就是任务起点，不需要任何上游产物。
+
+## 使用示例
+
+### 场景 1：一次正常的检索
+
+**你的输入**：
+
+```text
+我的 React 应用有点慢，有没有现成的 Skill 能帮我看？
+```
+
+**它会先看榜单，再跑搜索**。榜单按累计安装量排，最经受检验的选项会直接顶在最上面——这一步能省掉大半次无效搜索。榜单没覆盖时才落到 CLI：
+
+```bash
+npx skills find react performance
+```
+
+**你会拿到的产出**：
+
+```text
+## 候选 1（推荐）
+react-best-practices        来自 Vercel Engineering 的 React / Next.js 性能指南
+安装量  185K                来源  vercel-labs（官方组织）
+仓库    star 4.2K
+装它    npx skills add vercel-labs/agent-skills@react-best-practices
+详情    https://skills.sh/vercel-labs/agent-skills/react-best-practices
+
+## 候选 2（不推荐）
+react-speed-tips            零散的性能小技巧合集
+安装量  63                  来源  个人账号，无其他产出
+仓库    star 11
+结论    安装量和 star 都太低，规则和脚本会直接进你的工作流，不建议
+
+## 建议
+装候选 1。要我现在装吗？装到用户级还是只给这个项目？
+```
+
+每条候选都带四样东西：它是什么、安装量与来源、你能直接复制的安装命令、skills.sh 上的详情地址。少任何一样你都没法自己做决定。
+
+### 场景 2：质量核验挡下一个候选
+
+<Aside type="danger">
+**搜到了不等于可以推荐。** 装一个第三方 Skill，等于把别人写的规则和脚本请进自己的工作流，之后每一轮它都可能影响模型的判断。所以三样东西必看：装的人多不多（1K 以上比较稳，不到 100 就要问为什么）、发布方是谁（`vercel-labs`、`anthropics`、`microsoft` 这类组织账号，和一个没有其他产出的个人账号，可信度不在一个量级）、源仓库有多少人认可（star 太少的当作实验品对待）。三项里有一项明显不对，宁可不推荐。
+</Aside>
+
+### 场景 3：一个都没找到
+
+不要为了给出答案硬推一个不相关的 Skill——那比说"没找到"糟糕得多，因为你会真的把它装上。
+
+```text
+你：有没有做 xyz 报表导出的 Skill？
+
+它：搜了几组关键词，没有匹配的。
+    这件事我可以直接用通用能力做完，要继续吗？
+    如果这是你每周都要做一遍的事，也值得自己建一个：
+    npx skills init my-xyz-skill
+```
+
+### 场景 4：装完之后
+
+安装是一次真实的环境变更，得先拿到你明确同意：
+
+```bash
+npx skills add <owner/repo@skill> -g -y
+```
+
+`-g` 装到用户级，对所有项目生效；不加就只给当前项目。`-y` 跳过交互确认。装完如果当前客户端里叫不出来，问题通常不在下载环节，去 [add-skill](/skills/skills-reference/medium/add-skill/) 走一遍发现验证。
+
+## 命令速查
+
+| 命令 | 你用它来干什么 |
+| --- | --- |
+| `npx skills find [query]` | 按关键词搜，不给参数就进交互模式 |
+| `npx skills add <package>` | 装一个，来源可以是 GitHub 仓库或其他源 |
+| `npx skills check` | 看手上装的有没有新版本 |
+| `npx skills update` | 一次全部升上去 |
+| `npx skills init <name>` | 生态里没有，起一个自己的骨架 |
+
+在线浏览：[skills.sh](https://skills.sh/)
+
+## 搜索词怎么给
+
+查询词要贴着你的原始问题翻译，别转成抽象名词。关键词越具体命中率越高——`react testing` 比光写 `testing` 有用得多；一个词搜不到就换同义表达试试：
+
+```bash
+# 前端与框架
+npx skills find react performance
+npx skills find nextjs app-router
+npx skills find tailwind design-system
+
+# 测试
+npx skills find playwright e2e
+npx skills find vitest unit
+
+# 部署与运维
+npx skills find docker deploy
+npx skills find kubernetes ci-cd
+
+# 文档与代码质量
+npx skills find changelog release-notes
+npx skills find pr review
+npx skills find refactor lint
+
+# 无结果时换个说法
+npx skills find deploy        # 空的话试下面两个
+npx skills find deployment
+npx skills find ci-cd
+```
+
+<Aside type="tip">
+高质量 Skill 相当集中在少数几个来源。`vercel-labs/agent-skills` 和 `ComposioHQ/awesome-claude-skills` 值得先整个翻一遍，往往比搜关键词更快找到你要的东西。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游**：无，它通常就是起点。
+
+**下游**：[add-skill](/skills/skills-reference/medium/add-skill/) — 装好之后可能还要注册进当前 CLI 的发现目录、同步索引、验证真的能调起来。
+
+**协作**：[project-navigator](/skills/skills-reference/medium/project-navigator/)（先看清项目到底缺什么能力）、[skill-creator](/skills/skills-reference/medium/skill-creator/)（生态里没有就自己写）
+
+```text
+project-navigator（确认真实缺口）
+        ↓
+find-skills  榜单 → 搜索 → 质量核验 → 征得同意 → 安装
+        ├─ 装上了 → add-skill（注册 / 同步索引 / 验证发现）
+        └─ 没找到 → 用通用能力直接做完，或 skill-creator 自建
+```
+
+## 产出与验收
+
+它交出来的是一次能核对的检索结论，不是文件：
+
+- 候选清单，每条带名称、用途、安装量、来源和详情地址。
+- 每条候选为什么能推荐或者为什么不能，把数字摆出来，不用"看起来不错"这种话。
+- 你能直接复制执行的安装命令；如果已经代为安装，说清装到了用户级还是项目级。
+- 没找到就明确说没找到，并给出替代路径。
+
+<Aside type="caution">
+网络不通、`npx` 不可用这类情况下，它降级成纯建议并把限制写清楚。"这个 Skill 应该能用"和"我确认这个 Skill 存在且装得上"是两回事，前者不能写成后者。
+</Aside>
+
+## 常见坑
+
+**为了用 Skill 而找 Skill。** 一件五分钟能做完的事，检索加评估加安装要花二十分钟，而且之后每一轮都多一份规则参与判断。
+
+**只看安装量。** 安装量高只说明很多人装过，不说明它适合你的技术栈。三项指标一起看，冲突时以来源和 star 为准。
+
+**把"装到磁盘上了"当成"能用了"。** 文件到位和当前客户端真的索引到它中间还有好几个环节，那一段归 [add-skill](/skills/skills-reference/medium/add-skill/)。
+
+**没问就装。** 装第三方 Skill 会改变你之后每一轮的行为。这是环境变更，必须先问。
+
+**搜不到就硬推一个近似的。** 装上一个不相关的 Skill，代价不是白装，而是它会持续干扰之后的判断。
+
+**关键词太抽象。** `optimization`、`best-practice` 这种词搜出来的都是噪声。贴着你的原始问题写。
+
+## 最佳实践
+
+**先翻榜单。** 榜单命中的概率比关键词搜索高，而且顶部那几个通常已经被很多人验证过。
+
+**用你的原话当查询词。** "我的 React 应用怎么变快"直接翻成 `react performance`，不要先在脑子里抽象一遍。
+
+**推荐时把不推荐的也列出来。** 你看到被否掉的候选和否掉的理由，才有判断依据，而不是只能接受一个结论。
+
+**装到用户级还是项目级，想清楚再选。** 只有这个项目用得上的能力，装成全局会污染你其他所有仓库。
+
+**装完顺手确认一次能调起来。** 这一步不做，下次真要用的时候才发现，中间隔了几天更难排查。
+
+## 下一步
+
+- [add-skill](/skills/skills-reference/medium/add-skill/) - 注册进当前 CLI 并验证能调起来
+- [skill-creator](/skills/skills-reference/medium/skill-creator/) - 生态里没有，自己写一个
+- [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) - 装上之后要改它的行为
+- [project-navigator](/skills/skills-reference/medium/project-navigator/) - 先看清项目缺的是什么

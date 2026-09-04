@@ -27,52 +27,33 @@ Runtime Hook 是 Skills Framework 的核心组件，在每次用户请求、工�
 
 1. **检查配置一致性**
 
-```bash
-检查 Runtime Hook 版本
-  本地: ~/.claude/settings.json
-  仓库: ~/.agent-workflow/skills/runtime-hooks/
-
-版本不一致 → 自动合并、去重、备份
-版本一致 → 静默通过
-```
-
-2. **检查 Penpot MCP 注册状态**
-
-```bash
-# 只检查本地注册状态，不连接远端
-claude mcp get penpot
-
-# 如果未注册，提示安装
-未找到 Penpot MCP → 运行安装器
-```
-
-3. **初始化环境变量**
-
-```bash
-AGENT_DEVELOPER_NAME=<从 Git 或系统用户获取>
-AGENT_RUNTIME_INSTANCE_ID=<会话 ID>
-```
+比对客户端里已装的 Hook 配置和仓库当前版本。一致就静默通过；不一致会自动合并、去重，并在改写前备份原配置。
 
 <Aside type="tip">
 设置 `AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0` 可关闭自动修复。
 </Aside>
 
+2. **检查 Penpot MCP 注册状态**
+
+只看本地有没有注册，不连远端，所以不会因为网络问题拖慢会话启动。
+
+```bash
+claude mcp get penpot
+```
+
+未注册时会提示你运行安装器。
+
+3. **初始化环境变量**
+
+确定这个会话的 developer-id（来自 Git `user.name` 或系统登录用户名）和运行实例 ID——TODO 的落点和"这一项归谁领取"都依赖它们。
+
 **安装器行为**：
 
 ```bash
-# 自动安装或更新
 node runtime-hooks/scripts/install.mjs
-
-# 预期行为：
-✓ 备份现有配置到 ~/.claude/hooks.backup.json
-✓ 合并 SessionStart Hook（去重）
-✓ 合并 UserPromptSubmit Hook
-✓ 合并 PreToolUse Hook
-✓ 合并 SubagentStart Hook
-✓ 合并 SubagentStop Hook
-✓ 合并 Stop Hook
-✓ 生成绝对路径命令（适配当前系统、Node、仓库路径）
 ```
+
+它会先备份现有客户端配置，再把各个 Hook 合并进去（重复项去重），已有的其他 Hook 不会被覆盖。
 
 ### UserPromptSubmit Hook
 
@@ -82,87 +63,33 @@ node runtime-hooks/scripts/install.mjs
 
 1. **注入行为内核**
 
-```markdown
-<behavior_kernel>
-- 事实先行：先读取适用规则、仓库事实和已批准边界
-- 简单优先：选择满足目标的最简单方案
-- 最小写集：只修改目标直接需要的文件
-- 目标驱动：以可观察用户结果判断完成
-- 按需加载：命中后再读取对应 SKILL.md
-- 有界推进：已授权且边界明确时直接执行
-</behavior_kernel>
-```
+每轮请求会自动注入一份跨客户端统一的行为准则，约束事实来源、改动范围和完成判据。你不需要手工维护、复述或在提示词里重复它，Claude Code 与 Codex 得到的是同一份。
 
 2. **自动定位项目根目录**
 
-```bash
-# 按以下顺序查找 Git 根目录
-1. 当前工作目录
-2. 向上遍历父目录
-3. AGENT_REPO_ROOTS 映射
+从当前工作目录向上找 Git 根目录，作为项目根。多仓库场景可以用 `AGENT_REPO_ROOTS` 显式指定映射。
 
-找到 Git 根目录 → 设置为项目根
-```
+<Aside type="caution">
+不在 Git 仓库里时找不到项目根，项目记忆和 TODO 上下文都不会注入。
+</Aside>
 
 3. **确保项目记忆文件存在**
 
-```bash
-# 检查路径（按优先级）
-1. docs/PROJECT-MEMORY.md
-2. docs/project-memory.md
-3. PROJECT-MEMORY.md
-
-不存在 → 自动创建空模板
-主要章节为空 → 提示调用 init-docs 采集事实
-```
+按 `docs/PROJECT-MEMORY.md` → `docs/project-memory.md` → 仓库根 `PROJECT-MEMORY.md` 的顺序查找。都没有就创建一份空模板；主要章节还是空的，会提示先用 `init-docs` 采集事实。
 
 4. **加载相关项目记忆**
 
-```markdown
-<project_memory path="PROJECT-MEMORY.md" status="present">
-Quick facts: 
-- 技术栈: Vue 3 + TypeScript + Vite
-- 架构: 前后端分离，RESTful API
-
-Reuse map:
-- API 工具类: src/utils/request.ts
-- 表单组件: src/components/Form/
-
-Boundaries:
-- 不使用 class 组件，统一使用 Composition API
-- 不引入 jQuery
-</project_memory>
-```
+只取与当前问题相关的稳定事实（技术栈、复用地图、边界），不是整份 `PROJECT-MEMORY.md`。
 
 <Aside type="caution">
-只注入与当前问题相关的记忆摘要，不是整个文件，控制在 3000 bytes 预算内。
+注入的是摘要。需要完整背景时直接说"读取 PROJECT-MEMORY.md 的完整内容"。
 </Aside>
 
 5. **提示当前 TODO 状态**
 
-```markdown
-<active_todo path="docs/alice-chen/tasks/todo/user-mgmt.md">
-进行中: [~] USER-LOGIN - 用户登录
-  执行实例: session-abc123
-  依赖: USER-REG (✓ 已完成)
-  写集: src/api/user/login.ts, src/pages/login.vue
-  AC-001: 用户可以通过表单登录
-  AC-002: JWT token 存储
-</active_todo>
-```
+如果当前会话已经领取了某个 Feature，这一轮会带上它的 ID、依赖、写集和验收条件，你不需要每轮重述"我在做哪个功能"。
 
-或者（如果处于规划阶段）：
-
-```markdown
-<active_planning state="requirements-analysis">
-当前阶段: requirements-analysis
-已完成: intake
-下一阶段: requirements-confirmation (需 --confirmed)
-阶段 Owner: alice-chen
-
-注意: 当前阶段不允许修改生产文件
-</active_planning>
-```
+如果还处在规划阶段，带上的是当前阶段、已完成阶段、下一阶段和阶段 Owner——以及当前阶段是否允许修改生产文件。
 
 6. **提示适用 Skill**
 
@@ -174,16 +101,7 @@ Boundaries:
 - 查看进度: progress
 ```
 
-**上下文预算控制**：
-
-```
-行为内核: 1500 bytes
-项目记忆: 3000 bytes（按相关性选择事实）
-TODO 提醒: 2000 bytes
-总预算: 8000 bytes 以内
-```
-
-超过预算时自动截断并提示直接读取文件。
+**上下文预算控制**：注入内容有总量上限，行为内核、项目记忆和 TODO 提醒都只放当前问题真正需要的部分。超过预算时自动截断并提示直接读取文件。
 
 ### PreToolUse Hook
 
@@ -211,70 +129,32 @@ git push --force-with-lease
 # 级别 3: 权限提升
 sudo rm -rf
 chmod -R 777 /
-
-拦截并提示用户确认
 ```
 
+命中后直接拒绝并给出中文原因，不是"提示确认"——同一条命令重试仍会被拒绝。确需执行时由使用者在自己的终端里操作。
+
 <Aside type="danger">
-设置 `AGENT_COMMAND_GUARD=0` 可关闭命令防护（不推荐）。
+`AGENT_COMMAND_GUARD=0` 可关闭命令防护（不推荐），但必须在**启动 CLI 之前** `export`：行内前缀（`AGENT_COMMAND_GUARD=0 git push --force`）只影响被执行的子进程，防护所在的 Hook 进程读不到它，命令照样被拒绝。
 </Aside>
 
 2. **流程门禁检查**
 
-检查流程状态机，阻止越阶段操作：
-
-```bash
-当前阶段: requirements-analysis
-尝试操作: Edit src/api/user.ts
-
-门禁检查:
-  业务开发阶段: business-development
-  当前阶段: requirements-analysis
-  
-结果: ✗ 拒绝（当前阶段不允许修改生产文件）
-
-允许操作:
-  ✓ Read（只读调查）
-  ✓ Write docs/（规划文档）
-  ✓ 状态机命令（--plan-advance）
-```
+规划阶段还没结束时，试图编辑生产代码会被拒绝，并告知当前阶段和需要先推进到哪个阶段。规划阶段仍然可以只读调查、写 `docs/` 下的规划文档，以及推进阶段本身。
 
 **阶段权限表**：
 
-| 阶段 | Read | Write 规划文档 | Write 生产代码 | Bash |
+| 阶段类型 | Read | Write 规划文档 | Write 生产代码 | Bash |
 |------|------|--------------|--------------|------|
-| intake | ✓ | ✓ | ✗ | 只读 |
-| requirements-analysis | ✓ | ✓ | ✗ | 只读 |
-| requirements-confirmation | ✓ | ✓ | ✗ | 只读 |
-| technical-plan | ✓ | ✓ | ✗ | 只读 |
-| technical-confirmation | ✓ | ✓ | ✗ | 只读 |
-| task-breakdown | ✓ | ✓ | ✗ | 只读 |
-| code-generation | ✓ | ✓ | ✗ | 只读 |
-| business-development | ✓ | ✓ | ✓ | ✓ |
-| code-review | ✓ | ✓ | ✓ | ✓ |
-| test-generation | ✓ | ✓ | ✓ | ✓ |
-| test-run | ✓ | ✓ | ✓ | ✓ |
-| user-acceptance | ✓ | ✓ | ✓ | ✓ |
-| git-delivery | ✓ | ✓ | ✓ | ✓ |
+| 规划阶段 | ✓ | ✓ | ✗ | 只读 |
+| 实施阶段 | ✓ | ✓ | ✓ | ✓ |
+| 交付阶段 | ✓ | ✓ | ✓ | ✓ |
 
 3. **写集边界检查**
 
-检查文件是否在当前 Feature 写集内：
-
-```bash
-当前 Feature: [~] USER-LOGIN
-写集: src/api/user/login.ts, src/pages/login.vue
-
-尝试写入: src/api/user/register.ts
-
-检查结果: ✗ 不在写集内
-
-警告: 该文件可能属于其他 Feature (USER-REG)
-建议: 先更新 TODO 写集，或者切换到对应 Feature
-```
+写入当前 Feature 写集之外的文件时会收到警告，并提示这个文件可能属于另一个 Feature。处理方式只有两种：先把该文件补进当前 Feature 的写集，或者切到真正拥有它的那个 Feature。
 
 <Aside type="tip">
-并行开发时，写集互斥检查防止多个任务修改同一文件。
+并行开发时，写集互斥检查防止两个任务同时改同一个文件。
 </Aside>
 
 ### SubagentStart Hook
@@ -283,39 +163,15 @@ chmod -R 777 /
 
 **主要功能**：
 
-与 UserPromptSubmit 类似，但额外包含：
+与 UserPromptSubmit 类似，但额外让子智能体知道：
 
-1. **父智能体上下文**
+1. **父任务上下文**：主任务是什么、当前在做哪个 Feature。
+2. **职责边界**：它只负责这个 Feature 的哪一部分、能改哪些文件；不允许改写集外的文件，也不允许自己变更 TODO 状态。
+3. **交接契约**：结束时必须交回哪些东西——改了哪些文件、覆盖了哪些 AC、证据是什么。
 
-```markdown
-<parent_context>
-主任务: 实现用户管理系统
-当前 Feature: USER-LOGIN
-父智能体 ID: main-session-abc
-</parent_context>
-```
-
-2. **子智能体职责边界**
-
-```markdown
-<subagent_scope>
-职责: 实现登录 API (src/api/user/login.ts)
-写集: src/api/user/login.ts
-不允许: 修改其他文件、变更 TODO
-</subagent_scope>
-```
-
-3. **交接契约**
-
-```markdown
-<handoff_contract>
-交接条件:
-- 文件: src/api/user/login.ts
-- AC: AC-001 登录接口实现
-- 证据: 单元测试通过
-- 返回: Feature ID, Instance ID, Changed files
-</handoff_contract>
-```
+<Aside type="tip">
+并行派子智能体时，写集互斥同样生效：两个子智能体不会被允许同时改同一个文件。
+</Aside>
 
 ### SubagentStop Hook
 
@@ -323,33 +179,7 @@ chmod -R 777 /
 
 **主要功能**：
 
-1. **交接检查**
-
-```bash
-检查交接契约:
-  ✓ Feature ID: USER-LOGIN
-  ✓ Instance ID: subagent-xyz
-  ✓ Changed files: src/api/user/login.ts
-  ✓ AC covered: AC-001
-  ✓ Commands/evidence: npm test -- login.test.ts
-  ✓ Decisions: 使用 JWT 进行身份验证
-  ✗ Unresolved risks: 密码加密强度待确认
-
-结果: 允许 handoff（带风险提示）
-```
-
-2. **状态回传**
-
-```markdown
-<handoff_result>
-Feature: USER-LOGIN
-Instance: subagent-xyz
-Changed files: src/api/user/login.ts
-AC covered: AC-001 -> 单元测试通过
-Decisions: JWT 身份验证
-Unresolved risks: 密码加密强度待确认
-</handoff_result>
-```
+子智能体返回时校验交接契约是否完整——改动文件、覆盖的 AC 及其证据、执行过的命令、做过的决策、以及尚未解决的风险。缺项会被指出；带未解决风险时仍然允许交接，但风险会显式带回给主 Agent，不会被悄悄吞掉。
 
 <Aside type="caution">
 SubagentStop 只校验 handoff，不代替主 Agent 的 Review、完成切换或 Git 收口。
@@ -363,73 +193,26 @@ SubagentStop 只校验 handoff，不代替主 Agent 的 Review、完成切换或
 
 1. **完成检查**
 
-```bash
-检查当前 Feature: [~] USER-LOGIN
-  ✓ AC-001: 用户可以通过表单登录
-    证据: src/pages/login.vue + 手工测试截图
-  ✓ AC-002: JWT token 存储
-    证据: src/utils/auth.ts + 单元测试 PASS
-  ✓ Review: code-review 通过
-  ✓ 写集内有待提交改动: src/api/user/login.ts, src/pages/login.vue
-
-完成门禁: ✓ 通过
-```
+回合结束时核对当前 Feature 是否真的可以标完成。任何一项不满足，Feature 就留在 `[~]`，并告诉你缺的是哪一项。
 
 **完成门禁要求**：
 
-- ✅ 所有 AC 都有证据（AC-001 -> evidence）
+- ✅ 所有 AC 都有证据（每条 AC 后面必须挂上真实的验证结果，不是"应该没问题"）
 - ✅ Review: pass
 - ✅ 写集内存在待提交的业务或必要文档改动
 - ✅ 验证档位要求满足（Lite / Standard / High-risk）
 
 2. **状态原子切换**
 
-```bash
-# 在临时互斥锁内执行
-读取 TODO 文件
-检查 Feature 状态: [~]
-检查执行实例: session-abc123 (匹配)
-检查完成条件: 全部满足
-
-原子操作:
-  [~] USER-LOGIN → [x] USER-LOGIN
-  清除执行实例字段
-  保留完成证据
-
-写回 TODO 文件
-释放锁
-```
+门禁全过之后，TODO 里的 `[~]` 自动变成 `[x]`，执行实例字段清空，完成证据保留。同一个 Feature 不会被两个会话同时改写，所以并行开发时不需要手工加锁或排队。
 
 3. **Git 收口提醒**
 
-```bash
-完成状态已更新
-下一步: 提交代码
-
-建议命令:
-  git add src/api/user/login.ts src/pages/login.vue docs/alice-chen/tasks/todo/user-mgmt.md
-  git commit -m "feat: 实现用户登录功能"
-  git push
-```
+状态更新后会提示下一步是提交，并给出建议的 `git add` / `git commit` / `git push` 命令——TODO 文件本身也在建议的暂存列表里，避免代码提交了、状态没跟上。
 
 4. **自动续作检查**
 
-```bash
-检查 Ready 队列:
-
-候选 Feature:
-  USER-PROFILE:
-    依赖: USER-LOGIN (✓ 已完成)
-    写集: src/api/user/profile.ts, src/pages/profile.vue
-    与其他进行中任务写集冲突: ✗ 无冲突
-    状态: Ready
-
-原子领取: USER-PROFILE
-  [ ] USER-PROFILE → [~] USER-PROFILE
-  执行实例: session-abc123
-  
-继续下一任务...
-```
+提交完成后自动在 TODO 里找下一项可执行的 Feature，找到就原子领取并继续；找不到就停下并说明原因（依赖未完成 / 写集冲突 / 队列已空）。
 
 **续作条件**：
 
@@ -440,15 +223,10 @@ SubagentStop 只校验 handoff，不代替主 Agent 的 Review、完成切换或
 
 5. **语音提醒**
 
-```bash
-# 根据最终回复的标记触发
-<!-- TASK_COMPLETE --> → 播放 audio/task-complete.wav
-<!-- CONFIRMATION_REQUIRED --> → 播放 audio/confirmation.wav
-无标记 → 播放 audio/reply-complete.wav
-```
+回合结束时播放一个短音，用来区分三种情况：需要你做决定或补信息、任务真正完成、普通答复。你不用盯着终端也能知道该不该回来看。
 
 <Aside type="tip">
-设置 `AGENT_COMPLETION_SOUND=0` 可关闭语音提醒。
+设置 `AGENT_COMPLETION_SOUND=0` 可关闭语音提醒；也可以用下面的环境变量换成自己的音频文件。
 </Aside>
 
 ## TODO 管理详解
@@ -469,14 +247,7 @@ docs/<developer-id>/tasks/todo/<项目名>.md
 
 **唯一性检查**：
 
-```bash
-检查 docs/alice-chen/tasks/todo/
-  user-mgmt.md  ✓
-  another-project.md  ✗
-
-错误: 发现多个活动 TODO
-操作: 阻断，要求用户合并或移除
-```
+`docs/<developer-id>/tasks/todo/` 下出现第二个文件时会直接阻断，要求你先合并或把不做的那份移出去，而不是自己猜该用哪一份。
 
 ### Feature 状态机
 
@@ -549,64 +320,23 @@ Epic 是同一 TODO 内的完成汇总：
   - 依赖: `USER-MGMT`（USER-MGMT 是 Epic）  # 依赖 Epic 等价于依赖其全部子 Feature
 ```
 
-**依赖检查**：
+**依赖是否满足**：只有依赖项处于 `[x]` 才算满足。
 
-```bash
-Feature: USER-PROFILE
-依赖: USER-LOGIN
+| 依赖项状态 | 能否领取 |
+|---|---|
+| `[x]` 完成 | ✓ 可以 |
+| `[~]` 进行中 | ✗ 等它完成 |
+| `[ ]` 未开始 | ✗ 先做它 |
+| `[!]` 阻塞 | ✗ 先解阻塞 |
 
-检查 USER-LOGIN 状态:
-  [x] - 依赖满足 ✓
-  [~] - 依赖未满足 ✗（进行中）
-  [ ] - 依赖未满足 ✗（未开始）
-  [!] - 依赖阻塞 ✗（阻塞）
-```
-
-**环形依赖检查**：
-
-```bash
-解析依赖图:
-  USER-LOGIN → USER-REG
-  USER-PROFILE → USER-LOGIN
-  USER-SETTINGS → USER-PROFILE
-
-检查环: 无 ✓
-
-# 非法示例
-USER-A → USER-B
-USER-B → USER-C
-USER-C → USER-A  # 环形依赖
-
-错误: 检测到环形依赖
-```
+**环形依赖**：A 依赖 B、B 依赖 C、C 又依赖 A 这类闭环会被识别并报错，因为闭环里没有任何一项能先开始。
 
 ### 并行任务管理
 
-**写集互斥检查**：
+**写集互斥检查**：领取新 Feature 时，把它的写集和所有 `[~]` 任务的写集求交集。交集为空才允许并行。
 
-```markdown
-进行中任务:
-  [~] USER-LOGIN
-    写集: src/api/user/login.ts, src/pages/login.vue
-
-尝试领取: USER-PROFILE
-  写集: src/api/user/profile.ts, src/pages/profile.vue
-
-写集交集: 空
-结果: ✓ 可以并行
-```
-
-```markdown
-进行中任务:
-  [~] USER-LOGIN
-    写集: src/api/user/login.ts, src/router/index.ts
-
-尝试领取: USER-REG
-  写集: src/api/user/register.ts, src/router/index.ts
-
-写集交集: src/router/index.ts
-结果: ✗ 冲突，不能并行
-```
+- 两个 Feature 各改自己的 API 和页面，没有共同文件 → 可以并行
+- 两个 Feature 都要改 `src/router/index.ts` → 冲突，只能串行；或者把这个文件从其中一个 Feature 的写集里拿掉
 
 **并行条件**：
 
@@ -615,44 +345,19 @@ USER-C → USER-A  # 环形依赖
 - ✅ 所有依赖已完成
 - ✅ 写集完全互斥（无交集）
 
-### 状态机命令
+### 状态怎么流转
 
-Runtime Hook 提供命令行工具管理 TODO：
+领取、完成、阻塞、释放，以及规划阶段的推进和等待确认，都由 Hook 在后台原子完成，你用自然语言驱动就够了：
 
-```bash
-# 建立流程状态机
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-start
-
-# 推进阶段
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-advance
-
-# 等待确认
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-await
-
-# 确认推进
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-advance --confirmed
-
-# 记录阻塞
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-block --reason "等待第三方 API"
-
-# 恢复
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --plan-resume
-
-# 领取任务
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --claim USER-LOGIN --instance session-abc
-
-# 完成任务
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --complete USER-LOGIN --instance session-abc --result "AC-001 -> evidence; Review: pass"
-
-# 阻塞任务
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --block USER-LOGIN --instance session-abc --result "等待设计稿"
-
-# 释放任务（主 Agent 确认旧实例已停止后）
-node <skills-root>/runtime-hooks/scripts/todo-continuation.cjs --release USER-LOGIN --instance main --supervisor
-```
+| 你说 | 发生什么 |
+|---|---|
+| "开始实现 USER-LOGIN" | 校验依赖和写集，把它从 `[ ]` 原子领取成 `[~]`，绑定当前会话 |
+| "完成 USER-LOGIN" | 走完成门禁；全过才切 `[x]` 并提示提交 |
+| "USER-LOGIN 卡住了，等设计稿" | 标 `[!]` 并记下阻塞原因 |
+| "继续" / "下一个" | 在 Ready 队列里找下一项并自动领取 |
 
 <Aside type="caution">
-`--complete` 必须在 commit 前执行，不接受 `--commit` 参数。
+状态先落定、再提交：这样 TODO 的更新和代码改动在同一次提交里，不会出现"代码进了远端、状态还留在昨天"。
 </Aside>
 
 ## 环境变量配置
@@ -695,6 +400,8 @@ AGENT_SKILL_DISCOVERY_FALLBACK=1
 
 ### Hook 未生效
 
+表现是这一轮完全没有自动上下文：没有行为准则、没有项目记忆、没有 TODO 提醒。
+
 ```bash
 # 1. 检查 Hook 安装状态
 node runtime-hooks/scripts/install.mjs --check --json
@@ -704,59 +411,40 @@ cat ~/.claude/settings.json | grep -A 20 hooks
 
 # 3. 重新安装
 node runtime-hooks/scripts/install.mjs
-
-# 4. Codex 用户：审查并信任 Hook
-/hooks
 ```
 
-### TODO 状态不同步
+Codex 用户装完还要在客户端里运行 `/hooks`，审查并信任新的 Hook——这是 Codex 的安全机制，不能跳过。
+
+### TODO 落在了意外的目录
+
+TODO 的位置由 developer-id 决定，先确认它是什么：
 
 ```bash
-# 1. 检查 TODO 文件路径
-echo $AGENT_TODO_DIR
-
-# 2. 检查 developer-id
 git config user.name
-
-# 3. 手动指定（临时）
-export AGENT_DEVELOPER_NAME=alice-chen
-
-# 4. 查看当前状态
-cat docs/alice-chen/tasks/todo/user-mgmt.md
+find docs/ -path "*/tasks/todo/*.md"
 ```
+
+路径和预期不符时，优先把 `git config user.name` 设成你想要的值，而不是去改文件位置。
 
 ### 命令被拦截
 
-```bash
-# 查看拦截日志
-检查最近的错误信息
-
-# 如果是误拦截，临时禁用（不推荐）
-AGENT_COMMAND_GUARD=0 claude
-
-# 或者使用更安全的命令
-rm -rf /path/to/target  # 明确指定路径
-```
+先确认这条命令是不是真的该跑。属于误拦截时，唯一的处理方式是你在自己的终端里执行；Agent 侧没有绕过路径。要长期关闭防护，必须在**启动 CLI 之前** `export AGENT_COMMAND_GUARD=0`。
 
 ### 并行任务冲突
 
 ```bash
-# 查看当前进行中任务
-grep '\[~\]' docs/alice-chen/tasks/todo/user-mgmt.md
-
-# 检查写集
-# Feature 1 写集
-# Feature 2 写集
-# 找出交集
-
-# 解决方案：
-1. 等待冲突任务完成
-2. 更新写集（确保真的不冲突）
-3. 串行执行
+# 查看当前进行中的任务，逐个比对写集
+grep '\[~\]' docs/<developer-id>/tasks/todo/<项目名>.md
 ```
+
+有交集就只能三选一：等冲突任务完成、把共享文件从其中一个写集里移出去、或者干脆串行做。
+
+<Aside type="tip">
+更细的症状-处理对照见 [Hook 故障排查](/skills/hooks/troubleshooting/) 和 [故障排查](/skills/troubleshooting/)。
+</Aside>
 
 ## 下一步
 
-- [项目记忆](/skills/core-concepts/project-memory) - 了解项目记忆如何被 Hook 加载
-- [功能开发流程](/skills/usage/feature-development) - 实践完整的开发流程
-- [TODO 管理](/skills/usage/todo-management) - 深入学习 TODO 管理技巧
+- [项目记忆](/skills/core-concepts/project-memory/) - 了解项目记忆如何被 Hook 加载
+- [功能开发流程](/skills/usage/feature-development/) - 实践完整的开发流程
+- [TODO 管理](/skills/usage/todo-management/) - 深入学习 TODO 管理技巧

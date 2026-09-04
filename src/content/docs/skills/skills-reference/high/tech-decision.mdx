@@ -1,0 +1,247 @@
+---
+title: 技术选型（tech-decision）
+description: 在每个业务 Feature 动手写代码之前，比较具名候选并选出可实施、可验证、可回退的技术方案
+order: 30
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+写代码之前那个"用什么"的决定，往往决定了后面三个月的返工量。`tech-decision` 把这个决定从"顺手用仓库里已有的"或"社区最火的"，变成一次留得下证据的比较：每个 Feature 都要有一句点名到具体技术的结论，后面挂着怎么落地、边界在哪、走不通怎么退——然后实现类 Skill 才被允许动生产代码。
+
+它不划系统边界（那是 [architecture-design](/skills/skills-reference/high/architecture-design/) 的活），也不写实现（那是 [dev](/skills/skills-reference/high/dev/) 和各专业 Skill 的活）。它只回答一句话：这个 Feature 的每个技术问题，选中的是什么、凭什么、怎么落、怎么退。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这个功能用什么技术做" | 领了已批准的 Feature，开工前定方案 |
+| "帮我做个方案对比" | 手上有两个以上真能走的路子 |
+| "技术选型" / "技术决策" | 全新项目，语言、框架、库、迁移工具都要定 |
+| "这个用 WebSocket 还是 SSE" | 单个技术问题的同类候选比较 |
+| "要不要引入 Redis" | 新依赖值不值、成本多少、退不退得掉 |
+| "技术评估" | 现有那套还适不适合这个 Feature |
+
+<Aside type="caution">
+每个业务 Feature 在动生产代码之前都要过一次。已经有明确指向当前 Feature 的确认结论就直接用，不必重比一遍；但"仓库里已经在用了"这句话本身不算结论——它没回答"为什么在这个 Feature 上它也是对的"。
+</Aside>
+
+## 什么时候不要用
+
+- **要划的是系统边界、模块归属和部署形态** → [architecture-design](/skills/skills-reference/high/architecture-design/)。先有边界，再选边界里面用什么；顺序反了就会出现"还不知道这个模块归谁，却已经挑好了存储引擎"。
+- **要定的是产品做什么、验收长什么样** → [product-manager](/skills/skills-reference/critical/product-manager/)。选型不许反过来砍产品能力、客户端、权限或验收标准。
+- **代码已经要落地了** → [universal-development](/skills/skills-reference/low/universal-development/) 或对应专业 Skill。开发中间临时换技术，等于让选型变成对既成事实的追认。
+- **技术栈早定了，这个 Feature 也没新增依赖** → 做一次适配核对就够，不必重新生成一批候选。
+- **连有哪些路子都还没想清** → 先用 [brainstorm](/skills/skills-reference/medium/brainstorm/) 把候选和被忽略的约束发散出来，再回来收敛。brainstorm 给的推荐是原料，不是结论。
+- **修 Bug、不改变业务行为的维护** → 一次适配核对足够。但只要牵出了新依赖、公共契约、数据、权限或基础设施变化，就得重新走一遍。
+
+## 前置条件
+
+**Feature 和验收得先稳定。** 验收条目不稳，"哪条验收靠什么证明"就无从绑定，比较很容易退化成技术偏好之争——两个人各讲一套道理，谁也拿不出判据。
+
+**架构得先落地，或者明确说清复用哪一套。** 模块归属还没定就挑技术，等于在不知道东西放哪的情况下决定用什么柜子。
+
+**生产代码还没开始改。** 代码一落地，选型就只剩追认的作用了。
+
+不满足会怎样：结论里缺了生产路径、兼容、安全、验证或迁移回滚中的任何一块，受影响的实现就要停下来，回到对应负责人补齐，而不是"先写着，回头补"。
+
+## 使用示例
+
+### 场景 1：一个 Feature 的完整选型
+
+**你的输入**：
+
+```text
+配置版本管理这个功能，开工前先把技术方案定下来。
+```
+
+**它先把 Feature 拆成会影响实现的技术问题**，而不是把"用什么技术做配置版本管理"当成一个问题：
+
+```text
+Feature: CONFIG-VERSION 配置版本管理
+  Q1  版本数据放哪
+  Q2  发布并发怎么控
+  Q3  缓存怎么失效
+```
+
+**再给每个问题列同层级、点得出名字的候选**：
+
+```text
+Q1  独立版本表 / sys_config JSON 列 / 主表版本列
+Q2  数据库 CAS / Redis 分布式锁 / PostgreSQL advisory lock
+Q3  Caffeine / Redis
+```
+
+**它会跑的取证命令**——结论必须落在仓库事实上：
+
+```bash
+cat PROJECT-MEMORY.md              # 已确认的复用地图、契约、边界、命令
+cat pom.xml package.json           # 构建清单与锁文件决定真实版本
+rg "RedisTemplate" --type java     # 现有调用链真的存在，还是只躺在依赖里
+```
+
+**你会拿到的产出**（这里只展开三个问题里的一个）：
+
+```text
+## Q2 发布并发怎么控
+选中      PostgreSQL advisory lock
+候选差异  数据库 CAS 要额外维护重试与冲突语义；Redis 锁引入一个新的可用性依赖，
+          而发布链路本来就在同一个事务里，advisory lock 不新增外部组件
+怎么得出  full（三个候选都真能走，逐项比过）
+怎么落地  extend-existing（沿用现有 PostgreSQL，加一个发布锁工具类）
+
+生产路径  初始化  无，复用现有 DataSource
+          配置    application-*.yml → config.publish.lock-timeout
+          调用链  ConfigPublishService#publish → PgAdvisoryLock#tryLock
+边界      锁键按 tenant_id 分段；跨库部署不适用，届时退回 Q2 的 Redis 候选
+迁移回滚  无 schema 变更；关掉开关即回到旧的乐观锁路径
+
+AC-3 发布并发不产生重复版本 → Regression-required（并发路径）
+未验证：跨可用区部署下的锁等待时间没有实测数据
+```
+
+一位实现者拿到这段，不需要再回来问"那到底用哪个"。
+
+### 场景 2：现有技术胜出
+
+<Aside type="tip">
+只写"复用现有技术"算**没做选型**。正确的形状是先点名"选择 X"，再标上"这次是原样复用"。只有写清了 X，下一个人才知道该核对什么、出问题时该往哪退。
+</Aside>
+
+```text
+你：日志存哪，就用现在这套吧。
+
+它：选择 Elasticsearch 7.17（候选：ClickHouse、文件 + Loki）。
+    本 Feature 只需要按 traceId 检索最近 7 天，
+    ES 已有生产链路和索引模板；ClickHouse 要新建摄入与运维面，净收益不成立。
+    比较方式 full，落地方式 reuse-existing，索引模板与保留期沿用现状。
+```
+
+### 场景 3：轮不到 Agent 拍板
+
+有些选择超出了它能替你决定的范围——新增外部系统、不可逆的数据动作、公共契约变更、发布类操作。这时它停下来，只把需要你定的那一件事摊开：
+
+```text
+## 需要你决定
+Q  消息投递用现有 RabbitMQ，还是引入 Kafka
+
+实质差异只有一条：本 Feature 峰值 3k msg/s，两者都扛得住；
+但下季度的数据回放需求 Kafka 原生支持，RabbitMQ 需要额外落库重放。
+引入 Kafka = 多一套运维面 + 团队目前无人有值守经验。
+
+受影响实现已暂停：ORDER-EVENT 的发布端与消费端
+```
+
+## 结论上的两个标签
+
+每条结论会带两个标签。第一个回答"这个决定是怎么得出的"：
+
+| 你会看到 | 它在说 |
+| --- | --- |
+| `full` | 真有几条路，逐项比过了 |
+| `single-path` | 只有一条路能走——你指定的、组织标准强制的，或者合规上只此一家——并且写清了那条让别的候选出局的事实 |
+| `confirmation-required` | 影响太大，要人拍板；相关实现先停 |
+| `superseded` | 出现新证据推翻了旧选择，结论和退路都已经更新 |
+
+第二个回答"这东西怎么落到代码里"：
+
+| 你会看到 | 它在说 |
+| --- | --- |
+| `reuse-existing` | 选中的技术连生产链路一起原样用 |
+| `extend-existing` | 还是这个技术，补上这个 Feature 需要的配置或扩展点 |
+| `introduce-new` | 仓库里第一次出现的东西 |
+| `replace-existing` | 换掉旧的，迁移和退路都写在结论里 |
+
+两个标签加起来也替代不了"到底选了什么"——这是它反复强调的一点。
+
+## 它什么时候会停下来问你
+
+比较的深浅随风险变。普通功能一句话结论就够；一旦牵到权限、数据、公共契约，就会额外要求迁移退出、回滚演练和一次独立复核——而且风险信号出现之后，不能拿之前那句轻量结论继续往下写代码。
+
+停不停下来还取决于你给它多大自主权：允许自己挑可回滚实现时它直接推进；有待你确认的事项没解除时，它不会进生产编辑；结论已经批准过则直接复用，不重新造一批候选。不过有几件事任何模式下都会重新问你：新依赖、外部系统、不可逆的数据动作、公共契约、发布动作。
+
+## 选完之后交给谁实现
+
+| 技术问题域 | 实施 Skill |
+| --- | --- |
+| Schema / 迁移 / 索引 | [database-design](/skills/skills-reference/high/database-design/)、[database-ops](/skills/skills-reference/high/database-ops/) |
+| API / JSON / 错误语义 | [api-development](/skills/skills-reference/high/api-development/)、[json-serialization](/skills/skills-reference/low/json-serialization/)、[error-handler](/skills/skills-reference/medium/error-handler/) |
+| 认证 / 授权 / 租户 / 数据权限 | [security-guard](/skills/skills-reference/high/security-guard/)、[tenant-management](/skills/skills-reference/medium/tenant-management/)、[data-permission](/skills/skills-reference/high/data-permission/)、[satoken-core](/skills/skills-reference/medium/satoken-core/) |
+| Web / App / 状态 | [ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)、[store-pc](/skills/skills-reference/medium/store-pc/) |
+| 推送 / 任务 / 缓存 / 文件 | [websocket-sse](/skills/skills-reference/medium/websocket-sse/)、[scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/)、[redis-cache](/skills/skills-reference/medium/redis-cache/)、[file-oss-management](/skills/skills-reference/medium/file-oss-management/) |
+| 没有对口的专业 Skill | [universal-development](/skills/skills-reference/low/universal-development/)；确实缺这项能力时用 [find-skills](/skills/skills-reference/medium/find-skills/) |
+
+专业 Skill 只负责落地，不替它做候选比较。
+
+## 与其他 Skill 的关系
+
+**上游**：[architecture-design](/skills/skills-reference/high/architecture-design/)、[product-manager](/skills/skills-reference/critical/product-manager/)
+
+**下游**：[universal-development](/skills/skills-reference/low/universal-development/)、[crud](/skills/skills-reference/high/crud/)、[crud-development](/skills/skills-reference/high/crud-development/)、[api-development](/skills/skills-reference/high/api-development/)
+
+**协作**：[brainstorm](/skills/skills-reference/medium/brainstorm/)、[project-details](/skills/skills-reference/high/project-details/)
+
+```text
+product-manager → architecture-design → tech-decision → project-manager → dev → code-review
+                                             ↑
+                                        brainstorm（候选想不全时）
+```
+
+确认下来的长期技术基线，由 [project-details](/skills/skills-reference/high/project-details/) 归并进项目记忆。反过来要小心：记忆里的旧结论不是无条件默认值，换个 Feature 就得重新对一遍适用性。
+
+## 产出与验收
+
+留下的是结论，不是文档堆。一份合格结论经得起这样追问：
+
+```text
+选了什么      点名到技术 / 库 / 协议，不是"成熟方案"这类泛称
+凭什么        仓库事实、组织标准或官方来源，不是 star 数和别人环境的 benchmark
+版本从哪来    锁文件、构建清单、制品源或官方发布页
+谁去落地      主实施 Skill + 需要的专项 Skill
+生产路径      初始化在哪、配置在哪、真实调用链在哪、各环境怎么注入差异
+边界          安全、权限、租户、数据、并发、外部副作用
+退路          契约 / 数据 / 依赖怎么迁，失败怎么回
+每条验收      用哪个现有检查或哪条真实主路径证明，还剩哪些没验
+```
+
+判断真的完成了：任意一位实现者读完就能开始写代码，而且答得出"这条路走不通怎么退回去"。
+
+<Aside type="caution">
+它不给每个 Feature 攒评分表、Binding 文件或独立报告。只有当这份结论要跨会话、跨人复用，或者牵到长期兼容、监管、数据迁移、基础设施、发布运维时，才值得动已有的架构文档或 ADR。选型本身也不等于功能完成——选中的方案得真的进到生产代码里。
+</Aside>
+
+## 常见坑
+
+**把不同层级的东西摆在一起比。** 数据库和迁移工具不是竞品，ORM 和客户端框架也不是。摆进同一组候选，比出来的结论必然是假的。同理，"复用现有""自研""成熟方案"是做法或形容词，不是候选的名字。
+
+**因为依赖里有，就当它已经在用。** 依赖、初始化、配置、真实调用链，缺一样都不算已采用。很多"复用现有"最后发现现有那套从来没被调起来过。
+
+**拿社区热度当事实。** star 数、宣传页、别人环境里跑出来的 benchmark，都不构成你这个环境里的证据。
+
+**选完了没写退路。** "可回退"三个字不是回滚方案。数据、契约、认证授权这几类必须写清怎么迁、失败怎么恢复。
+
+**开发中途换技术。** 遇到新证据要先回到选型更新结论、影响面和退路，再回去改代码，而不是边写边改主意。
+
+**给每个 Feature 攒一套文档。** 结论写在当前上下文或那条 TODO 的规划来源里就够；多出来的模板只会让下一个人不知道该读哪份。
+
+## 最佳实践
+
+- **先拆问题，再找候选。** 一个 Feature 通常藏着三到五个独立的技术问题，混在一起比必然比不清。
+- **候选只留真能走的那几个。** 为凑数量塞明显不可行的选项，只是给自己增加论证负担。
+- **只比会影响这个功能的那几个维度。** 需求吃不吃得下、正确性、兼容、跨端、安全与供应链、维护成本、可观测、迁移与退出——用不上的维度不必摊开。
+- **版本钉在锁文件上。** 凭记忆写版本号是最常见的返工来源。
+- **结论要能被一个陌生人复述。** 复述不出来，说明它还不是结论，只是一段讨论。
+
+## 下一步
+
+- [architecture-design](/skills/skills-reference/high/architecture-design/) - 边界还没定，先回上游
+- [brainstorm](/skills/skills-reference/medium/brainstorm/) - 候选想不全时先发散一轮
+- [project-manager](/skills/skills-reference/high/project-manager/) - 把结论写进当前开发者唯一 TODO
+- [dev](/skills/skills-reference/high/dev/) - 拿着结论开始纵向实现
+- [project-details](/skills/skills-reference/high/project-details/) - 把长期技术基线并进项目记忆
+
+
+
+
+

@@ -1,0 +1,128 @@
+---
+title: 项目导航 - project-navigator
+description: 项目导航 - 定位代码结构、入口和参考实现
+order: 20
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 概述
+
+"这块功能的代码在哪"听着像个搜索问题，但很容易给出错答案：文件名叫 `UserService` 不代表它还有人调；祖先目录里那份 `CLAUDE.md` 定了规则却没人读到；嵌套仓库里父仓库的状态跟目标文件毫无关系。
+
+`project-navigator` 回答三个问题，而且每个答案都带可复核的路径：代码在哪里、这个模块负责什么、该照哪个相邻实现写。它的输出永远分三层——已确认事实（有规则文件、构建清单、源码、配置或调用方作证）、待确认假设（还没打开定义、Git 不可用或职责证据不足）、通用建议（不代表这个仓库的事实）。
+
+它只读：不改代码、配置、测试，也不动 TODO。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "登录这块的代码在哪" | 按业务动作定位入口、定义和相邻实现 |
+| "这个模块是干什么的" | 从入口、路由、配置和迁移确认目录职责 |
+| "我照哪个文件写" | 在多个候选里挑参照物，并说明为什么是它 |
+| "这仓库到底分几个模块" | 从真实构建清单识别语言、框架、工作区和模块边界 |
+| "这个方法还有人用吗" | 查生产调用和测试，没有就明确写"未找到" |
+| "这几个仓库分别负责什么" | 多仓或嵌套仓库逐个确认真实 Git 根 |
+
+触发面覆盖找代码、找入口、找模块、问目录职责和挑参照实现这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
+
+## 什么时候不要用
+
+- **完全陌生的仓库，要的是整体上手** → [start](/skills/skills-reference/high/start/)。它做首次概览，本 Skill 做精确定位；顺序通常是先 start 后本页。
+- **要把结论沉淀成项目记忆** → [project-details](/skills/skills-reference/high/project-details/)。本 Skill 只回答"在哪"，不维护记忆。
+- **要从定位到的代码里提炼命名、分层、依赖约定** → [code-patterns](/skills/skills-reference/low/code-patterns/)。一个找到代码，一个说清这些代码的规矩。
+- **要挑一个工具类或 API，并核对签名、空值、线程与租户语义** → [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)。
+- **GitHub 上的仓库要深度源码报告** → [github-code-interpreter](/skills/skills-reference/low/github-code-interpreter/)。本 Skill 面向本地仓库，默认只给最小路径索引。
+- **要写代码** → [dev](/skills/skills-reference/high/dev/)（完整新功能或骨架）、[universal-development](/skills/skills-reference/low/universal-development/)（局部修改）。
+- **要决定下一步做哪一项** → [next](/skills/skills-reference/medium/next/)；**要维护 TODO** → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。
+
+## 前置条件
+
+三条门槛：
+
+1. **你要的是位置，不是实现**。要求变成代码时，导航证据只是输入，动手交给开发类 Skill。
+2. **有一个具体的定位目标**——某个入口、模块、组件或参照实现。"看看这个项目"换来的会是一份没有重点的目录清单。
+3. **不是整体概览，也不是架构设计**。这两件事各有各的 Skill，混进来只会让输出变长而不变准。
+
+目标仓库存在 `PROJECT-MEMORY.md` 时，它先读 Quick facts、Reuse map 和 Boundaries，再按当前功能定向找入口和相邻实现——省掉每次从零全量扫的成本。
+
+## 怎么用
+
+发现顺序是五步：确认扫描根与规则作用域 → 从真实构建清单识别技术栈与模块边界 → 从入口、路由、配置、迁移和源码根确认目录职责 → 按字面量定位目标再核对定义、生产调用与测试 → 比较相邻实现，输出最小索引和未找到项。
+
+### 第一步最容易被跳过：分清三个根
+
+- **工作区根**：用户或执行环境明确授权的最外层边界；
+- **Git 根**：目标路径所属仓库的根，Git 不可用时记为 `unavailable`；
+- **扫描根**：本次搜索的最窄根，通常取目标所属的 Git 根，或你指定的子目录。
+
+为什么必须分开：规则文件要沿目标路径的祖先链一直读到工作区根，内层规则按目录作用域盖住外层；而 Git 根只用来判断仓库状态、历史和构建清单归属，不能拿它把工作区级的团队规则截断掉。多仓或嵌套仓库要对目标路径单独解析真实 Git 根，父仓库的状态代替不了子仓库。
+
+```bash
+pwd
+git rev-parse --show-toplevel 2>/dev/null
+git status --short 2>/dev/null
+```
+
+Git 不可用时它仍然能在扫描根里导航，但会注明缺少历史与工作树证据。README、贡献指南和模块说明也要逐层取证，不能把兄弟模块或子模块的说明套到目标文件上。
+
+### 搜索先用字面量，不轻易上正则
+
+文件名、路由、配置键、表名、Topic，以及你给出的类名或符号，默认都按字面量匹配（`rg -F`）。确实需要正则时，先验证目标语言的标识符语法或做完整转义，并在输出里注明用了正则。输入以 `-` 开头时用 `--` 终止选项。用户输入不拼进正则、SQL、路径、URL 或 shell 命令；命令里的占位符是参数模板，要作为独立且已转义的参数传入。
+
+### 找到候选之后还有三件事
+
+1. 打开定义，确认签名、导出方式、包或模块归属，以及它实际负责什么。
+2. 找同模块里的生产调用。找不到就写"未找到生产调用"——文件名推断不出"还在用"。
+3. 找相关测试。没有就写"未找到相关测试"，不顺手补一个。
+
+技术专属的搜索模式只在构建清单和依赖证明了对应技术栈之后才启用。Java / Spring 的包名从 `package` 声明确认，不假设存在 DAO、Mapper、BO/VO、统一返回体、多租户基类或固定转换工具；Node / Web 的路由、组件库、状态管理、请求层和构建脚本同样从依赖和源码确认，不在大仓库里无条件搜 `export default`。
+
+<Aside type="caution">
+模块数量、工作区关系和源码根只来自本次扫描结果。它不会输出没扫过的完整目录树，也不会把扫描范围之外的文件写成"不存在"；包名、模块名、端口、表前缀、配置文件和完成状态都不写死。
+</Aside>
+
+### 参照实现按优先级挑
+
+1. 同模块、同业务动作，且仍有生产调用的实现；
+2. 同框架、同数据类型，错误与权限语义一致的相邻实现；
+3. 有现成测试作证的公共实现；
+4. Git 可用且提交历史能证明时，把"最近还在维护"作为辅助因素；
+5. Skill 里的示例只作最后候选。
+
+多个候选并存时，它会把依赖、数据类型、权限、错误处理、测试和维护情况的差异列出来，再说明为什么选这一个；Git 不可用时，维护时间一律标为未确认。
+
+## 与其他 Skill 的关系
+
+**上游（before）**：[init-docs](/skills/skills-reference/medium/init-docs/)——项目记忆先立起来，导航才有起点。
+
+**下游（after）**：[universal-development](/skills/skills-reference/low/universal-development/)、[code-patterns](/skills/skills-reference/low/code-patterns/)
+
+**协作（complement）**：[find-skills](/skills/skills-reference/medium/find-skills/)、[utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)
+
+```text
+init-docs（项目记忆）
+  → project-navigator（三个根 → 构建清单 → 目录职责 → 字面量定位 → 定义/调用/测试 → 参照实现）
+      ├─ find-skills（缺的是哪种能力）
+      └─ utils-toolkit（工具类选型与签名核对）
+            ├─ code-patterns（把约定提炼成规范）
+            └─ dev / universal-development（开始动代码）
+```
+
+已经有 TODO 时，它把导航证据交回 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 的 owner，不自己排下一步。协作 Skill 没安装时，它返回已有的定位证据加缺失的能力说明，不把兄弟 Skill 当成自己的运行时文件依赖。
+
+## 产出与验收
+
+输出模板是固定的：
+
+- **扫描边界**：三个根、目标范围、排除目录，以及关键命令和它们的结果摘要；
+- **已确认事实**：路径 + 职责或约定 + 证据类型（构建清单 / 源码 / 配置 / 调用方）；
+- **目标位置**：定义、生产调用、测试、配置或迁移，各自给路径和行号，或者明确写"未找到""不适用"；
+- **候选参照实现**：候选、差异、选择依据三列；
+- **待确认假设与未找到项**：每条附上验证用的命令或文件；
+- **通用建议**：单独一节，明示它不代表本仓库事实。
+
+判断真的完成了：每个结论都能点到具体路径和行号；"没找到"是写出来的，不是省略掉的；已确认事实和待确认假设没有混在一句话里；单次扫描的结果没有被升级成通用默认。
+
+

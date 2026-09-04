@@ -1,0 +1,233 @@
+---
+title: Agent 架构治理（agent-optimizer）
+description: 用 12-Factor AgentOps 框架设计或审查多 Agent 架构、上下文边界与协作治理，定位跨 Skill 的结构性问题
+order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+Agent 跑偏，通常不是模型不够聪明，而是编排有结构问题：上下文早就塞满了、一个会话同时揣着三件事、让干活的人自己验收自己、worker 报了完成但 diff 对不上。
+
+`agent-optimizer` 把这类症状对回**具体违反了哪条工程原则**，然后给结构性改法。它不是逐条打补丁——同一个症状你打三次补丁还会有第四次。
+
+管的是跨 Skill、跨 Agent、跨工作流的整体形状：哪段上下文归谁、任务边界怎么切、验收由谁做、并发怎么隔离、失败往哪升。单个 Skill 内部怎么写不在这里。它是审查和咨询角色，不写业务代码、不定产品、不维护任务状态。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "帮我看下这套 Agent 架构有没有问题" | 已有多 Agent / 多 Skill 编排，要整体审一遍 |
+| "一个会话做了太多事，是不是该拆" | 任务边界与上下文饱和 |
+| "这两个 Feature 能不能同时开两个 Agent 做" | 并发单元与写集隔离的判断 |
+| "让 Agent 自己检查自己行不行" | 验收该由谁执行 |
+| "所有东西都塞进 system prompt 了" | 上下文预算与分阶段加载 |
+| "worker 说完成，但我看 diff 不是那样" | 监督层级与对账责任归谁 |
+| "它一直重试，就是不告诉我卡住了" | 重试预算与升级路径 |
+| "subagent 干完一件就在那闲着" | 常驻 worker 的领活与回收 |
+
+## 什么时候不要用
+
+- **只想改某一个 Skill 的触发词、流程或门槛** → [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)。本 Skill 不下沉到单个执行体内部。
+- **要新建一个 Skill 或重排 Skill 目录** → [skill-creator](/skills/skills-reference/medium/skill-creator/)。
+- **同一个毛病反复出现，要变成长期公共规则** → [skill-evolution](/skills/skills-reference/low/skill-evolution/)。
+- **要写实现代码** → [universal-development](/skills/skills-reference/low/universal-development/) 或对应专业 Skill。
+- **要定产品做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **要划业务系统的模块和部署边界** → [architecture-design](/skills/skills-reference/high/architecture-design/)。那是业务系统的架构，这里管的是 Agent 之间的协作架构。
+
+## 前置条件
+
+没有硬门槛，任何时候都能拿来做一次架构咨询。但有两件事决定结论有没有用：
+
+**得有能核对的事实。** 结论要落在真实存在的 Skill、Hook、TODO 结构和真实发生过的执行上。凭一段口头描述评价一套看不见的编排，给出来的只能是通用建议。
+
+**TODO 是有则回写、无则不建。** 当前请求已经有 TODO 时，审查结论回写进去；没有 TODO 时它只在回复里给结论，不替你开任务。要把架构结论变成可领取的任务项，那一步属于 [project-manager](/skills/skills-reference/high/project-manager/) 和 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。
+
+## 它用什么视角看问题
+
+诊断依据是公开框架 **12-Factor AgentOps**（`https://www.12factoragentops.com`），分四层：
+
+| 层 | 这一层在问什么 |
+| --- | --- |
+| 基础层 | 上下文归谁管、可复算的事实存在哪、一个执行体同时揣几件事 |
+| 质量层 | 动手前调研够不够、验收由谁做、通过的成果会不会被回退 |
+| 学习层 | 什么样的经验值得留下、留下的东西还能不能被检索到、拿什么指标算成功 |
+| 规模层 | 工作单元怎么隔离、升级往哪走、失败之后剩下什么 |
+
+每个因素的详细说明在 Skill 目录的 `references/` 下按因素分文件保存，诊断时只读相关的那一两份，不整包加载。
+
+所以它的产出总是"症状 → 违反了哪一条 → 结构上怎么改"这个形状，而不是一串零散建议。
+
+## 使用示例
+
+### 场景 1：一个会话什么都干
+
+**你的输入**：
+
+```text
+我这个会话现在同时在做订单导出、权限重构和一个前端弹窗，
+到后面它开始混着改，改完的东西自己都对不上了。这架构是不是有问题？
+```
+
+**你会拿到的产出**：
+
+```text
+## 症状
+单个执行实例同时持有 3 个可执行 Feature，后期出现跨 Feature 串改
+
+## 违反
+基础层 · 一个执行体一件事      → 三个 Feature 的上下文互相污染
+基础层 · 上下文即一切          → 三份需求 + 三份 diff 挤在同一窗口
+
+## 结构性改法
+1. 一个执行实例同一时刻只持有一个可执行 Feature，做完再领下一个
+2. 三个 Feature 里 ORDER-EXPORT 与 PERM-REFACTOR 都要改
+   src/order/service/，写集重叠，不能并行 → 串行
+3. FE-DIALOG 写集为 src/web/components/order-dialog/，与上面互斥
+   → 可以另开一个实例并行
+4. 上下文分阶段加载：领取时只读当前 Feature 的需求出处和直接调用链，
+   不预载另外两个 Feature 的材料
+
+## 回写位置
+已回写 docs/tanner/tasks/todo/order-center.md 的对应三项
+```
+
+### 场景 2：worker 说完成，diff 不是那样
+
+**你的输入**：
+
+```text
+subagent 回来说三个文件都改好了，我一看 git diff 只有一个文件动了。
+这种事怎么防？
+```
+
+**你会拿到的产出**：
+
+```text
+## 症状
+把 worker 的自报结果当成了验收证据
+
+## 违反
+质量层 · 验收不能自评          → 干活的人同时是验收的人
+基础层 · 事实要可复算          → 「完成」这个结论没有对应的可核对痕迹
+
+## 结构性改法
+1. 主 Agent 判定完成的依据换成真实的 git status / git diff 和提交树，
+   worker 回复里的文件清单只作为线索，不作为结论
+2. 对账不通过时，退回同一个 worker 补齐，而不是自己接着往下走
+3. worker 的最后一次回复固定交出：改了哪些文件、覆盖了哪些验收、
+   跑了什么命令拿到什么结果、还有什么没解决——不另开交接文件
+
+## 未验证边界
+未确认你的 worker 是否在独立 worktree 内工作；若是，对账要在主 checkout 做
+```
+
+<Aside type="danger">
+TODO 状态只有一个写入位置：主 checkout。独立 worktree 可以隔离生产实现，但不参与领活、标完成、标阻塞和释放。这条一旦破掉，你会得到两份互相覆盖的进度，而且很难看出是哪一次覆盖丢了状态。
+</Aside>
+
+### 场景 3：这两件事能不能并行
+
+**你的输入**：
+
+```text
+USER-PROFILE 和 USER-AVATAR 我想同时开两个 Agent 做，行吗？
+```
+
+**你会拿到的产出**：
+
+```text
+## 判断：不能，先串行
+
+依赖    USER-AVATAR 依赖 USER-PROFILE 的用户详情接口，
+        该项当前是进行中，不是已完成 → 下游拿不到稳定契约
+
+写集    两者都要改 src/user/service/ 和 db/migration/
+        → 目录前缀重叠，并行会产生迁移冲突
+
+## 可行的拆法
+USER-PROFILE 先做完并远端可见 → USER-AVATAR 再开
+若确需并行，先把 USER-PROFILE 的接口契约单独提为一个前置项交付，
+之后两者写集才可能互斥
+
+## 顺带一条
+不要把 backend / frontend / Review / Git 拆成四个并行任务，
+那不是并行单元，只是把一个纵向交付切成互相等待的四段
+```
+
+### 场景 4：它一直重试，就是不说卡住了
+
+**你的输入**：
+
+```text
+昨天它在同一个报错上试了十几次，每次都是同一条命令，最后我自己发现的。
+```
+
+**你会拿到的产出**：
+
+```text
+## 症状
+无新增信息的重复尝试，且失败没有向上传递
+
+## 违反
+规模层 · 升级路径              → 卡住之后没有往上报
+学习层 · 从失败中取信息        → 每次重试没有改变任何可证伪的假设
+
+## 结构性改法
+1. 同一方法设重试预算，且每次重试必须带来新证据或改掉一个假设；
+   原样重跑同一条命令不算新的一次
+2. 触发升级的情形写死：连续同根因失败、依赖或写集冲突、验收漂移、
+   越界、拿不到必需证据
+3. 升级只向上走，交给唯一的上级；不横向丢给另一个 worker 继续盲试
+4. 失败随交接一起上报，重复出现的根因才进长期知识
+```
+
+## 与其他 Skill 的关系
+
+**对照面**：[architecture-design](/skills/skills-reference/high/architecture-design/)（业务系统架构）、[tech-decision](/skills/skills-reference/high/tech-decision/)（具体技术选择的收口）
+
+**落地面**：[skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)（把结论改进某一个 Skill）、[skill-evolution](/skills/skills-reference/low/skill-evolution/)（重复根因转长期规则）、[skill-creator](/skills/skills-reference/medium/skill-creator/)（确实缺承接者时新建）
+
+**协作**：[code-review](/skills/skills-reference/high/code-review/)（外部验收的默认入口）、[experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/)（经验的出口）
+
+```text
+观察到 Agent 的失败行为
+    → agent-optimizer            定位违反项 + 结构性改法
+        ├→ skill-optimizer       单个 Skill 直接改
+        ├→ skill-evolution       重复根因转长期规则
+        └→ skill-creator         确需新增能力
+    → code-review                一次外部验收
+```
+
+## 常见坑
+
+**只说"Agent 表现不好"。** 没有可观察行为它只能泛泛而谈。说清哪个执行实例、在哪一步、做了什么、你期望什么，诊断就能落到具体因素上。
+
+**把它当成实现者。** 它给的是架构结论，不会顺手把编排改完。改动落地要走 [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) 或对应 Skill。
+
+**拿并发当加速手段。** 把一个纵向功能横切成"后端 / 前端 / Review / 提交"四个并行任务，得到的是四个互相等待的半成品加一份对不上的状态。
+
+**在 worktree 里维护 TODO。** 隔离实现是对的，隔离状态是错的——两份进度互相覆盖之后，很难判断丢的是哪一次。
+
+**让干活的人自己验收。** 自评永远通过。外部验收哪怕只有一次，价值也高于十次自查。
+
+## 最佳实践
+
+- **带着一段真实的执行记录来。** 一段真实日志或一次真实 diff，比十句描述有用。
+- **一次问一个症状。** 混着问会得到混着的结论，你也没法验证哪条建议真的解决了问题。
+- **拿到结论先看"违反了哪一条"。** 每条建议都应该能指回一个具体因素；指不回去的建议，通常是猜的。
+- **需要落成任务时明说。** 它不会替你开任务；要变成可领取的事项，接 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。
+
+<Aside type="caution">
+架构审查本身不构成任何写入授权。未经你明确同意，它不执行 Git 操作、不发布、不做破坏性数据动作。
+</Aside>
+
+## 下一步
+
+- [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) - 把结论落到某一个 Skill
+- [skill-evolution](/skills/skills-reference/low/skill-evolution/) - 重复根因转长期规则
+- [architecture-design](/skills/skills-reference/high/architecture-design/) - 业务系统的架构边界
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) - 把结论变成可领取的事项
+- [code-review](/skills/skills-reference/high/code-review/) - 外部验收的默认入口
+

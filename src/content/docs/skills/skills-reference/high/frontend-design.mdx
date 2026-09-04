@@ -1,580 +1,150 @@
 ---
-title: frontend-design
+title: 前端设计 - frontend-design
 description: 前端设计 - 建立可实施的 UI/UX 设计基线
 order: 16
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+import { Aside } from '@astrojs/starlight/components';
 
 ## 概述
 
-`frontend-design` 是 **High 优先级** Skill，负责为新增或重构界面建立 UI/UX 设计基线，定义页面结构、交互、状态与约束。
+一份"看起来没问题"的设计交到实现手上之后，写代码的人还要当场决定十几件事：没数据的时候这块显示什么、请求慢了给不给骨架屏、没权限时按钮是灰的还是不见、备注写了两千字怎么截、提交失败能不能重试。这些当场拍的决定，就是后面返工的来源——它们全都属于设计，只是没人写下来。
 
-**适用场景**：
-- 新页面或重构页面设计
-- 复杂交互存在歧义
-- 客户要求先审设计
-- 用户明确要求页面设计
+`frontend-design` 的产出不是稿子，是一份让实现不用猜的设计基线（DesignContract）：每个表面写清入口与用户任务、信息层级、真实数据形状、布局与断点规则、每个动作的行为与权限与后端契约、必须覆盖的状态、无障碍与动效边界，最后附上实现完成后必须真实渲染出来的验证清单。
 
-**不适用场景**：
-- 已有页面的纯视觉精修 → 使用 `frontend-polish`
-- 代码实现 → 使用 `ui-pc` 或 `ui-app`
-- 产品定义 → 使用 `product-manager`
-- 后端 API 设计 → 使用 `api-development`
+它不写生产页面代码，也不选框架、组件库、请求层或桌面壳——那些属于技术决策。真实效果由 [ui-pc](/skills/skills-reference/high/ui-pc/) 和 [ui-app](/skills/skills-reference/high/ui-app/) 落地。
 
-## 快速开始
+## 什么时候用
 
-### 设计新页面的完整流程
+| 你会这样说 | 场景 |
+| --- | --- |
+| "做一个订单列表和订单详情" | 新增界面的结构、交互与状态基线 |
+| "这个页面要重构一下" | 已有界面的行为或结构要变，基线需要重定 |
+| "这块交互我说不清该怎么定" | 关键交互存在歧义，先把契约定死再实现 |
+| "客户想先看设计再开发" | 先审设计的交付模式 |
+| "后端接口有了，前端怎么接" | 后端功能对应的入口、状态、权限反馈与恢复路径 |
+| "这个图表组件能不能支持下钻" | 会实质改变布局、成本或验收的技术未知，走可行性探针 |
 
-```bash
-# 1. 确认产品定义已完成
-# 查看 TODO 中的功能描述、用户结果、验收条件
+触发面覆盖界面设计、交互定义、状态与权限表达这一类说法，中英文都收；具体触发词由 Skill 自己的 frontmatter 维护。
 
-# 2. 消费 brainstorm 结论（如有）
-# 不在设计阶段重复发散
+## 什么时候不要用
 
-# 3. 开始设计
-"设计用户列表页面"
-"设计订单管理界面"
+- **已有界面只是不好看、不顺手，行为不变** → [frontend-polish](/skills/skills-reference/high/frontend-polish/)。分界很清楚：从零设计新界面、或者重构会改变行为的界面，归本 Skill；已有实现的视觉与手感打磨，归它。走错的代价是本来复用现有基线就能改完的事，被重新定了一遍基线。
+- **要把设计写成页面代码** → [ui-pc](/skills/skills-reference/high/ui-pc/)（PC/管理端）或 [ui-app](/skills/skills-reference/high/ui-app/)（移动与跨端）。
+- **产品目标或业务规则本身还不清** → [product-manager](/skills/skills-reference/critical/product-manager/)。设计不替产品做决定。
+- **还在比几个方案，没收敛** → [brainstorm](/skills/skills-reference/medium/brainstorm/)。收敛之后再进本 Skill，否则会在设计阶段第二次发散。
+- **要定具体技术、版本、组件库** → [tech-decision](/skills/skills-reference/high/tech-decision/)；**要定接口契约** → [api-development](/skills/skills-reference/high/api-development/)；**要定表结构** → [database-design](/skills/skills-reference/high/database-design/)。
+- **只想审现有动效** → [review-animations](/skills/skills-reference/low/review-animations/)；**只想把模糊的动效描述换成准确术语** → [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)。
+- **要在 Penpot 里画出可点的原型** → [penpot-prototype](/skills/skills-reference/low/penpot-prototype/)。文字规格不等于原型，不能互相冒充。
+- **要品牌视觉规范** → [brand-guidelines](/skills/skills-reference/low/brand-guidelines/)；**要海报或艺术图** → [canvas-design](/skills/skills-reference/low/canvas-design/)。
+- **纯后端，且批准需求或架构边界能证明没有客户端** → 不为它创建设计任务。
 
-# 4. 确认关键交互决策
-# 只在无法取证且会实质改变设计时询问
+## 前置条件
 
-# 5. 输出设计基线
-# 更新项目设计文档或 TODO
+三条门槛，每条都在挡一种具体的失败。
 
-# 6. 交给实现 Skill
-/ui-pc    # PC/管理端
-/ui-app   # 跨端应用
-```
+1. **完整的产品定义已经消费过了，或者已经明确这次不需要产品构思。** 缺这一条，设计就会顺手替产品做决定——多出一个"批量导入"，或者把"不支持第三方登录"悄悄改成支持。
+2. **批准的交付面确实包含 Web / App / Desktop。** 纯后端不需要设计任务；硬做一份，实现阶段没人会读。
+3. **这不是已有页面的纯视觉精修。** 那种情况复用现有基线直接改更快。
 
-## 使用示例
+进入之后还有一道事实门禁：先读用户约束、产品大纲、批准交付面、仓库规则、构建与锁文件、路由、设计 tokens、相邻的生产页面和真实内容，然后把手上的信息分成三档——**已确认事实**，用户、仓库或批准需求里有证据；**待确认假设**，缺了它，页面结构、交互、权限、数据形状或验收条件里至少有一项定不下来；**通用候选**，只在发散时借用，不能冒充这个项目已有的事实。
 
-### 场景 1：设计用户管理页面
+<Aside type="danger">
+不能从示例反推项目：框架、组件库、主题数量、目标 viewport、用 Modal 还是 Drawer、桌面壳形态、页面结构、品牌——这些都必须从仓库或批准需求取证。技术可行性可以作为设计输入，但具体技术由 [tech-decision](/skills/skills-reference/high/tech-decision/) 冻结。
+</Aside>
 
-**输入**：
-```
-需要设计一个用户管理页面，包括用户列表、搜索、编辑和删除功能
-```
+## 怎么用
 
-**设计流程**：
+### 1. 消费构思，不重复发散
 
-1. **明确产品意图**：
-```yaml
-productIntent:
-  users: ["管理员"]
-  tasks: ["查看用户列表", "搜索用户", "编辑用户信息", "删除用户"]
-  success: ["快速找到目标用户", "准确修改信息", "安全删除"]
-  nonGoals: ["用户注册", "批量导入", "权限分配"]
-```
+规划里做过一次的候选、取舍和选中方向直接拿来用；在选中的那个方向里面再比一比信息层级、布局和交互表达，给出推荐做法、被淘汰的做法、各自适用的条件和风险。这一层取舍不允许改变用户结果、业务规则、权限或交付范围。真发现了新的实质方案空间，返回 `scope-change-detected`，交 [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 决定要不要回到产品构思——设计不自己扩范围。
 
-2. **定义页面结构**：
-```yaml
-surfaces:
-  - surfaceId: "user-list"
-    routeOrEntry: "/user/list"
-    purpose: "帮助管理员查看、搜索和管理用户"
-    informationHierarchy:
-      - "搜索筛选区（邮箱、手机、状态）"
-      - "用户表格（ID、姓名、邮箱、手机、状态、创建时间）"
-      - "操作列（编辑、删除）"
-    realContentAndDataShape:
-      - "用户 ID: Long 雪花 ID"
-      - "姓名: String, 最长 50 字符"
-      - "邮箱: String, 符合邮箱格式"
-      - "手机: String, 11 位数字"
-      - "状态: Enum (ACTIVE, INACTIVE, BANNED)"
-      - "创建时间: DateTime, yyyy-MM-dd HH:mm:ss"
-    layoutAndResponsiveRules:
-      - "1920×1080: 3 列筛选 + 完整表格"
-      - "1366×768: 2 列筛选 + 表格收缩非关键列"
-      - "移动端: 单列筛选 + 卡片列表"
-```
+能从需求、仓库、设计系统或平台事实查出来的，直接取证不问人。只有查不到、且会实质改变已选设计结果的决定才走 [grilling](/skills/skills-reference/medium/grilling/)，一次一个问题，带推荐答案和取舍。
 
-3. **定义组件和动作**：
-```yaml
-componentsAndActions:
-  - actionId: "search-user"
-    label: "搜索"
-    behavior: "输入条件 → 点击搜索 → Loading → 显示结果"
-    permission: "user:query"
-    backendContract: "GET /api/v1/users?email=&phone=&status="
-  
-  - actionId: "edit-user"
-    label: "编辑"
-    behavior: "点击编辑 → 打开 Dialog → 修改信息 → 保存 → 刷新列表"
-    permission: "user:update"
-    backendContract: "PUT /api/v1/users/{id}"
-  
-  - actionId: "delete-user"
-    label: "删除"
-    behavior: "点击删除 → 二次确认 → 提交 → 成功提示 → 刷新列表"
-    permission: "user:delete"
-    backendContract: "DELETE /api/v1/users/{id}"
-```
+### 2. 把基线写成实现能照着做的形状
 
-4. **定义状态**：
-```yaml
-states:
-  - default: "默认显示，表格和筛选正常"
-  - loading: "搜索中，表格显示 Loading"
-  - empty: "无数据，显示空状态提示"
-  - error: "请求失败，显示错误信息和重试按钮"
-  - success: "操作成功，显示成功提示"
-  - hover: "鼠标悬停时，行高亮"
-  - focus-visible: "键盘焦点时，显示焦点框"
-  - disabled: "无权限时，按钮禁用"
-```
-
-5. **无障碍和动效**：
-```yaml
-accessibility:
-  - "支持键盘导航（Tab、Enter、Escape）"
-  - "焦点状态清晰可见"
-  - "表格使用语义化标签（table、thead、tbody）"
-  - "操作按钮有明确的 aria-label"
-  - "颜色对比度符合 WCAG AA 标准"
-
-motion:
-  - "表格加载：骨架屏渐显"
-  - "删除确认：Dialog 淡入淡出"
-  - "操作成功：Toast 提示从顶部滑入"
-  - "支持 prefers-reduced-motion"
-```
-
-### 场景 2：设计订单详情页
-
-**输入**：
-```
-设计订单详情页，显示订单信息、商品列表、物流信息和操作
-```
-
-**设计输出**：
+字段不适用就省略，但下面这些一旦缺失，实现就得靠猜：
 
 ```yaml
 designBaseline:
-  productIntent:
-    users: ["客服人员", "订单管理员"]
-    tasks: ["查看订单完整信息", "修改订单状态", "联系客户", "处理退款"]
-    success: ["快速了解订单情况", "准确处理订单问题"]
-    nonGoals: ["创建订单", "批量导出", "统计分析"]
-
+  productIntent:      # 角色、核心任务、可观察的成功结果、明确不做的事
   surfaces:
-    - surfaceId: "order-detail"
-      routeOrEntry: "/order/detail/:id"
-      purpose: "帮助客服和管理员查看和处理订单"
-      informationHierarchy:
-        - "订单基本信息（订单号、状态、金额、下单时间）"
-        - "商品列表（商品名、数量、单价、小计）"
-        - "收货信息（收货人、手机、地址）"
-        - "物流信息（物流公司、运单号、物流状态）"
-        - "操作区（修改状态、联系客户、退款）"
-      realContentAndDataShape:
-        - "订单号: String, 20 位"
-        - "状态: Enum (PENDING, PAID, SHIPPED, COMPLETED, CANCELLED)"
-        - "金额: Decimal(10,2), 单位元"
-        - "商品: Array<{name, quantity, price, subtotal}>"
-        - "物流: {company, trackingNumber, status, updateTime}"
-      layoutAndResponsiveRules:
-        - "1920×1080: 两栏布局，左侧主信息，右侧操作和时间线"
-        - "1366×768: 单栏布局，操作区固定在顶部"
-        - "移动端: 单栏布局，操作区底部悬浮"
+    - surfaceId:      # 页面/窗口标识与真实（或待创建）入口
+      purpose:        # 这个表面帮谁完成什么
+      informationHierarchy:      # 内容顺序与优先级
+      realContentAndDataShape:   # 字段、列表、图表、单位、长文本的真实形状
+      layoutAndResponsiveRules:  # 布局、断点、滚动与密度
       componentsAndActions:
-        - actionId: "update-status"
-          label: "修改状态"
-          behavior: "选择新状态 → 确认 → 提交 → 刷新详情"
-          permission: "order:update"
-          backendContract: "PUT /api/v1/orders/{id}/status"
-        - actionId: "refund"
-          label: "退款"
-          behavior: "输入退款金额和原因 → 二次确认 → 提交 → 等待审核"
-          permission: "order:refund"
-          backendContract: "POST /api/v1/orders/{id}/refund"
-      states:
-        - default: "正常显示订单信息"
-        - loading: "加载中，显示骨架屏"
-        - empty: "订单不存在，显示 404 提示"
-        - error: "加载失败，显示错误信息和返回按钮"
-        - pending: "操作进行中，按钮禁用"
-        - success: "操作成功，显示成功提示"
-      accessibility:
-        - "面包屑导航，返回列表页"
-        - "状态徽章有语义化颜色和文本"
-        - "金额格式化，千分位分隔"
-        - "手机号脱敏，仅显示前 3 后 4 位"
-        - "操作需要二次确认，防止误操作"
-
-  designSystem:
-    reuse:
-      - "El-Card / Card 组件"
-      - "El-Table / Table 组件"
-      - "El-Button / Button 组件"
-      - "El-Dialog / Modal 组件"
-      - "项目主题 tokens"
-    additions:
-      - "订单状态徽章颜色: PENDING=orange, PAID=blue, SHIPPED=cyan, COMPLETED=green, CANCELLED=gray"
-      - "时间线组件（如项目中不存在）"
-  
-  verification:
-    targetViewportsOrDevices:
-      - "1920×1080 (管理员常用)"
-      - "1366×768 (客服常用)"
-      - "iPad (移动办公)"
-    requiredStates:
-      - "订单各状态正常显示"
-      - "修改状态 Dialog 正常打开"
-      - "退款 Dialog 正常打开和提交"
-      - "加载和错误状态正常"
-    unresolvedBoundaries:
-      - "物流信息实时更新机制待后端确认"
-      - "退款审核流程待产品确认"
+        - actionId:   # 稳定动作 ID
+          behavior:   # 触发、确认、反馈、恢复
+          permission: # 真实权限语义
+          backendContract:  # 接口/IPC/事件绑定，或标注待冻结
+      states:         # default / loading / empty / error / success + 适用的交互态
+      accessibility:  # 键盘与触控、焦点、语义、对比度、reduced preferences
+      motion:         # 目的、触发、可中断、性能、reduced-motion；不适用则省略
+  designSystem:       # 可复用的组件/tokens/字体/图表，以及确有必要的新增项及原因
+  feasibilityProbe:   # 见下一节
+  verification:       # 目标 viewport/设备、实现后必须真实渲染的状态、未闭合边界
 ```
 
-### 场景 3：设计数据看板
+基线可以直接写进已有设计文件、Issue、项目文档或那份唯一 TODO，不要求另起一份 Markdown。主题数量按项目实际需要，不固定两套。
 
-**输入**：
-```
-设计销售数据看板，展示销售趋势、top 商品和地区分布
-```
+### 3. 可行性未知用探针挂起，而不是回避
 
-**设计输出**：
+`feasibilityProbe` 只解决"会实质改变设计"的最小技术未知，它有五个状态，含义各不相同：
 
-```yaml
-designBaseline:
-  productIntent:
-    users: ["销售总监", "运营人员"]
-    tasks: ["查看销售趋势", "分析 top 商品", "对比地区销售"]
-    success: ["快速发现异常", "辅助决策", "定位问题区域"]
-    nonGoals: ["数据导出", "明细查询", "实时刷新"]
-
-  surfaces:
-    - surfaceId: "sales-dashboard"
-      routeOrEntry: "/dashboard/sales"
-      purpose: "帮助管理层快速了解销售情况"
-      informationHierarchy:
-        - "关键指标卡片（今日销售额、订单数、客单价、环比增长）"
-        - "销售趋势图（最近 30 天销售额和订单量）"
-        - "Top 10 商品（商品名、销售额、销量、占比）"
-        - "地区分布地图（各省销售额热力图）"
-      realContentAndDataShape:
-        - "销售额: Decimal(12,2), 单位元"
-        - "订单数: Integer"
-        - "客单价: Decimal(8,2), 计算值"
-        - "环比增长: Decimal(5,2), 百分比"
-        - "趋势数据: Array<{date, sales, orders}>"
-        - "商品数据: Array<{name, sales, quantity, percentage}>"
-        - "地区数据: Map<provinceCode, sales>"
-      layoutAndResponsiveRules:
-        - "1920×1080: 2×2 网格 + 趋势图全宽 + 2 列图表"
-        - "1366×768: 单列布局，图表堆叠"
-      componentsAndActions:
-        - actionId: "change-date-range"
-          label: "切换时间范围"
-          behavior: "选择日期范围 → 重新加载数据 → 更新图表"
-          permission: "dashboard:view"
-          backendContract: "GET /api/v1/dashboard/sales?startDate=&endDate="
-        - actionId: "drill-down"
-          label: "下钻"
-          behavior: "点击地区 → 跳转地区详情页"
-          permission: "dashboard:view"
-          backendContract: "路由跳转 /region/detail/{code}"
-      states:
-        - default: "正常显示数据和图表"
-        - loading: "首屏加载，显示骨架屏"
-        - empty: "无数据，显示空状态提示"
-        - error: "加载失败，显示错误信息和重试"
-        - refreshing: "刷新中，显示局部 Loading"
-      accessibility:
-        - "关键指标使用大字号和高对比度"
-        - "图表提供数据表格备用视图"
-        - "颜色不作为唯一区分手段"
-        - "支持键盘导航和焦点管理"
-      motion:
-        - "指标卡片：数字滚动动画"
-        - "趋势图：线条绘制动画"
-        - "地图：热力渐变动画"
-        - "支持 prefers-reduced-motion（直接显示最终状态）"
-
-  designSystem:
-    reuse:
-      - "项目图表库（ECharts / VChart）"
-      - "栅格布局系统"
-      - "主题 tokens"
-    additions:
-      - "指标卡片组件（如不存在）"
-      - "地图组件配置"
-  
-  feasibilityProbe:
-    status: "pending-g2"
-    question: "地图组件是否支持省级热力图和点击下钻？"
-    ownerSkill: "tech-decision"
-    evidence: "待验证图表库的地图插件和交互能力"
-    fallbackDesign: "如地图不可用，改用表格 + 柱状图展示地区销售"
-  
-  verification:
-    targetViewportsOrDevices:
-      - "1920×1080 (管理层常用大屏)"
-      - "1366×768 (运营人员常用屏幕)"
-    requiredStates:
-      - "指标卡片正常显示和更新"
-      - "趋势图正常渲染和交互"
-      - "Top 商品表格正常显示"
-      - "地图（或降级方案）正常显示"
-      - "日期范围切换正常工作"
-    unresolvedBoundaries:
-      - "数据更新频率待产品确认"
-      - "地图技术可行性待 tech-decision 验证"
+```text
+not-required       没有会改变设计的未知
+pending-g2         已挂起，交 architecture-design / tech-decision 取证
+passed             证据到手，设计不变
+fallback-selected  证据不支持，采用已批准的降级方向并递增设计版本
+failed             未闭合状态——开发者不得现场改版
 ```
 
-## 关键规则
+`pending-g2` 允许先交项目经理拆依赖图，但受影响的功能必须等状态变成 `passed` 或 `fallback-selected` 才能进入可执行队列。这一条的意义是：不确定的地方被显式挂着，而不是在实现阶段变成某个人的临时决定。
 
-### 1. 消费产品定义，不重复发散
+### 4. 后端有入口，页面就必须同时定
 
-```markdown
-<!-- 正确: 消费 brainstorm 结论 -->
-brainstorm 已选中: 列表页 + 筛选 + 批量操作
-→ frontend-design 直接设计列表页交互和状态
+批准范围里的后端功能只要存在界面或交互入口，设计必须同时给出：它对应哪个表面、哪个入口、用户在那里完成什么任务；接口或 IPC 在哪一处被消费、返回的数据长什么形状、权限不足时给什么反馈；加载中、空、出错、成功这四种表现，加上这个平台上适用的交互态；提交、撤销、重试、重复操作和异常之后的恢复路径；以及实现完成后要跑一遍的真实主路径。
 
-<!-- 错误: 重复发散 -->
-frontend-design 又开始比较: 列表 vs 卡片 vs 看板
-→ 浪费时间，产生冲突
-```
+<Aside type="caution">
+缺了对应页面设计，项目经理就不该把这个后端功能拆成"后端先做完、前端以后再说"的完整交付——那样勾上的格子不代表用户能用上任何东西。纯后端只有在批准需求或架构边界明确证明没有客户端时才裁剪。
+</Aside>
 
-### 2. 真实产品而非模板
+### 5. 硬门禁：真实产品，不是模板
 
-```markdown
-<!-- 正确: 基于真实任务 -->
-- 用户角色: 客服人员
-- 核心任务: 快速查找订单并处理问题
-- 信息密度: 高（需要扫描大量订单）
-- 主要输入: 键盘为主，鼠标辅助
-→ 设计: 强大的筛选 + 快捷键 + 批量操作
-
-<!-- 错误: 套用模板 -->
-- 用户角色: 不明确
-- 设计: Hero + 三列卡片 + 紫蓝渐变
-→ 不符合实际需求
-```
-
-### 3. 状态、权限与恢复
-
-```markdown
-必须覆盖的状态:
-- default: 正常状态
-- loading: 加载中
-- empty: 无数据
-- error: 错误
-- success: 成功
-- 适用的交互状态: hover, focus-visible, disabled, pending
-
-权限处理:
-- 前端权限只负责界面体验
-- 不能因为按钮不可见就请求未授权数据
-- 必须有后端强校验
-
-恢复路径:
-- 错误时提供重试按钮
-- 操作失败时提供撤销或回滚
-- 网络断开时提供离线提示
-```
-
-### 4. 响应式、无障碍与动效
-
-```markdown
-响应式:
-- 不固定 1920×1080
-- 根据真实用户设备定义断点
-- 窄窗口下保持主任务可用
-
-无障碍:
-- 键盘/触控路径等价
-- 焦点状态清晰可见
-- 语义化标签
-- 颜色对比度符合 WCAG AA
-
-动效:
-- 必须有反馈、状态或连续性目的
-- 可中断
-- 支持 prefers-reduced-motion
-- 不使用无目的装饰动画
-```
-
-## 设计基线字段说明
-
-### productIntent（产品意图）
-
-```yaml
-users: ["<目标用户角色>"]
-tasks: ["<用户核心任务>"]
-success: ["<可观察的成功结果>"]
-nonGoals: ["<明确不做的事情>"]
-```
-
-### surfaces（页面/表面）
-
-```yaml
-surfaceId: "<页面唯一标识>"
-routeOrEntry: "<路由或入口>"
-purpose: "<该页面帮助谁完成什么>"
-informationHierarchy: ["<内容顺序和优先级>"]
-realContentAndDataShape: ["<真实数据形状和类型>"]
-layoutAndResponsiveRules: ["<布局和断点规则>"]
-componentsAndActions: [<组件和动作定义>]
-states: [<状态列表>]
-accessibility: [<无障碍要求>]
-motion: [<动效定义>]
-```
-
-### componentsAndActions（组件和动作）
-
-```yaml
-actionId: "<动作唯一标识>"
-label: "<用户可见文案>"
-behavior: "<交互流程>"
-permission: "<权限语义>"
-backendContract: "<API 契约>"
-```
-
-### designSystem（设计系统）
-
-```yaml
-reuse: ["<已有组件/tokens/字体/图表>"]
-additions: ["<新增项及原因>"]
-themes: ["<实际需要的主题>"]
-```
-
-### feasibilityProbe（可行性探针）
-
-```yaml
-status: not-required | pending-g2 | passed | fallback-selected | failed
-question: "<技术问题>"
-ownerSkill: "<验证 Skill>"
-evidence: "<证据>"
-fallbackDesign: "<降级方案>"
-```
-
-### verification（验证）
-
-```yaml
-targetViewportsOrDevices: ["<目标设备/尺寸>"]
-requiredStates: ["<必须渲染的状态>"]
-unresolvedBoundaries: ["<待确认内容>"]
-```
-
-## Skill 协调
-
-`frontend-design` 与以下 Skill 配合：
-
-| 阶段 | Skill |
-|------|-------|
-| 产品定义 | product-manager |
-| 构思发散 | brainstorm |
-| 设计基线 | frontend-design |
-| PC 实现 | ui-pc |
-| App 实现 | ui-app |
-| 页面精修 | frontend-polish |
-| 动效审查 | review-animations |
+- **不出现没有依据的那一套**：紫蓝渐变、没有语义的玻璃效果、卡片里再套卡片、一排堆着的胶囊、鼠标划过就整体放大、没有理由的入场错峰、Hero 加三列卡片，还有伪造的指标、Logo、用户评价和空泛的"智能赋能"文案。层级该由真实任务、真实内容、信息密度、品牌和风险撑起来。
+- **不重复说已经说过的话**：菜单、面包屑、页签或布局标题已经交代了这个界面是干什么的，内容区就不要再放一遍标题、用途副标题、逐页业务介绍、显而易见的操作说明或技术口径——管理页、工作台、驾驶舱一视同仁。就近说明只留给真实限制、风险、合规要求、不可逆影响、必须解释的空态与错误态，以及确实存在的上手成本。例外是那些本来就没有导航上下文的场景：独立全屏展示、登录页、首次引导、品牌空态，它们可以保留一个必要标题或一句简短的业务定位，但不写宣传口号。
+- **客户可见文案面向用户任务**，不暴露 AUTHZ、RBAC、接口、WebSocket、IPC、事实源这类工程黑话。
+- **状态、权限与退路**：关键动作至少要有默认、进行中、成功、失败四种表现，外加失败之后怎么回到可用状态；界面上隐藏或禁用不能替代后端强校验，`actionId -> 权限 -> 界面 -> 接口 -> 后端 -> 错误与审计 -> 验证` 这条链要能在后续阶段对齐。长文本、空数据、慢请求、重复提交、权限不足、数据过期——这六种情况实现阶段一定会遇到，基线里就该有答案，而不是留给写代码的人临场决定。
+- **响应式、无障碍与动效**：屏幕尺寸、设备类型、输入方式和信息密度按真实使用场景取，不套 `1920x1080` 这类固定值，也不套某一套现成断点。键盘要有和触控等价的路径，焦点看得见，结构有语义，命中区够大，对比度够，弹层关掉之后焦点能回到原处。动效得有理由——给反馈、表达状态、或者维持空间上的连续性；可以中断，并且给出 reduced-motion 下的等价体验。
 
 <Aside type="note">
-frontend-design 只负责输出设计基线，不负责代码实现或操作 Git。
+需要打分时才动用视觉质量量规，而分数不能替代上面这些硬门禁，也不能替代真实渲染。没有真实页面、浏览器渲染、截图或真机证据时，能声称的只有"静态契约通过"。
 </Aside>
 
 ## 与其他 Skill 的关系
 
-### 选择决策
+上游是 [product-manager](/skills/skills-reference/critical/product-manager/)（产品目标与验收）和 [brainstorm](/skills/skills-reference/medium/brainstorm/)（方案发散与收敛）。下游是 [ui-pc](/skills/skills-reference/high/ui-pc/) 与 [ui-app](/skills/skills-reference/high/ui-app/) 的生产实现，以及后续由 [frontend-polish](/skills/skills-reference/high/frontend-polish/) 接手的打磨。协作方是 [review-animations](/skills/skills-reference/low/review-animations/) 和 [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/)——一个只审现状，一个只给术语，都不承担设计决策。
 
 ```text
-新页面设计 → frontend-design
-已有页面精修 → frontend-polish
-PC 页面实现 → ui-pc
-App 页面实现 → ui-app
-产品定义 → product-manager
+product-manager（产品目标与验收）· brainstorm（方案收敛）
+        ↓
+frontend-design（设计基线 / DesignContract + 可行性探针）
+        ↓                                    ↘
+ui-pc · ui-app（真实页面 + 真实接口）          tech-decision / architecture-design
+        ↓                                     （回答探针挂起的技术问题）
+frontend-polish（已有实现的打磨）
 ```
 
-### Related Skills
+设计结论直接更新项目既有设计文档，并由 [product-manager](/skills/skills-reference/critical/product-manager/) 或 [project-manager](/skills/skills-reference/high/project-manager/) 压缩进那份唯一 TODO。本 Skill 不维护 TODO、不编辑生产代码、不碰 Git。
 
-**前置依赖**:
-- `product-manager` - 产品定义
-- `brainstorm` - 构思发散
+## 产出与验收
 
-**后续推荐**:
-- `ui-pc` - PC 实现
-- `ui-app` - App 实现
-- `frontend-polish` - 页面精修
+交给项目经理和实现方的是这几样：每个表面对应哪条需求、哪个功能；用户流；真实内容；每一种状态；权限怎么表达；出错之后怎么恢复；各端之间有哪些差异。再加上设计系统里哪些资产可以直接拿来用、哪些必须新增（新增的连原因一起写）。最后是技术负责人必须回答的可行性问题，连同探针状态、要什么证据、以及不成立时走哪条降级方向；以及实现完成后必须真实渲染出来的状态和主路径验收。
 
-**协作 Skill**:
-- `review-animations` - 动效审查
-- `animation-vocabulary` - 动效术语
-- `tech-decision` - 技术验证
+判断这一步真的完成了：随便挑一个动作，能顺着它答出"谁在什么入口触发、需要什么权限、成功和失败分别看到什么、失败之后怎么退回来"；随便挑一个表面，能答出"没数据、加载中、出错、无权限时它长什么样"。答不上来的地方，就是实现阶段会被临时决定的地方。
 
-## 最佳实践
-
-### 1. 先事实后设计
-
-```markdown
-<!-- 正确: 基于事实 -->
-1. 读取产品定义、用户角色、核心任务
-2. 查看项目设计系统、组件库、相邻页面
-3. 基于事实设计页面结构和交互
-
-<!-- 错误: 直接套模板 -->
-1. 不看产品定义
-2. 不看项目设计系统
-3. 直接套用 Hero + 卡片模板
-```
-
-### 2. 真实内容和数据形状
-
-```markdown
-<!-- 正确: 真实数据 -->
-- 用户 ID: Long 雪花 ID, 19 位数字
-- 姓名: String, 最长 50 字符
-- 邮箱: String, 符合邮箱格式
-- 状态: Enum (ACTIVE, INACTIVE, BANNED)
-
-<!-- 错误: 模糊类型 -->
-- 用户信息: Object
-- 状态: String
-```
-
-### 3. 完整状态覆盖
-
-```markdown
-<!-- 正确: 覆盖全部状态 -->
-- default: 正常显示
-- loading: 加载中
-- empty: 无数据
-- error: 错误
-- success: 成功
-- hover: 悬停
-- focus-visible: 焦点
-- disabled: 禁用
-- pending: 进行中
-
-<!-- 错误: 只设计正常态 -->
-- default: 正常显示
-- （其他状态缺失）
-```
-
-### 4. 明确未确认边界
-
-```markdown
-<!-- 正确: 明确标注 -->
-unresolvedBoundaries:
-  - "物流信息更新机制待后端确认"
-  - "退款审核流程待产品确认"
-  - "地图技术可行性待 tech-decision 验证"
-
-<!-- 错误: 假装已确认 -->
-- 物流信息实时更新（未确认）
-- 退款自动审核（未确认）
-- 使用 ECharts 地图（未验证）
-```
-
-## 下一步
-
-- [ui-pc](/skills/skills-reference/high/ui-pc) - PC 页面实现
-- [ui-app](/skills/skills-reference/high/ui-app) - App 页面实现
-- [frontend-polish](/skills/skills-reference/high/frontend-polish) - 页面精修
-- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义
-- [brainstorm](/skills/skills-reference/high/brainstorm) - 构思发散
+<Aside type="danger">
+设计稿、文字规格、Penpot 文件、静态截图——这四样都不能算生产页面通过。真正的完成要由实现 Skill 照着基线做出来、接上真实后端，然后在目标尺寸或真机上把关键状态一个一个渲染出来看过。基线写得再完整，它证明的也只是"这份输入可以直接实施"。
+</Aside>

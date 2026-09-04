@@ -1,0 +1,203 @@
+---
+title: 规则沉淀（skill-evolution）
+description: 把重复出现的用户纠正或跨 Skill 的同一根因，一次性沉淀为一致的长期公共规则，而不是逐个 Skill 打补丁
+order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+同一件事被纠正第三次的时候，问题就不在那一次输出上了。它在规则的摆放位置上——同一个意思写在了共享文档、编排 Skill、专业 Skill 和运行时入口好几处，你改掉的那一处只挡住了一个入口，换条路进来照旧犯。
+
+`skill-evolution` 处理的就是这种情况：把根因找出来，一次修完所有还在按老规矩办事的位置，让这个行为从下一轮开始就是一致的。
+
+它和 [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) 的分界线是**范围**，不是难度。一个 Skill 的直接修改归那边，一类 Skill 的长期约定归这边。
+
+## 四个入口的分工
+
+| Skill | 干什么 | 什么时候进来 |
+| --- | --- | --- |
+| [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) | 从一次纠正里找根因，判断范围，分流 | 纠正刚发生，还没定范围 |
+| [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) | 直接改你点名的那**一个** Skill | 范围就在一个 Skill 里 |
+| `skill-evolution`（本页） | 把重复根因变成**跨 Skill 长期一致**的行为 | 同一根因影响多个 Skill 或多次执行 |
+| [skill-creator](/skills/skills-reference/medium/skill-creator/) | 新建 Skill 或公共资源目录 | 本地确实没有能承接这个职责的地方 |
+
+顺序是：识别 → 分流 → 执行 → **沉淀（本页）**。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "这个问题又出现了" | 同一个毛病不是第一次被纠正 |
+| "以后所有 Skill 都得这样" | 需要一条到处都生效的公共约定 |
+| "为什么换了个入口又犯同样的错" | 根因有多份副本，得一次修完 |
+| "上下文一压缩就跑偏" | 需要让恢复依赖 TODO 而不是聊天记录 |
+| "持续改进" / "规则沉淀" | 明确要求把这次纠正变成长期行为 |
+| "这两个 Skill 都漏了同一件事" | 同一疏漏跨多个执行者出现 |
+
+<Aside type="tip">
+你在消息里说的"改成这样"**就是**授权。它不会先生成一份提案、一份评估、一份批准记录再回头问你同不同意——那套递归流程本身就是它要清掉的东西。只想听分析时说"只看不改"，改由 [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) 给你 findings。
+</Aside>
+
+## 什么时候不要用
+
+- **只改一个 Skill，范围很清楚** → [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)。
+- **本地没有承接这个职责的地方，得新建** → [skill-creator](/skills/skills-reference/medium/skill-creator/)。
+- **纠正刚发生，还不知道是普遍问题还是这一次的偶发** → 先走 [auto-optimizer](/skills/skills-reference/low/auto-optimizer/)。
+- **问题出在 Agent 怎么分工、上下文怎么切，而不是规则内容** → [agent-optimizer](/skills/skills-reference/low/agent-optimizer/)。
+- **要沉淀的是已经验证过的团队做法，不是行为约定** → [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/)。
+- **写业务代码、定产品** → [universal-development](/skills/skills-reference/low/universal-development/) / [product-manager](/skills/skills-reference/critical/product-manager/)。
+
+## 前置条件
+
+一条硬的，一条软的。
+
+**硬的：根因得是普遍的。** 只有"换任何项目、任何入口都成立"的问题才该进共享 Skill。如果这条规则只对你手上这个仓库成立——它用的是哪个 ORM、表名前缀是什么、部署脚本叫什么——那它的落点是目标仓库的 `PROJECT-MEMORY.md`，由 [project-details](/skills/skills-reference/high/project-details/) 原位归并。写进共享 Skill 的后果是每个项目都被这条规则约束一次。
+
+**软的：还有一层授权边界。** 一次"改规则"不自动带上提交、推送和改客户端配置的许可，这些它会另外问你。
+
+<Aside type="danger">
+参考外部仓库时，它只把外部实现当成**可核对的来源证据**，改进仍然融进本地已有的承接者。照着外部清单一比一复制出第二套流程，结果是同一个职责有两个 Owner，往后每次纠正都得改两遍——这正好是本 Skill 要消除的状态。
+</Aside>
+
+## 使用示例
+
+### 场景 1：换个入口，同一个错又来了
+
+**你的输入**：
+
+```text
+这已经是第三次了。上周走 dev 漏了权限校验，我说过一次；
+昨天走 crud-development 又漏了；今天走 api-development 还是漏。
+不要再单独改一个了，一次修干净。
+```
+
+**你会拿到的产出**：
+
+```text
+## 根因
+「交付面包含权限时必须实际实现权限」这条要求只写在一个地方，
+其余入口只写了「按需处理权限」，读起来像可选项。
+
+## 修改路径（同一次改完）
+- dev/SKILL.md                  权限交付面从可选描述改为必需项
+- crud-development/SKILL.md     同上，并补充列表接口的数据范围要求
+- api-development/SKILL.md      同上，接口契约里显式列出权限失败响应
+- security-guard/SKILL.md       作为唯一事实来源，其余三处只引用不复制
+
+## 长期行为变化
+任何入口拿到「交付面含权限」的功能，都必须给出实际实现位置和一次验证；
+拿不出来时功能保持未完成，而不是标记完成后补。
+
+## 一次验证
+node add-skill/scripts/validate-skill-catalog.mjs  → errors: []
+code-review                                        → pass
+
+## 剩余风险
+未覆盖第三方鉴权网关代管权限的项目，这类项目仍需项目级说明
+```
+
+### 场景 2：上下文一压缩就跑偏
+
+**你的输入**：
+
+```text
+每次对话长了之后，它就记不住这个功能原本是从哪条需求来的，
+开始按自己的理解改验收标准。已经出过两次了。
+```
+
+**你会拿到的产出**：
+
+```text
+## 根因
+功能与其需求出处的对应关系只活在聊天记录里。上下文一压缩就没了，
+恢复时只能看 checkbox，看不到原始需求。
+
+## 修改路径
+- task-todo-workflow/SKILL.md   TODO 每项必须带可回读的来源位置
+- next/SKILL.md                 领取前回读来源原文，不只看 checkbox
+- dev/SKILL.md                  续作与恢复时同样回读
+- update-status/SKILL.md         判定完成前核对来源原文
+- change-impact-analysis/SKILL.md  范围决策以原文为准
+
+## 长期行为变化
+换设备、换 runtime、上下文压缩之后，恢复依据是 TODO 里记着的来源位置
+加上原始文档本身，不是聊天摘要，也不新开第二份状态文件。
+
+## 一次验证
+git diff --check → 无空白错误；code-review → pass
+```
+
+### 场景 3：这条其实不该进共享规则
+
+不是每次纠正都会变成长期规则。范围判断本身就是产出：
+
+```text
+## 范围分类
+[通用]   「不得用低等级证据关闭高等级门禁」
+         → 进共享 Skill，本轮已修 3 处
+
+[项目]   「本仓库的迁移脚本必须放 db/migration 并按日期前缀命名」
+         → 不进共享 Skill，路由 project-details 写入目标仓库
+            PROJECT-MEMORY.md 的 Boundaries 章节
+
+[单次]   「这次把测试端口写成了 8080 而不是 8081」
+         → 不进任何长期位置，本轮修掉即可
+```
+
+<Aside type="caution">
+这个 Skill 目录下的 `references/` 和 `scripts/` 目前是空的，这跟"默认不产出评价记录、演化档案"是一致的。哪天你发现这里开始堆评测产物和历史档案，那些东西本身就是该被清掉的对象。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游**：[auto-optimizer](/skills/skills-reference/low/auto-optimizer/)（识别与分流）
+
+**执行面复用**：[skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)（改现有 Skill）、[skill-creator](/skills/skills-reference/medium/skill-creator/)（确实缺承接者时才新建）
+
+**协作**：[project-details](/skills/skills-reference/high/project-details/)（项目专属事实的落点）、[add-skill](/skills/skills-reference/medium/add-skill/)（`name` / `description` 变了才同步一次）、[code-review](/skills/skills-reference/high/code-review/)（那一次验证）
+
+典型链路：
+
+```text
+同一根因第 N 次被纠正
+  → auto-optimizer          判为重复 / 跨 Skill
+  → skill-evolution
+        ├→ 找到最早那处规则，再把所有还按老规矩办的位置找齐
+        ├→ 分范围：通用 / 项目 / 单次
+        ├→ 通用的交给 skill-optimizer 落地（缺承接者才 skill-creator）
+        └→ 项目的交给 project-details 写进 PROJECT-MEMORY.md
+  → add-skill（仅 frontmatter 变化）
+  → 一次差异检查 + 一次 code-review
+```
+
+## 常见坑
+
+**只改了最显眼的那一处。** 少改一个入口，等于这次沉淀白做——下次那个入口进来照旧犯，而且你会以为规则已经生效了，排查成本更高。产出里的"修改路径"清单就是用来核对这件事的。
+
+**把项目专属事实写进共享 Skill。** 一条只对某个仓库成立的约定，进了共享 Skill 之后会去约束所有项目，表现是别的项目莫名被要求做一件不相干的事。
+
+**顺手复制了一套外部流程。** 同职责出现两个承接者之后，每次改都得改两遍，漏一遍就产生不一致的行为。
+
+**把"流程精简"做成"交付精简"。** 该清的是重复回合、无人消费的产物、已授权后还要再确认一遍的空转；不该清的是完整规划、纵向交付、真实验收和安全边界。
+
+## 最佳实践
+
+- **报重复现象时把前几次也说出来。** "上周这样、昨天那样、今天又这样"比"这个问题又出现了"能精确得多，直接决定要搜哪些位置。
+- **先接受范围分类的结论。** 它判成"项目"或"单次"时，那通常是对的；硬要塞进共享规则，代价是以后所有项目替你承担这条约定。
+- **改完看一眼"修改路径"数量。** 只改了一处的沉淀，多半没搜全冲突位置。
+- **frontmatter 没变就不用跑注册。** 普通正文修改不需要同步索引。
+
+<Aside type="note">
+怎么算真的完成了：换一个入口重来一次，同样的错不再出现；通用规则进了共享 Skill，项目事实进了 `PROJECT-MEMORY.md`，一次性偏差没有留在任何长期位置；也没有多出第二份状态、第二份记忆、第二套同职责 Skill。
+</Aside>
+
+## 下一步
+
+- [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) - 判断一次纠正该往哪走
+- [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) - 单个 Skill 的直接修改
+- [skill-creator](/skills/skills-reference/medium/skill-creator/) - 确实缺承接者时新建
+- [project-details](/skills/skills-reference/high/project-details/) - 项目专属事实的落点
+- [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/) - 沉淀已验证的团队做法
+

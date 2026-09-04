@@ -1,0 +1,208 @@
+---
+title: 方案发散（brainstorm）
+description: 在已确认约束上生成多个候选方向并收敛出推荐，然后把最终决定交回对应 Owner
+order: 29
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"发散"这个词容易让人以为是自由联想。实际上它第一步做的是划线：哪些是能在仓库里翻到证据的硬条件，哪些只是还没人定义的空白，哪些纯粹是行业里常见的做法所以被顺手当成了默认。这三栏不先分开，后面生成的方案会全是对着一个想象中的技术栈设计的。
+
+它会给出好几条路，也会比出一条更值得走的，但最后拍板的不是它。产品范围和验收回到 [product-manager](/skills/skills-reference/critical/product-manager/)；页面和交互回到 [frontend-design](/skills/skills-reference/high/frontend-design/)；技术、数据、权限、基础设施这类影响面大的选择回到 [tech-decision](/skills/skills-reference/high/tech-decision/)。
+
+## 和 grilling 的分工
+
+这两个经常被搞混，判断依据其实很直接——**问题本身还会不会变**。
+
+| 情况 | 该走哪个 |
+| --- | --- |
+| "导出要支持哪些字段？给谁用？多久跑一次？"这类还没答案 | [grilling](/skills/skills-reference/medium/grilling/)，一次问一个，问到不再影响结论 |
+| 目标清楚了，但实现路径有五种，不知道选哪条 | 本 Skill |
+| 路径也只有一条，只需要确认它可行 | 直接 [tech-decision](/skills/skills-reference/high/tech-decision/) |
+
+对着一个还会变的目标发散，产出的候选会整批作废——这是顺序不能颠倒的唯一原因。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "这个先头脑风暴一下" | 几条差异明显的路径，各自的代价和风险都写出来 |
+| "有什么方案" | 从复用现成能力到引入外部服务的一整排候选 |
+| "怎么做比较好" | 一张按需求覆盖、复杂度、可逆性排开的对照表 |
+| "想想办法"（撞上性能、成本或合规） | 绕开硬约束的可行路径，以及每条的启用条件 |
+| "给点思路" | 补齐候选空间，避免只在第一个想到的方案上打磨 |
+| "这块有没有别的做法" | 现有做法的替代路径，附带迁移和退回方式 |
+
+## 什么时候不要用
+
+- 需求本身还有会改结论的空白 → [grilling](/skills/skills-reference/medium/grilling/)。
+- 要定产品范围、业务规则和验收 → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- 要把方案定下来、签字生效 → [tech-decision](/skills/skills-reference/high/tech-decision/)。这里的"推荐"只是收敛结果，不是选型结论，更不是开工许可。
+- 代码已经写了一半 → 发散在前，实现在后；这时候更该做的是确认当前实现能不能收尾。
+- 只是想把需求理清楚 → 那是澄清或产品定义环节的事。
+
+## 前置条件
+
+得先有一个说得出口的目标，得确实存在多条路可选，而且还没开始写生产代码。三条里最容易忽略的是第二条：只有一条合规路径时，硬要凑出三个候选来比，产出的是一份形式上完整、实质上没有信息的对照表。
+
+## 使用示例
+
+### 示例 1：月末对账报表导出会超时
+
+你说："财务导出对账明细，五万行就 504 了，想想办法。"
+
+**第一段产出是分栏的事实**，每条都指到具体位置：
+
+```markdown
+## 已确认
+- `pom.xml`：项目里已有 xxl-job 客户端，`ReconcileJob` 在跑日切
+- `application-prod.yml`：Nginx 与网关读超时都是 30s
+- `ReconcileExportController#export`：同步查询 + 内存拼 Excel，一次性返回
+- 明细表 `fin_reconcile_detail` 单月约 5 万行，有 `(month, status)` 索引
+
+## 待确认
+- 财务是否接受"点一下、稍后来下载"，而不是当场拿到文件？
+  验证：问一次业务对接人
+- 对象存储有没有可用的私有桶？
+  验证：`rg -n 'oss|minio|s3' src/main/resources`
+- 单月上限会不会涨到 50 万行（明年接入新渠道）？
+  验证：看渠道接入排期
+
+## 通用候选（本仓库尚无证据）
+- 报表服务、列式存储、专用导出中间件——都要新增依赖和运维成本
+```
+
+<Aside type="danger">
+只有源码或配置里翻到了，才能把某个能力写成"我们已经有了"。翻不到的一律进候选列，并且要写清引入它之后谁来运维、怎么退回去。依赖的坐标和版本一律从构建文件里读，不凭印象写。
+</Aside>
+
+**第二段是候选，先不打分：**
+
+```markdown
+### A. 复用现有任务框架，改成异步下载
+点导出 → 落一条任务记录 → xxl-job 执行 → 生成文件 → 通知 + 下载中心取。
+依赖：已有 xxl-job；需要一张任务表和一个下载入口。
+失败：任务表记 failed 与原因，用户可重试。
+退出：保留原同步接口，行数小于阈值仍走同步。
+
+### B. 同步接口改流式写出
+不在内存拼整个工作簿，边查边写 response，用 SXSSF 之类的流式实现。
+依赖：不新增；但网关 30s 超时仍在，只是把风险推后。
+失败：写到一半断开会留下半个文件，需要客户端处理。
+退出：改动集中在一个方法，随时可回退。
+
+### C. 前端分页多次请求再拼
+后端不变，前端循环拉页并在浏览器里合并。
+依赖：不新增。
+风险：浏览器内存、中断续传、导出一致性（分页期间数据在变）。
+
+### D. 夜间预生成
+日切时把上月明细写成文件放对象存储，白天只做鉴权下载。
+依赖：需要对象存储（待确认）。
+限制：只能拿到 T-1 的数据，对"刚改完就要导"的场景不成立。
+
+### E. 引入报表服务
+交给专门的报表组件出文件。
+依赖：新增服务、部署、权限对接。
+成本：这是这批里唯一改变部署形态的方案。
+```
+
+**第三段才是收敛。** 先把违反硬条件的划掉，剩下的做相对比较——注意这里写的是"相对"，不是打小数分：
+
+| 候选 | 需求覆盖 | 新增依赖 | 复杂度 | 可逆性 | 依据 |
+| --- | --- | --- | --- | --- | --- |
+| A 异步下载 | 全覆盖 | 无（复用 xxl-job） | 中 | 高，同步接口保留 | 已在 `pom.xml` 确认 |
+| B 流式写出 | 5 万行可能覆盖 | 无 | 低 | 高 | 未实测，超时风险仍在 |
+| C 前端拼 | 覆盖但体验差 | 无 | 中 | 高 | 一致性问题无法回避 |
+| D 预生成 | 只覆盖 T-1 | 对象存储待确认 | 中 | 中 | 业务是否接受待问 |
+| E 报表服务 | 全覆盖 | 新服务 + 运维 | 高 | 低 | 与当前规模不相称 |
+
+<Aside type="caution">
+比较要能追到依据。没实测过就写"未实测"，不要生造一个带小数点的分数——一个 7.5 分会让读者以为这件事已经量化过了，而实际上它只是个印象。
+</Aside>
+
+**最后一段是推荐加落地拆解：**
+
+```markdown
+## 推荐：A（异步下载），B 作为小数据量的快路径
+启用条件：xxl-job 客户端已在 pom.xml，执行器在 test 环境可用（已确认）
+未选原因：D 只能给 T-1 数据，业务未确认接受；E 的运维成本与当前规模不相称
+
+分阶段：
+1. 先只加任务表和下载记录，不改现有导出行为
+2. 接上 xxl-job 执行，行数 > 2 万走异步，其余仍同步
+3. 灰度到财务一个小组，观察任务耗时与失败率
+4. 全量；失败率超过 1% 则回退到只走同步
+
+需要确认的：
+- 单月上限会不会涨到 50 万行？会的话第 2 步的阈值和分片方式要重设
+- 生成的文件放哪、留多久、谁能下载
+```
+
+### 示例 2：发散完了交给谁
+
+产出本身不落地，它要被人接走。谁接，取决于结论是什么类型的：
+
+| 结论落在哪 | 交给 |
+| --- | --- |
+| "异步导出算不算这个版本的范围？验收怎么写" | [product-manager](/skills/skills-reference/critical/product-manager/) |
+| "下载中心页面长什么样、任务状态怎么展示" | [frontend-design](/skills/skills-reference/high/frontend-design/) |
+| "确定用 xxl-job 而不是新引入组件" | [tech-decision](/skills/skills-reference/high/tech-decision/) |
+| "任务表放在哪个模块、谁拥有这份数据" | [architecture-design](/skills/skills-reference/high/architecture-design/) |
+
+### 示例 3：其实不该发散的情况
+
+你说："我们要加个登录限流，头脑风暴一下。"
+
+如果仓库里已经有一套限流注解，并且团队一直这么用，那这里没有多条路——只有一条已经在用的路加上"要不要调参数"。这时候该给的回答是：
+
+```text
+本仓库已有 @RateLimit（backend-annotations 那套），相邻的短信发送接口在用。
+没有需要发散的空间；要确认的是阈值和触发维度，直接走 tech-decision 记一条即可。
+```
+
+硬凑三个候选出来比，只会让人以为这件事经过了权衡。
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [grilling](/skills/skills-reference/medium/grilling/) | 目标还会变时，先问清 |
+| 前置 | [project-navigator](/skills/skills-reference/medium/project-navigator/) | 先找到真实结构和可参考的实现 |
+| 后续 | [product-manager](/skills/skills-reference/critical/product-manager/) | 范围与验收由它收口 |
+| 后续 | [tech-decision](/skills/skills-reference/high/tech-decision/) | 具名的技术结论由它给出 |
+| 后续 | [architecture-design](/skills/skills-reference/high/architecture-design/) | 涉及模块边界与数据归属时 |
+| 协作 | [frontend-design](/skills/skills-reference/high/frontend-design/) | 页面与交互方向的探索 |
+
+```text
+grilling（问到不再影响结论）→ project-navigator（摸清现状）
+                                    ↓
+                             brainstorm（候选 + 收敛 + 推荐）
+                                    ↓
+        product-manager（范围/验收）   frontend-design（页面/交互）
+        architecture-design（边界）    tech-decision（选型结论）
+```
+
+## 常见坑
+
+**把"推荐"当成开工许可。**  推荐是一份收敛结果，签字的人还没签。没有对应 Owner 拍板就开始改生产代码，最后往往要连着方案一起回退。
+
+**在需求还会变的时候发散。**  最贵的不是白做几个候选，而是团队已经开始按其中一个准备工作了。
+
+**把一次扫描结果写成通用规则。**  "这个项目用 Redis" 和 "Redis 是标准做法" 是两句话。前者要有路径支撑，后者在换项目时会变成错误前提。
+
+**候选之间差异不足。**  三个方案其实是同一条路的三种参数，比来比去没有信息。差异应该体现在依赖、部署形态或数据流向上。
+
+**给了推荐但没写退出方式。**  可逆性是比较维度里最容易被跳过的一项，也是上线后第一个被追问的。
+
+## 下一步
+
+- [grilling](/skills/skills-reference/medium/grilling/) — 目标还不清楚时先问
+- [tech-decision](/skills/skills-reference/high/tech-decision/) — 把推荐变成结论
+- [product-manager](/skills/skills-reference/critical/product-manager/) — 范围与验收
+- [architecture-design](/skills/skills-reference/high/architecture-design/) — 模块与数据边界
+- [project-navigator](/skills/skills-reference/medium/project-navigator/) — 先摸清现有结构
+
+
+
+

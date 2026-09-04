@@ -1,0 +1,269 @@
+---
+title: 数据库实施（database-ops）
+description: 真正落地数据库变更——迁移脚本、索引、ORM 映射，并在隔离环境验证迁移与回滚
+order: 23
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+[database-design](/skills/skills-reference/high/database-design/) 出结论，`database-ops` 让结论变成仓库里真实存在的东西：正向迁移、索引、回填、实体与查询映射。然后在一个用完就扔的隔离环境里，把迁移和回滚**真的各跑一遍**，并从库的元数据里读回来核对——注释是不是都写了、物理外键是不是真的为零、逻辑外键有没有索引。
+
+"设计说了"和"数据库改了"是两件事，这个 Skill 存在的意义就是不让前者冒充后者。
+
+它同时是持久化访问纪律的执行点：业务代码里不出现 SQL。碰到 `Service` 里拼字符串查库，只要本轮改动经过那条链路，就先把 SQL 挪回持久化边界再继续。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "把这个表建起来" / "写个迁移" | 按已确认的数据契约写正向迁移并执行验证 |
+| "给这张表加个字段" | 分阶段变更、回填、旧版本兼容与回滚 |
+| "历史数据要回填" | 存量数据搬迁、清洗，要可观测可恢复 |
+| "ORM 映射对不上" | 实体、类型处理器、自动填充与真实结构同步 |
+| "加个索引" | 按真实查询和执行计划落索引，评估写放大 |
+| "这个查询很慢，SQL 写在 Service 里" | 挪回持久化边界并用类型安全 API 重写 |
+
+## 什么时候不要用
+
+- **还在决定建哪些表、什么类型、什么索引策略** → [database-design](/skills/skills-reference/high/database-design/)。设计与实施是两个动作。
+- **接口契约、请求响应、错误语义** → [api-development](/skills/skills-reference/high/api-development/)
+- **前端列表与表单** → [ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)
+- **业务领域逻辑、状态机、复杂流程** → [dev](/skills/skills-reference/high/dev/) 或 [universal-development](/skills/skills-reference/low/universal-development/)
+- **权限策略本身** → [data-permission](/skills/skills-reference/high/data-permission/)。这里只保证字段和索引能支撑那套策略。
+- **慢查询的整体性能定位** → [performance-doctor](/skills/skills-reference/medium/performance-doctor/)
+
+## 前置条件
+
+动手写迁移之前，这几件事得有确定答案。
+
+**数据库产品、版本和方言。** MySQL 8 和 PostgreSQL 15 的 DDL、默认值、注释语法、事务内 DDL 行为都不一样，写错了本地能跑、CI 挂掉。
+
+**迁移工具和脚本约定。** 目录在哪、命名规则、执行顺序、能不能重跑、回滚怎么做——沿用仓库现有的那套，而不是新起一套。
+
+**数据契约已经确认。** 字段、范围、唯一性、逻辑关系、生命周期、预估数据量。没有这些就只能边写边猜，改一次表付一次代价。
+
+<Aside type="caution">
+没有依赖、配置、定义和真实调用作为依据时，不会生成项目专属的实体基类、`Mapper` 基类、权限注解或脚本路径。旁边的老代码里有某种写法，也不构成新代码照着写的理由——它可能本身就是待还的债。
+</Aside>
+
+## 使用示例
+
+### 示例 1：建一张订单表
+
+你说：`把订单表建起来，字段按上次设计的来`
+
+拿到的是一份可以直接进版本控制的迁移脚本，注释、唯一键、逻辑外键索引都齐：
+
+```sql
+-- migrations/V20260904_01__create_t_order.sql
+CREATE TABLE t_order (
+  id           BIGINT        NOT NULL COMMENT '主键，应用层生成',
+  tenant_id    BIGINT        NOT NULL COMMENT '租户',
+  order_no     VARCHAR(32)   NOT NULL COMMENT '业务单号',
+  user_id      BIGINT        NOT NULL COMMENT '下单用户，逻辑外键',
+  dept_id      BIGINT        NULL     COMMENT '归属部门，逻辑外键',
+  amount       DECIMAL(18,2) NOT NULL COMMENT '订单金额，单位元',
+  state        VARCHAR(24)   NOT NULL COMMENT 'CREATED/PAID/SHIPPED/CLOSED',
+  create_by    BIGINT        NULL     COMMENT '创建人',
+  create_time  DATETIME(3)   NOT NULL COMMENT '创建时间',
+  update_by    BIGINT        NULL     COMMENT '更新人',
+  update_time  DATETIME(3)   NULL     COMMENT '更新时间',
+  del_flag     TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除 0 正常 1 删除',
+  remark       VARCHAR(255)  NULL     COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_tenant_no (tenant_id, order_no),
+  KEY idx_user (user_id),
+  KEY idx_dept (dept_id)
+) COMMENT '订单';
+```
+
+对应的实体只声明真实存在的东西，不引入仓库里没有的基类：
+
+```java
+@TableName("t_order")
+public class Order {
+    @TableId(type = IdType.INPUT)          // ID 由应用生成，数据库不覆盖
+    private Long id;
+    private Long tenantId;
+    private String orderNo;
+    private Long userId;
+    private BigDecimal amount;
+    private String state;
+    @TableLogic private Integer delFlag;
+}
+```
+
+建完之后从元数据读回来核对，而不是"我记得都写了"：
+
+```sql
+-- 没写注释的字段（期望 0 行）
+SELECT table_name, column_name FROM information_schema.columns
+WHERE  table_schema = DATABASE() AND table_name = 't_order'
+  AND (column_comment IS NULL OR column_comment = '');
+
+-- 物理外键数量（期望 0）
+SELECT COUNT(*) AS physical_fk FROM information_schema.table_constraints
+WHERE  table_schema = DATABASE() AND constraint_type = 'FOREIGN KEY';
+
+-- 存储过程、函数、触发器（期望 0）
+SELECT routine_name FROM information_schema.routines WHERE routine_schema = DATABASE();
+SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = DATABASE();
+```
+
+```text
+无注释字段    0 行
+physical_fk   0
+routines      0
+triggers      0
+逻辑外键索引  idx_user / idx_dept 均存在
+```
+
+### 示例 2：给已上线的表加字段
+
+你说：`订单表要加一个结算时间，线上有 180 万行`
+
+产出是三段可以分别上线、分别回滚的迁移，而不是一条 `ALTER`：
+
+```sql
+-- ① 先加可空列，老代码完全不受影响
+ALTER TABLE t_order ADD COLUMN settle_time DATETIME(3) NULL COMMENT '结算时间';
+
+-- ② 分批回填：可观测、可中断、可重跑
+UPDATE t_order SET settle_time = update_time
+WHERE  settle_time IS NULL AND state = 'CLOSED' AND id > ?
+ORDER BY id LIMIT 2000;
+
+-- ③ 全部实例升级完成后才收紧约束
+ALTER TABLE t_order MODIFY COLUMN settle_time DATETIME(3) NOT NULL;
+```
+
+```text
+① 回滚：直接 DROP COLUMN，无数据依赖
+② 回滚：不需要，重跑即可，游标记在 id 上
+③ 回滚：先 MODIFY 回 NULL，再评估是否 DROP
+上线顺序：① → 发应用（新代码写入该字段）→ ② → 观察一轮 → ③
+```
+
+### 示例 3：加索引
+
+你说：`订单列表按状态筛加时间排序，越来越慢`
+
+产出是执行计划的前后对比和写放大评估，不是"加个索引试试"：
+
+```sql
+EXPLAIN SELECT id, order_no, amount FROM t_order
+WHERE  tenant_id = 1 AND state = 'PAID' AND del_flag = 0
+ORDER BY create_time DESC LIMIT 20;
+```
+
+```text
+加索引前  type=ALL    rows=1842307  Extra=Using where; Using filesort
+加索引后  type=range  rows=2140     Extra=Using index condition
+索引      KEY idx_tenant_state_time (tenant_id, state, create_time)
+写放大    该表写入约 40 QPS，新增一个二级索引可接受
+未覆盖    带关键词搜索的分支仍然全表扫，需要单独方案
+```
+
+### 示例 4：SQL 写在 Service 里
+
+你说：`这个查询很慢，代码在 OrderService 里拼的字符串`
+
+先把 SQL 挪回持久化边界，顺手消掉拼接带来的注入面：
+
+```java
+// 改前：字符串拼接，既绕过持久化层又能被注入
+String sql = "select * from t_order where state='" + state + "' limit 20";
+jdbcTemplate.queryForList(sql);
+
+// 改后：类型安全 API，分页交给框架
+Page<Order> page = orderMapper.selectPage(new Page<>(1, 20),
+        Wrappers.lambdaQuery(Order.class)
+                .eq(Order::getTenantId, tenantId)
+                .eq(Order::getState, state)
+                .orderByDesc(Order::getCreateTime));
+```
+
+确实需要 join、聚合、窗口函数时，放进持久化层的专用边界，而不是回到业务代码里：
+
+```xml
+<select id="sumByUser" resultType="com.example.order.dto.UserAmountDTO">
+  SELECT u.id AS userId, u.nick_name AS nickName, SUM(o.amount) AS total
+  FROM   t_order o
+  JOIN   sys_user u ON u.id = o.user_id
+  WHERE  o.tenant_id = #{tenantId} AND o.del_flag = 0
+  GROUP  BY u.id, u.nick_name
+</select>
+```
+
+### 示例 5：在隔离环境验证迁移与回滚
+
+这一步是交付的硬证据，用一次性容器跑，不碰任何共享环境：
+
+```bash
+docker run -d --name db-verify -e MYSQL_ROOT_PASSWORD=verify \
+  -p 33061:3306 mysql:8.0.36
+URL=jdbc:mysql://localhost:33061/app?useSSL=false
+
+./mvnw flyway:migrate -Dflyway.url=$URL          # 正向
+./mvnw flyway:info    -Dflyway.url=$URL
+./mvnw flyway:migrate -Dflyway.url=$URL          # 再跑一次，必须幂等
+mysql -h127.0.0.1 -P33061 -uroot -pverify app < migrations/rollback/R20260904_01.sql
+docker rm -f db-verify
+```
+
+```text
+正向迁移      2 个脚本，1.8s
+重复执行      0 changes，幂等
+回滚          反向脚本成功，表结构回到基线
+元数据断言    注释缺失 0 / 物理外键 0 / 触发器 0
+应用侧        mvn -pl order-service test 通过（含旧版本兼容与审计填充用例）
+未验证边界    生产数据量下的在线 DDL 耗时与锁表窗口未验证
+```
+
+## 与其他 Skill 的关系
+
+**先做**：[database-design](/skills/skills-reference/high/database-design/) 给出选型、表结构和索引策略。
+
+**后做**：[code-review](/skills/skills-reference/high/code-review/) 对本次迁移与映射做一次完整 Review。
+
+**配合**：[crud-development](/skills/skills-reference/high/crud-development/)（业务侧需要持久化落地时）、[snowflake-id](/skills/skills-reference/low/snowflake-id/)（应用层主键生成）、[data-permission](/skills/skills-reference/high/data-permission/)（字段与索引要能支撑权限条件）、[json-serialization](/skills/skills-reference/low/json-serialization/)（大整数主键对外的精度表示）。
+
+```text
+database-design → database-ops → code-review
+                       ↕
+   crud-development / data-permission / snowflake-id / json-serialization
+```
+
+## 常见坑
+
+**建表时不写注释。** 半年后没人知道 `state` 有哪几个取值、`amount` 是元还是分。补注释的成本远高于当时顺手写上。
+
+**用物理外键做数据完整性。** 级联删除会在你意料之外的时刻清掉一批数据，分库分表和数据归档也会被它卡住。改成逻辑外键 + 索引 + 服务层校验。
+
+**用触发器同步字段。** 这类逻辑不在代码仓库里，排查问题时永远想不到去数据库里找。
+
+**一条 `ALTER` 上线。** 大表加非空列会锁表，老版本应用还在跑时新约束直接让它写入失败。分阶段是为了让两边都能活着。
+
+**回填不分批。** 一条 `UPDATE` 改 180 万行，事务日志膨胀、锁等待、中断后无法续跑，三样一起来。
+
+**只在本地跑过迁移。** 本地是空库，看不到锁表时间、执行计划变化和数据倾斜。
+
+**索引照着查询条件一列一列加。** 组合索引的列顺序和最左前缀决定能不能用上，堆一堆单列索引只会让写入变慢。
+
+<Aside type="danger">
+DDL、索引和数据迁移的 SQL 只进版本化迁移文件。在生产库上手工执行一条 `ALTER`，下一次从零部署或从备份恢复时，那条变更就凭空消失了。
+</Aside>
+
+## 下一步
+
+- [database-design](/skills/skills-reference/high/database-design/) - 表结构和索引策略先定下来
+- [crud-development](/skills/skills-reference/high/crud-development/) - 持久化落地之后的业务交付
+- [data-permission](/skills/skills-reference/high/data-permission/) - 行级权限对字段和索引的要求
+- [snowflake-id](/skills/skills-reference/low/snowflake-id/) - 应用层主键生成
+- [performance-doctor](/skills/skills-reference/medium/performance-doctor/) - 索引之外的慢查询定位
+- [code-review](/skills/skills-reference/high/code-review/) - 迁移与映射的一次完整 Review
+
+
+
+
+

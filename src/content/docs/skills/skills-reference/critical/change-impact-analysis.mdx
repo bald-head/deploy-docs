@@ -1,5 +1,5 @@
 ---
-title: change-impact-analysis
+title: 变更影响分析 - change-impact-analysis
 description: 需求变更影响分析 - 识别受影响功能并定向更新 TODO
 order: 1
 ---
@@ -8,531 +8,294 @@ import { Aside } from '@astrojs/starlight/components'
 
 ## 概述
 
-`change-impact-analysis` 是 **Critical 优先级** Skill，专门处理已批准范围的真实变化。当需求、契约、数据、权限或交付面发生实质性变更时，完整识别受影响的功能、菜单、API、数据、权限和交付面，并原位更新当前开发者的 TODO 文件。
+需求改一个字，代码要动七个地方——难的从来不是动手，是知道哪七个。`change-impact-analysis` 只干这一件事：把一次已批准范围的真实变化，摊成一份完整的受影响清单，然后就地改掉那份 TODO。
 
-**核心职责**：
-- 建立变化 Diff（before/after）
-- 完整影响闭包分析
-- 定向回流受影响的专业 Skill
-- 原位更新 TODO 文件
+它是 **Critical 优先级**，但不是每个需求都要先过一遍的关卡。范围没真的动，它就该保持沉默。你手上有一份已经批准、正在做的计划，而这份计划的前提变了——这才是它出场的时候。
 
-<Aside type="caution">
-本 Skill 只在真实变化时定向回流，**不是**所有新需求和实现的固定前置阶段。
-</Aside>
+三个动作构成它的全部：把变化写清、把被牵动的东西找全、把计划改准。它不重跑一整套项目规划，只碰真的受影响的那几块。
 
-## 触发条件
+## 什么时候用
 
-### Triggers（触发词）
+| 你会这样说 | 场景 |
+| --- | --- |
+| "需求改了" / "需求变了" | 已批准的用户结果或验收变了 |
+| "加一个字段" | 数据模型变化，会一路牵到接口和页面 |
+| "范围变了" | 功能边界扩大或收窄 |
+| "这个接口要改成 xxx" | 已发布的契约变化，得找齐所有调用方 |
+| "这个功能也要支持 App" | 新增交付面 |
+| "普通用户也能看了" | 权限或数据可见范围变化 |
+| "帮我看看这改动会影响哪些地方" | 动手前先要一份受影响清单 |
 
-**中文**：
-- 影响分析
-- 变更影响
-- 依赖分析
-- 需求改了
-- 需求变了
-- 范围变了
-- 加一个字段
-- 加字段
-- 改需求
-- 功能变更
+## 什么时候不要用
 
-**English**：
-- impact analysis
-- change impact
-- scope change
-- requirement change
+它最常见的误用是被当成固定流程，每写一行代码前都跑一遍。下面这些看着像"该重新评估影响"，其实都不该叫它：
 
-### Gates（前置条件）
+- **代码写错了、编译过不去、测试红了。** 这是修 bug，计划没变，直接改。
+- **Review 提了几个问题要改。** 那是修复清单，不是新需求。
+- **勾完成状态、提交、跑流水线。** 流程动作，跟范围无关。
+- **改个配置值、把提示文案改通顺。** 用户能做的事一点没变。
+- **实现过程中换了个写法。** 只要用户结果和对外契约没动，就不算变化。
 
-1. **已有批准的范围、契约或交付面**
-2. **发生真实变化**（用户结果、API、数据、权限或交付面）
-3. **存在唯一 TODO 文件需要更新**
+判断标准只有一句：**用户能做的事、或者别人依赖的契约，有没有真的变。** 变了才叫它。
+
+另外这几件事有专门的 Skill：
+
+- **全新需求，还没有产品定义** → [product-manager](/skills/skills-reference/critical/product-manager/)。它管从零定义，这一页管已有范围的变更。
+- **第一次生成 TODO** → [project-manager](/skills/skills-reference/high/project-manager/)。初始清单和变更后的更新是两件事。
+- **追加一个和现有功能无关的新功能** → [add-todo](/skills/skills-reference/medium/add-todo/)。
+- **线上出故障要定位原因** → [bug-detective](/skills/skills-reference/high/bug-detective/)。
+- **需求本身还没说清** → [grilling](/skills/skills-reference/medium/grilling/)。它负责把话问清；这一页处理的是已经说清并批准过的东西发生了变化。
+
+## 开始之前
+
+**得先有一份已经批准的范围。** 没有基线就没有"变化"——那种情况叫定义需求，不叫变更分析。
+
+**变化得是真的。** 用户结果、接口、数据、权限、交付面里至少有一样动了。想法上的犹豫不算，还在讨论的方案也不算。
+
+**得有一份 TODO 可以改。** 它的产出是就地改掉的计划，不是一份新报告。没有落点的分析等于白做。
 
 <Aside type="note">
-Bug 修复、编译/测试失败、代码实现偏差、Review finding、checkbox、Git、CI、普通配置值和不改变行为的文案调整**不触发**本 Skill。
+它只会去读能回答这次变化的那几段文档和那几处源码，不会把整份 PRD、设计稿、架构文档和历史记录全翻一遍。翻得多不等于分析得准，只会把上下文塞满，反而更容易漏。
 </Aside>
 
-## 使用场景
+## 使用示例
 
-### 场景 1：用户要求新增字段
+### 场景 1：加一个字段
 
-**用户输入**：
-```
-需求改了，用户表要加一个手机号字段
-```
-
-**Skill 行为**：
-
-1. **建立变化 Diff**：
-   ```markdown
-   - 领域: data
-   - 对象: 用户表 (users)
-   - 原值: email, password, username
-   - 新值: email, password, username, phone
-   - 来源: 用户要求
-   ```
-
-2. **影响闭包分析**：
-   ```
-   users 表
-   ├─ 数据库迁移: ALTER TABLE users ADD COLUMN phone
-   ├─ 后端 Model: UserEntity.java
-   ├─ 注册 API: POST /api/v1/auth/register
-   ├─ 注册页面: src/pages/register.vue
-   ├─ 用户信息页面: src/pages/profile.vue
-   └─ API 文档: docs/api/auth.md
-   ```
-
-3. **动作决策**：
-   ```markdown
-   - Feature: USER-REG-API
-     Action: update-current
-     Reason: 注册 API 需要增加 phone 参数验证
-   
-   - Feature: USER-REG-PAGE
-     Action: update-current
-     Reason: 注册页面需要增加手机号输入框
-   
-   - Feature: USER-PROFILE-PAGE
-     Action: update-current
-     Reason: 用户信息页面需要展示手机号
-   ```
-
-4. **更新 TODO**：
-   ```markdown
-   ## Feature: USER-REG-API
-   
-   - 状态: [~] in-progress → [~] in-progress
-   - 验收:
-     - AC-001: 接收邮箱密码
-     - AC-002: 接收手机号 ✨ 新增
-     - AC-003: 手机号格式验证 ✨ 新增
-   
-   - 写集:
-     - src/main/java/entity/UserEntity.java ✨ 新增 phone 字段
-     - src/main/java/controller/AuthController.java
-     - docs/migrations/add_phone_to_users.sql ✨ 新增
-   ```
-
-### 场景 2：API 契约变化
-
-**用户输入**：
-```
-登录接口改成支持邮箱或手机号登录
-```
-
-**影响闭包**：
-```
-POST /api/v1/auth/login
-├─ 后端: AuthController.login()
-│   ├─ 参数验证: 支持 email 或 phone
-│   └─ 用户查询: UserService.findByEmailOrPhone()
-├─ 前端: LoginPage.vue
-│   ├─ 表单: 输入框提示改为 "邮箱或手机号"
-│   └─ 验证规则: 邮箱格式 | 手机号格式
-└─ API 文档: docs/api/auth.md
-```
-
-**Planning Level 重算**：
-```markdown
-原 Level: Lite
-新 Level: Standard
-原因: 公开 API 契约变化，需要补充 API 文档和前端兼容性验证
-```
-
-### 场景 3：权限规则变化
-
-**用户输入**：
-```
-普通用户也可以查看订单列表，但只能看自己的
-```
-
-**影响闭包**：
-```
-订单列表 API
-├─ 权限注解: @RequirePermission("order:list") → 移除
-├─ 数据权限: 增加 userId 过滤
-├─ 查询 SQL: WHERE user_id = :currentUserId
-└─ 前端路由: /orders 从管理员菜单移到用户菜单
-```
-
-**Planning Level 重算**：
-```markdown
-原 Level: Lite
-新 Level: High-risk
-原因: 权限变化涉及数据可见性，需要安全审查和数据权限测试
-```
-
-### 场景 4：交付面变化
-
-**用户输入**：
-```
-用户登录功能要支持移动端 App
-```
-
-**影响闭包**：
-```
-用户登录
-├─ 后端 API: 已有，无需改动
-├─ Web 页面: 已完成
-├─ App 页面: 新增
-│   ├─ src/app/pages/login/index.tsx
-│   ├─ 适配移动端布局
-│   └─ 生物识别支持（可选）
-└─ 路由配置: app/routes.ts
-```
-
-**动作决策**：
-```markdown
-- Feature: USER-LOGIN-WEB
-  Action: continue
-  Reason: Web 端已完成，无需改动
-
-- Feature: USER-LOGIN-APP
-  Action: 新增 Feature
-  Reason: 新增交付面，需要独立 Feature
-```
-
-## 工作原理
-
-### 第一步：建立变化 Diff
-
-从唯一 TODO 当前项、项目既有文档和用户新要求取得 before/after：
-
-```markdown
-- 领域: scope / contract / data / permission / architecture / technology / surface
-- 对象: Feature、菜单、API、表、权限、页面或集成
-- 原值: ...
-- 新值: ...
-- 来源: 用户要求、文档路径或源码位置
-```
-
-**只读规则**：
-- 只读能回答当前变化的章节和源码
-- 不全量回读所有 PRD、设计、架构、历史 Context 或 workflow 目录
-
-### 第二步：完整影响闭包
-
-按真实引用、依赖和调用链检查：
+**你的输入**：
 
 ```text
-requirement -> capability -> journey/menu -> feature/acceptance
-feature -> dependsOn 后继
-API/schema/message -> producer + all consumers
-data/permission -> repository/service/API/client/audit
-architecture/technology -> affected modules/repositories/environments
-changed path -> integration/review/git scope
+需求改了，用户表要加个手机号，之后要能用手机号登录。
 ```
 
-**覆盖范围**：
-- 直接受影响的功能、菜单
-- 数据、API、后端、Web/App/Desktop
-- 权限、集成、迁移/回滚
-- 配置和验证
+**它先把变化本身固定成一行**：
+
+```text
+变化    data · users 表
+        before  email / password / username
+        after   email / password / username / phone
+来源    用户本轮要求
+```
+
+**然后顺着真实引用往外走一圈**：
+
+```text
+users 表
+├─ 迁移        新增一列 + 已有数据怎么填（这里缺一个决定）
+├─ 实体        UserEntity  ← 3 处引用
+├─ 注册接口    POST /auth/register    参数校验要加一条
+├─ 登录接口    POST /auth/login       查询条件从"按邮箱"变成"按邮箱或手机号"
+├─ 注册页      register.vue           表单加一项 + 校验规则
+├─ 个人资料页  profile.vue            展示 + 可编辑
+└─ 接口文档    auth 那一节，两个接口都要更
+```
+
+**你会拿到的产出**：
+
+```text
+## 动作
+USER-REG-API     update-current   注册接口加手机号参数与格式校验
+USER-LOGIN-API   update-current   查询条件扩展为邮箱或手机号
+USER-REG-PAGE    update-current   表单项 + 校验规则
+USER-PROFILE     update-current   展示与编辑手机号
+（无新增功能）    迁移脚本挂进 USER-REG-API 的写集，不单开一个功能
+
+## 档位重算
+USER-LOGIN-API   Lite → Standard
+理由             登录是对外契约，已知调用方 2 个（Web、小程序），
+                 要同步接口文档并回归两端
+
+## TODO 已更新
+docs/<developer-id>/tasks/todo/   对应功能的验收、写集、依赖已就地修改
+新增验收         能用手机号注册 / 手机号格式校验 / 能用手机号登录
+
+## 未受影响
+订单、支付、消息模块没有引用 users 的这几列，本次不动
+
+## 阻塞：需要你定一件事
+已有用户的 phone 怎么处理？
+  A 允许为空 —— 老用户不受影响，但登录路径要处理空值分支
+  B 必填 —— 数据更干净，但得先想清楚老数据填什么
+这个决定会同时改变迁移脚本和登录逻辑，定了才继续。
+```
+
+最后那一段是它的性格：**遇到会改变数据或产品形态的缺失决定，它停下来问，不替你选。**
+
+### 场景 2：权限放宽
+
+**你的输入**：
+
+```text
+订单列表普通用户也能看了，但只能看自己的。
+```
+
+这句话听起来是"放宽一点"，实际上它把一个功能从"谁能进"的问题，变成了"每一行归谁"的问题。
+
+**你会拿到的产出**：
+
+```text
+## 影响
+接口权限     order:list 这个注解要摘掉
+数据过滤     查询必须带上当前用户条件 —— 这是新增的行为，不是删一行注解
+前端入口     /orders 从管理员菜单挪到用户菜单，路由守卫跟着改
+既有调用方   管理端列表页也走这个接口，加了过滤之后管理员会看不到别人的单子
+             → 需要区分：管理员走全量，普通用户走本人
+
+## 动作
+ORDER-LIST-API    reopen        已完成，但现在的实现对新规则是错的
+ORDER-LIST-PAGE   update-current 菜单归属与守卫
+ORDER-ADMIN-PAGE  update-current 补管理员分支，否则会被误伤
+
+## 档位重算
+ORDER-LIST-API    Lite → High-risk
+理由              改的是数据可见范围。漏一个过滤条件，就是一次越权，
+                  而且这种问题不会报错、只会静默泄露
+
+## 验收要补
+普通用户只看到自己的单子 / 管理员仍看到全量 / 直接传别人的订单 id 拿不到数据
+```
+
+注意 `reopen` 那一行。已经打上完成的功能，只有在新规则让它的实现真的不成立时才会被重新打开——这里就是那种情况。
+
+### 场景 3：新增交付面
+
+**你的输入**：
+
+```text
+登录功能要支持 App。
+```
+
+**你会拿到的产出**：
+
+```text
+## 影响
+后端接口     已有，无需改动（App 与 Web 复用同一个）
+Web 页面     已完成，不动
+App 页面     不存在 —— 这是一个新的交付面
+Token 存储   App 侧存储方式与 Web 不同，需要单独确认
+路由         App 侧路由表新增
+
+## 动作
+USER-LOGIN-WEB   continue        已完成，新变化没有让它失效
+USER-LOGIN-API   continue        契约没变
+USER-LOGIN-APP   新增功能         独立的交付面，独立验收
+
+## 为什么是新增而不是扩写
+"支持 App"不是给 Web 那个功能补几行，它有自己的页面、自己的存储方式、
+自己的验收（真机上能登进去）。塞进 Web 功能里，最后一定有一半没做完
+却被勾成了完成。
+```
+
+## 它怎么保证找全
+
+"找全"这件事没有取巧的办法，只能一路问到底：
+
+- 这个变化会不会让某个菜单或入口需要调整？
+- 数据要不要迁移？迁完还回得来吗？
+- 这个接口有几个调用方，都在哪？
+- Web 做了，App 和桌面端呢？
+- 权限规则和可见范围动没动？
+- 外部集成会不会被打断？
+- 每个环境的配置项要不要跟着加？
+- 最后拿什么证明改对了？
 
 <Aside type="caution">
-文件名相似或模型猜测**不能单独形成影响**，必须基于真实引用和调用链。
+一条硬规则：**文件名看着像不算影响。** 影响必须建立在真实的引用、依赖和调用链上。`UserService` 和 `UserProfileService` 名字接近，但没有一行代码把它们连起来的时候，后者就不在闭包里。靠猜测扩大范围，和漏掉一样有害——它会让你花时间改不需要改的东西，并且掩盖真正被漏掉的那一处。
 </Aside>
 
-### 第三步：动作决策
+## 六种动作
 
-每个受影响项选择动作：
+每个受影响的东西都会被归到其中一种，这决定了你接下来做什么：
 
-| 动作 | 说明 | 示例 |
-|------|------|------|
-| `continue` | 变化已在当前范围内，无需改计划 | 字段变化在预留扩展范围内 |
-| `update-current` | 补充当前 Feature 的目标、验收或写集 | 增加新字段的验证规则 |
-| `reopen` | 已完成 Feature 的用户结果因新变化失效 | 已上线的登录功能需要支持手机号 |
-| `reorder` | 依赖或优先级必须调整 | B 依赖 A 的新字段，需要先完成 A |
-| `cancel/supersede` | 旧功能不再有效 | 旧的单点登录方案被 OAuth2 替代 |
-| `decision-required` | 缺失决定会改变产品、架构或数据 | 手机号是否允许为空？是否支持国际号码？ |
+| 动作 | 意思 | 什么时候会看到 |
+| --- | --- | --- |
+| `continue` | 不用动 | 变化落在这个功能原本就覆盖的范围里 |
+| `update-current` | 在原功能上补 | 加一条校验、加一个字段、补一个交付面细节 |
+| `reopen` | 已完成的要重做 | 新规则让现有实现变成错的，比如权限收紧后旧查询会越权 |
+| `reorder` | 换个顺序 | B 现在得等 A 的新字段，原来的顺序走不通了 |
+| `cancel` / `supersede` | 作废或被取代 | 旧方案被新方案顶掉，继续做只是浪费 |
+| `decision-required` | 停下来等你 | 缺的这个决定会改变产品形态、架构，或者动到不可逆的数据 |
 
-### 第四步：Planning Level 重算
+`reopen` 和 `decision-required` 是两个最值得留意的。前者意味着"已完成"的判断需要撤回，后者意味着它拒绝替你猜——这两种情况它都会说明白为什么，而不是默默往下走。
 
-根据变化影响重新评估 Planning Level：
+## 风险档位会被重算
 
-**升级为 High-risk 的条件**：
-- 新增权限/租户
-- 迁移/删除数据
-- 公开契约变化
-- 并发/幂等要求
-- 涉及资金
-- 跨仓/外部集成
-- 难以回滚
-- 核心架构边界
+变化不只改内容，也改这件事有多容易出错。有几种情况会把档位直接顶到最高：
 
-**降级规则**：
-- 变化接近原 Feature 大部分时（约 70%），只作为人工复核信号
-- 不能凭行数自动升级或继续
+| 出现这种情况 | 为什么值得多花一道功夫 |
+| --- | --- |
+| 新增权限或租户维度 | 漏一处不报错，只静默泄露 |
+| 数据迁移或删除 | 出错之后不一定回得来 |
+| 对外契约变化 | 调用方在你视野之外，坏了你先不知道 |
+| 涉及并发或幂等 | 测试环境很难复现，线上一定会遇到 |
+| 涉及资金 | 错一分钱都是事故 |
+| 跨仓库或外部集成 | 联调窗口和回滚都不由你决定 |
+| 回滚困难 | 没有退路的改动值得慢一点 |
+| 动到核心架构边界 | 影响面会持续扩散到后面每个功能 |
 
-**Mode 重算**：
-- 仍有关键决定时返回 `Plan`，不进入可领取队列
-- 批准后才写回 `Goal` 或 `Build`
+变化大到接近整个功能重做时，它不会自己拍板，而是把这件事标出来让人看一眼。它也不会因为改了多少行就自动升档——行数不是风险。如果还有关键决定悬着，这个功能会被退回规划状态，不进可执行队列；决定定了才写回去。
 
-### 第五步：定向回流专业 Skill
+## 只叫该叫的人
 
-只调用受影响的专业规划 Skill：
+分析完之后，它只把被牵动的那一类专业能力叫过来，不重跑整套规划：
 
-| 变化类型 | 回流 Skill |
-|---------|-----------|
-| 产品变化 | `product-manager` |
-| UI/UX 变化 | `frontend-design` |
-| 边界变化 | `architecture-design` |
-| 技术变化 | `tech-decision` |
-
-<Aside type="note">
-不重新运行整套项目规划，只针对受影响部分定向更新。
-</Aside>
-
-## 输出格式
-
-### 变化摘要
-
-```markdown
-## 变化摘要
-
-**变化类型**: 数据模型变化
-
-**变化内容**:
-- 用户表 (users) 新增 phone 字段
-- 类型: VARCHAR(20)
-- 约束: NOT NULL, UNIQUE
-
-**来源**: 用户要求
-
----
-```
-
-### 影响闭包
-
-```markdown
-## 影响闭包
-
-### 直接影响
-
-1. **数据库**
-   - users 表: 新增 phone 字段
-   - 迁移脚本: docs/migrations/add_phone_to_users.sql
-
-2. **后端**
-   - UserEntity.java: 新增 phone 属性
-   - AuthController.java: 注册接口增加 phone 参数
-   - UserService.java: 增加手机号查询方法
-
-3. **前端**
-   - register.vue: 新增手机号输入框
-   - profile.vue: 展示手机号
-
-4. **API 文档**
-   - docs/api/auth.md: 更新注册接口文档
-
-### 间接影响
-
-1. **测试**
-   - 注册功能测试: 增加手机号测试用例
-   - 数据迁移测试: 验证迁移脚本
-
-2. **验收条件**
-   - AC-002: 用户可以使用手机号注册
-   - AC-003: 手机号格式验证
-
----
-```
-
-### 动作计划
-
-```markdown
-## 动作计划
-
-### Feature: USER-REG-API
-
-**动作**: update-current
-
-**原因**: 注册 API 需要增加 phone 参数验证
-
-**更新内容**:
-- 验收: 新增 AC-002, AC-003
-- 写集: 新增 UserEntity.java, add_phone_to_users.sql
-
-**Planning Level**: Lite → Standard
-**理由**: 公开 API 契约变化，需要补充文档
-
----
-
-### Feature: USER-REG-PAGE
-
-**动作**: update-current
-
-**原因**: 注册页面需要增加手机号输入框
-
-**更新内容**:
-- 写集: 新增 register.vue (手机号输入)
-- 验收: 新增表单验证测试
-
----
-```
-
-### 决策请求（如需）
-
-```markdown
-## 需要决策
-
-### 决策 1: 手机号是否允许为空？
-
-**上下文**: 用户表新增 phone 字段
-
-**选项**:
-- A: 允许为空（NULL）
-- B: 必填（NOT NULL）
-
-**影响**:
-- 选项 A: 兼容已有用户，但需要额外逻辑处理空值
-- 选项 B: 数据一致性好，但需要迁移脚本为已有用户生成默认值
-
-**建议**: 选项 A，兼容性更好
-
----
-
-### 决策 2: 是否支持国际手机号？
-
-**上下文**: 手机号格式验证
-
-**选项**:
-- A: 只支持中国大陆 (+86)
-- B: 支持国际号码 (需要区号选择)
-
-**影响**:
-- 选项 A: 实现简单，正则验证 11 位数字
-- 选项 B: 需要国家/地区选择器，复杂度增加
-
-**建议**: 根据用户群体决定
-
----
-```
+| 变的是 | 找谁 |
+| --- | --- |
+| 产品定义、验收 | [product-manager](/skills/skills-reference/critical/product-manager/) |
+| 界面与交互 | [frontend-design](/skills/skills-reference/high/frontend-design/) |
+| 模块与数据边界 | [architecture-design](/skills/skills-reference/high/architecture-design/) |
+| 技术选型 | [tech-decision](/skills/skills-reference/high/tech-decision/) |
 
 ## 与其他 Skill 的关系
 
-### Conflicts（职责边界）
+**上游**：[product-manager](/skills/skills-reference/critical/product-manager/)（初始产品定义）、[project-manager](/skills/skills-reference/high/project-manager/)（初始 TODO）、[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)
 
-| Skill | 边界说明 |
-|-------|---------|
-| `product-manager` | `product-manager` 负责新项目产品定义；`change-impact-analysis` 负责已有范围的变更分析 |
-| `project-manager` | `project-manager` 负责初始 TODO 生成；`change-impact-analysis` 负责变更后的 TODO 更新 |
+**下游**：[project-manager](/skills/skills-reference/high/project-manager/)、[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)
 
-### Related Skills
+**协作**：[universal-development](/skills/skills-reference/low/universal-development/)（按新计划实施）、[code-review](/skills/skills-reference/high/code-review/)（审变更代码）
 
-**前置依赖** (before):
-- `product-manager` - 提供初始产品定义
-- `project-manager` - 提供初始 TODO
-- `task-todo-workflow` - 提供 TODO 工作流
+```text
+product-manager（定义） → project-manager（初始 TODO）
+                                    ↓
+                            范围在执行中变了
+                                    ↓
+                     change-impact-analysis（找全 + 就地改 TODO）
+                          ↓                        ↓
+              定向回流受影响的规划能力        universal-development（实施）
+              （产品 / 设计 / 架构 / 技术）              ↓
+                                              code-review（审）
+```
 
-**后续推荐** (after):
-- `project-manager` - 重新生成或更新 TODO
-- `task-todo-workflow` - 更新 TODO 状态
+## 常见坑
 
-**协作 Skill** (complement):
-- `universal-development` - 实施变更后的功能
-- `code-review` - 审查变更代码
+**闭包只找了一层。** 接口改了，改完接口就收工——调用它的三个页面和一个定时任务没人管。找影响要顺着引用一路走到没有下一跳，不是看一眼直接依赖。
+
+**用名字猜影响。** 见过把所有含 `User` 的文件都列进受影响清单的分析。清单看着很全，实际上真正被漏掉的那一处淹在里面。
+
+**把它当固定关卡。** 每个功能实现前都跑一遍影响分析，成本全花在重复确认"没变化"上。它的价值只在真的有变化的时候兑现。
+
+**档位一律往高走。** 见到"权限"两个字就顶到最高档，小范围的内部权限调整也被要求走完整套安全审查。风险要看这次变化实际能造成什么，不是看关键词。
+
+**分析完不改 TODO。** 这是最贵的一种。清单在对话里，计划还是旧的，第二天接手的人照着旧计划做——等于这次分析白做，还多了一次误导。
+
+**用"需求改了"三个字启动。** 它会把时间花在反问上。说清改的是什么、原来是什么，一句话省掉一轮来回。
 
 ## 最佳实践
 
-### 1. 明确变化范围
+- **带上 before。** "登录改成支持手机号，原来只支持邮箱"比"登录要支持手机号"好用得多——后者它得先去确认现状。
+- **说清为什么改。** 加手机号是为了登录，还是为了发短信通知？目的不同，闭包不同（后者会牵到通知模块）。
+- **一次说一个变化。** 三个变化混在一句话里，闭包会互相污染，最后分不清哪条动作对应哪个变化。
+- **分析完立刻让 TODO 落地。** 分析和更新之间不要留空隙，中间那段时间里的所有决定都建立在过期计划上。
+- **对 `decision-required` 认真一点。** 它停下来问的那些问题，通常是当时省一分钟、后面赔一天的那类。
 
-```markdown
-<!-- 不够清晰 -->
-需求改了
-
-<!-- 清晰明确 -->
-需求改了：用户登录要支持手机号登录，原来只支持邮箱
-```
-
-### 2. 提供上下文
-
-```markdown
-<!-- 缺少上下文 -->
-加一个字段
-
-<!-- 完整上下文 -->
-用户表加一个 phone 字段，用于手机号登录和短信通知
-```
-
-### 3. 区分真实变化 vs 实现偏差
-
-**真实变化**（触发 change-impact-analysis）：
-- 用户要求新增手机号登录
-- API 契约从同步改为异步
-- 权限规则从管理员专用改为所有用户可用
-
-**实现偏差**（不触发）：
-- 代码写错了，少了一个参数验证
-- Review 发现性能问题，需要加缓存
-- 测试失败，需要修复 bug
-
-### 4. 及时更新 TODO
-
-变化分析完成后，立即更新 TODO：
-
-```bash
-# 错误：分析完不更新
-/change-impact-analysis
-# ... 分析完成 ...
-# （用户继续开发，TODO 过时）
-
-# 正确：分析完立即更新
-/change-impact-analysis
-# ... 分析完成 ...
-/project-manager  # 或手动更新 TODO
-```
-
-## 故障排查
-
-### 问题 1：影响闭包不完整
-
-**症状**：分析遗漏了受影响的模块
-
-**原因**：
-- 只基于文件名相似推测，未检查真实引用
-- 未追踪间接依赖
-
-**解决方案**：
-```bash
-# 检查真实引用
-git grep "UserEntity"
-git grep "users 表"
-
-# 检查间接依赖
-# 找到所有调用 AuthController 的地方
-```
-
-### 问题 2：Planning Level 评估不准
-
-**症状**：变化很小但被升级为 High-risk
-
-**原因**：
-- 触发了权限、数据或契约关键词
-- 未考虑变化的实际影响范围
-
-**解决方案**：
-- 评估变化的真实风险
-- 小范围权限调整不一定是 High-risk
-- 内部 API 变化可以是 Lite
-
-### 问题 3：重复触发
-
-**症状**：每次实现都被要求做影响分析
-
-**原因**：
-- 未区分真实变化和实现步骤
-- 把 change-impact-analysis 当作固定流程
-
-**解决方案**：
-- 只在用户明确提出范围变化时触发
-- 实现过程中的调整不触发
-- Bug 修复不触发
+<Aside type="note">
+怎么算真的做完了：变化写清了，受影响的东西列全了并且每一项都有动作，档位重算过，TODO 已经就地改完，没被影响的边界也明确说了出来。如果卡在某个决定上，那就是"阻塞"，不是"完成"。
+</Aside>
 
 ## 下一步
 
-- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义与验收
-- [project-manager](/skills/skills-reference/high/project-manager) - 生成功能 TODO
-- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
-- [universal-development](/skills/skills-reference/high/universal-development) - 实施变更功能
+- [product-manager](/skills/skills-reference/critical/product-manager/) - 产品定义与验收
+- [project-manager](/skills/skills-reference/high/project-manager/) - 生成功能 TODO
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) - TODO 工作流
+- [universal-development](/skills/skills-reference/low/universal-development/) - 实施变更后的功能
+- [code-review](/skills/skills-reference/high/code-review/) - 审查变更代码

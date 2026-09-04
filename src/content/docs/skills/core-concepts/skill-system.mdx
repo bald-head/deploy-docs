@@ -31,44 +31,38 @@ Skill 是一个**自包含的能力单元**，封装了完成特定软件工程�
 
 ### 1. Frontmatter 元数据
 
+下面用一个虚构的 `invoice-export` 当例子——它不是仓库里真实存在的 Skill，只用来把字段结构讲清楚。真实 Skill 的取值请直接看它自己的 `SKILL.md`。
+
 ```yaml
 ---
-name: product-manager
-description: "对新项目或新功能完成研究、brainstorm、产品定义与验收"
-category: product
-tags: [definition, requirements, planning]
-priority: critical
+name: invoice-export
+description: "把对账明细导出成财务可直接入账的文件"
+category: development
+tags: [export, finance, report]
+priority: medium
 
 triggers:
   zh:
-    - 产品定义
-    - 完整需求
-    - 产品规划
-    - 新项目
-    - 新功能
-    - 需求分析
-    - PRD
+    - 导出对账单
+    - 财务导出
+    - 生成对账明细
   en:
-    - product definition
-    - requirements
-    - PRD
-    - product planning
+    - export invoice
+    - reconciliation export
 
 gates:
-  - "新项目或尚未规划的新功能（非已批准 TODO 的续作）"
-  - "需求需要完整定义（用户、能力、菜单、规则、权限、验收）"
-  - "存在唯一 TODO 文件且已执行 --plan-start"
+  - "已确认导出字段与口径（不是还在讨论要导什么）"
+  - "已有可查询的账务数据源"
 
 conflicts:
-  universal-development: "universal-development 负责已有产品定义的实现；product-manager 负责新项目/新功能的产品定义"
-  change-impact-analysis: "change-impact-analysis 负责已有范围的变更分析；product-manager 负责新项目/新功能的完整定义"
+  some-report-skill: "报表 Skill 负责屏幕上的可视化；本 Skill 负责可入账的文件产物"
 
 related_skills:
-  before: [task-todo-workflow]
-  after: [architecture-design, tech-decision, project-manager]
-  complement: [product-discovery, product-execution, brainstorm, grilling]
+  before: [database-design]
+  after: [code-review]
+  complement: [xlsx]
 
-not_for: [已有完整PRD的实现, 纯技术维护, Bug修复, 架构设计, 技术选型]
+not_for: [口径还没定, 只是想看图表, 一次性手工取数]
 ---
 ```
 
@@ -91,7 +85,7 @@ name: product-manager
 一句话描述 Skill 的核心用途和关键边界，用于 Skill 发现和选择。
 
 ```yaml
-description: "对新项目或新功能完成研究、brainstorm、产品定义与验收"
+description: "把对账明细导出成财务可直接入账的文件"
 ```
 
 ### category（可选）
@@ -109,11 +103,15 @@ Skill 的分类：
 
 Skill 的优先级，影响路由时的选择顺序：
 
-- `critical` - 关键（1 个）：task-todo-workflow
-- `high` - 高优先级（19 个）：核心开发流程
-- `medium` - 中优先级（30 个）：专业领域
-- `low` - 低优先级（35 个）：扩展功能
-- `fallback` - 兜底（10 个）：通用能力
+| 取值 | 含义 | 当前数量 |
+|---|---|---|
+| `critical` | 范围变化与产品定义，先于一切实现 | 2 |
+| `high` | 核心开发流程 | 25 |
+| `medium` | 专业领域能力 | 30 |
+| `low` | 扩展能力 | 38 |
+| `fallback` | 兜底（当前未使用，保留取值） | 0 |
+
+数量会随 Skill 增删变化，按桶位的完整名单以 [Skill 目录](/skills/catalog/) 为准；单个 Skill 的真实取值只看它自己 `SKILL.md` 的 `priority`。
 
 ### triggers（必需）
 
@@ -122,20 +120,19 @@ Skill 的优先级，影响路由时的选择顺序：
 ```yaml
 triggers:
   zh:
-    - 产品定义      # 精确匹配
-    - 新项目        # 关键词
-    - 需求改了      # 口语化表达
+    - 导出对账单    # 精确匹配
+    - 财务导出      # 关键词
+    - 这个月的账导一下  # 口语化表达
   en:
-    - product definition
-    - new project
-    - requirements changed
+    - export invoice
+    - reconciliation export
 ```
 
 <Aside type="tip">
 **设计原则**：
 - 至少 5-7 个中文触发词
-- 包含口语化表达（如"需求改了"）
-- 避免歧义（如"优化"太宽泛）
+- 带上口语化说法，用户不会照着文档背词
+- 避免歧义，像"优化"这种没有领域限定的词会到处乱撞
 </Aside>
 
 ### gates（必需）
@@ -144,16 +141,17 @@ triggers:
 
 ```yaml
 gates:
-  - "新项目或尚未规划的新功能"
-  - "需求需要完整定义"
-  - "存在唯一 TODO 文件且已执行 --plan-start"
+  - "已确认导出字段与口径"
+  - "已有可查询的账务数据源"
 ```
 
 **作用**：
 
-- ✅ 避免过早触发：tech-decision 要求"尚未开始生产代码编辑"
-- ✅ 确保输入完整：api-development 要求"已有相邻生产接口参考"
-- ✅ 防止职责越界：bug-detective 要求"已确认是故障而非需求变更"
+- ✅ 避免过早触发：技术选型类 Skill 会要求"尚未开始生产代码编辑"
+- ✅ 确保输入完整：接口类 Skill 会要求"已有相邻生产接口可参考"
+- ✅ 防止职责越界：排障类 Skill 会要求"已确认是故障而不是需求变更"
+
+具体门槛逐个 Skill 不同，以各自 `SKILL.md` 的 `gates` 为准。
 
 ### conflicts（必需）
 
@@ -161,8 +159,8 @@ gates:
 
 ```yaml
 conflicts:
-  frontend-polish: "frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化"
-  change-impact-analysis: "product-manager 负责新项目产品定义；change-impact-analysis 负责已有范围的变更分析"
+  some-report-skill: "报表 Skill 负责屏幕上的可视化；本 Skill 负责可入账的文件产物"
+  some-etl-skill: "ETL 负责把数据搬进仓；本 Skill 只负责出账务口径的文件"
 ```
 
 **冲突解决示例**：
@@ -182,9 +180,9 @@ conflicts:
 
 ```yaml
 related_skills:
-  before: [task-todo-workflow]                    # 通常在这些 Skill 之后执行
-  after: [architecture-design, project-manager]   # 完成后应该进入这些 Skill
-  complement: [brainstorm, grilling]              # 可以配合调用的 Skill
+  before: [database-design]   # 通常在这些 Skill 之后执行
+  after: [code-review]        # 完成后应该进入这些 Skill
+  complement: [xlsx]          # 可以配合调用的 Skill
 ```
 
 **依赖类型**：
@@ -198,7 +196,7 @@ related_skills:
 明确不适用的场景，避免误用：
 
 ```yaml
-not_for: [已有完整PRD的实现, 纯技术维护, Bug修复, 架构设计, 技术选型]
+not_for: [口径还没定, 只是想看图表, 一次性手工取数]
 ```
 
 ## Skill 发现机制
@@ -415,55 +413,25 @@ api-development/
 需要数据库设计时，协作调用 `database-design` Skill。
 ```
 
-## 95 个 Skill 分类
+## 95 个 Skill 怎么分布
 
-### Critical（1 个）
+按 `priority` 分成四个在用的桶位：
 
-- `task-todo-workflow` - 任务管理核心
+| 桶位 | 数量 | 里面装的是什么 | 完整名单 |
+|---|---|---|---|
+| Critical | 2 | 范围变化与产品定义。这两件事没结论，后面的实现都可能白做 | [Critical & High](/skills/catalog/critical-high/) |
+| High | 25 | 从项目规划、架构、逐 Feature 技术选型，一路到实现、Review、提交的主干 | [Critical & High](/skills/catalog/critical-high/) |
+| Medium | 30 | 专业领域：数据库与缓存、鉴权、实时通信、定时任务、前端状态、Skill 治理 | [Medium](/skills/catalog/medium/) |
+| Low | 38 | 扩展能力：文档与办公文件生成、平台集成、设计工具、增长与内容 | [Low & Fallback](/skills/catalog/low-fallback/) |
 
-### High 优先级（19 个）
+`fallback` 是保留取值，当前没有 Skill 使用。
 
-产品和架构：
-- `product-manager` - 产品定义
-- `project-manager` - 项目规划
-- `architecture-design` - 架构设计
-
-开发实施：
-- `crud-development` - CRUD 开发
-- `api-development` - API 开发
-- `database-design` - 数据库设计
-- `frontend-design` - 前端设计
-- `ui-pc` - PC 界面
-- `ui-app` - 移动界面
-- `universal-development` - 通用开发
-
-质量保障：
-- `code-review` - 代码审查
-- `bug-detective` - 故障排查
-
-Git 操作：
-- `git-commit` - 提交推送
-- `git-workflow` - 分支管理
-
-其他：
-- `change-impact-analysis` - 影响分析
-- `project-navigator` - 项目导航
-- `frontend-polish` - 前端优化
-- `progress` - 进度统计
-- `sc` - 特殊能力
-
-### Medium 优先级（30 个）
-
-数据库和缓存、安全、前端、Git、产品、测试、Skill 管理等。
-
-### Low & Fallback（45 个）
-
-文档生成、特殊工具集成、平台特定能力等。
-
-详见：[Skill 目录](/skills/catalog/critical-high)
+<Aside type="caution">
+桶位会随 Skill 增删和职责调整变化，这里只给形态、不逐个点名——名单写进正文就一定会过期。要查某个 Skill 归哪一桶，看它自己 `SKILL.md` 里的 `priority`；要看整桶，走上面三个目录页。
+</Aside>
 
 ## 下一步
 
-- [路由机制](/skills/core-concepts/routing) - 了解 Skill 如何被自动选择
-- [Runtime Hook](/skills/core-concepts/runtime-hooks) - 了解 Skill 的运行时环境
-- [Skill 目录](/skills/catalog/critical-high) - 浏览所有可用的 Skill
+- [路由机制](/skills/core-concepts/routing/) - 了解 Skill 如何被自动选择
+- [Runtime Hook](/skills/core-concepts/runtime-hooks/) - 了解 Skill 的运行时环境
+- [Skill 目录](/skills/catalog/) - 浏览所有可用的 Skill

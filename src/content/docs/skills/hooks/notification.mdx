@@ -1,114 +1,49 @@
 ---
 title: 中文语音通知
-description: 任务完成状态的语音提示系统
+description: 三类中文提示音的含义、开关方式和听不到声音时的排查
 order: 9
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-## 概述
+## 这个功能帮你做什么
 
-Runtime Hooks 支持通过中文语音提示任务状态，帮助开发者在不看屏幕的情况下了解 Agent 的工作进展。
+Agent 一轮回复结束时会播一段中文提示音，你不用盯着屏幕也知道当前是"该我出手了"还是"整件事做完了"。
 
-**三种状态提示**：
-- **需要确认**（`<!-- CONFIRMATION_REQUIRED -->`）
-- **回复完成**（普通回复）
-- **任务完成**（`<!-- TASK_COMPLETE -->`）
+提示音由 Agent 自己按回复性质选择，你不需要做任何标注或手工触发。
 
-## 工作原理
+## 三类提示音
 
-### 触发机制
-
-Agent 在最终回复末尾添加不可见的 HTML 注释标记：
-
-```markdown
-用户的可见回复内容...
-
-<!-- CONFIRMATION_REQUIRED -->
-```
-
-Stop Hook 或 notify Hook 检测到标记后，播放对应的 WAV 音频。
-
-### 音频文件
-
-| 状态 | 文件路径 | 内容 | 触发条件 |
-|------|---------|------|---------|
-| 需要确认 | `runtime-hooks/audio/confirmation.wav` | "需要您确认" | 需要用户决定、补充信息或授权 |
-| 回复完成 | `runtime-hooks/audio/reply-complete.wav` | "回复完成" | 普通回复（无标记） |
-| 任务完成 | `runtime-hooks/audio/task-complete.wav` | "任务完成" | 代码、验证、Review、Git 全部完成 |
+| 提示音 | 什么时候响 | 你该做什么 |
+|--------|-----------|-----------|
+| 需要您确认 | 需要你做决定、补充信息、给出授权，或需要你手工操作（重启服务、跑数据库脚本、切换设备） | 看回复内容，给出决定或完成那一步 |
+| 回复完成 | 普通回复结束：状态更新、信息汇报、可选建议、部分完成 | 看一眼，决定下一步 |
+| 任务完成 | 一件事真正收尾：代码写完、验证通过、Review 通过、已提交并推送，且没有剩余必做事项 | 可以开始下一个任务 |
 
 <Aside type="note">
-音频文件是静态的中文 WAV 文件，存储在仓库中。
+听到"任务完成"就意味着代码已经推到远端了。如果只是代码写完还没验、或者验完还没推，响的会是"回复完成"。
 </Aside>
 
-## 使用场景
+### 举例
 
-### 场景 1：需要用户确认
-
-**Agent 回复**：
+响"需要您确认"的回复长这样：
 
 ```markdown
-需求变更影响分析完成：
+数据库迁移脚本已生成，请手工执行：
 
-受影响模块：
-- 用户表增加 phone 字段
-- 注册 API 增加 phone 参数
-- 注册页面增加手机号输入
-
-是否继续实施这些变更？
-
-<!-- CONFIRMATION_REQUIRED -->
-```
-
-**语音提示**："需要您确认"
-
-**用户操作**：查看分析结果，决定是否继续。
-
-### 场景 2：等待用户操作
-
-**Agent 回复**：
-
-```markdown
-数据库迁移脚本已生成：
-
-```sql
-ALTER TABLE users ADD COLUMN phone VARCHAR(20);
-```
-
-请手工执行以下步骤：
 1. 连接到数据库
-2. 执行上述 SQL
-3. 确认执行成功后回复
-
-<!-- CONFIRMATION_REQUIRED -->
+2. 执行 ALTER TABLE users ADD COLUMN phone VARCHAR(20);
+3. 确认执行成功后告诉我
 ```
 
-**语音提示**："需要您确认"
-
-**用户操作**：执行数据库迁移，然后告知 Agent。
-
-### 场景 3：普通回复
-
-**Agent 回复**：
+响"回复完成"的回复长这样：
 
 ```markdown
-已完成用户登录 API 实现：
-
-- POST /api/v1/auth/login
-- 参数验证
-- 密码校验
-- JWT 生成
-
-下一步：实现登录页面
+已完成用户登录 API 实现（参数验证、密码校验、JWT 生成）。
+下一步：实现登录页面。
 ```
 
-**语音提示**："回复完成"
-
-**用户操作**：查看回复，决定下一步。
-
-### 场景 4：任务完成
-
-**Agent 回复**：
+响"任务完成"的回复长这样：
 
 ```markdown
 用户登录功能已完成：
@@ -117,422 +52,100 @@ ALTER TABLE users ADD COLUMN phone VARCHAR(20);
 ✓ 开发者验证（手工测试通过）
 ✓ Code Review（无问题）
 ✓ Git 交付（已推送到 origin/main）
-
-验收证据：
-- AC-001: 用户可以登录 -> 手工测试通过
-- AC-002: Token 存储 -> DevTools 验证
-- Review: pass
-
-远端确认：commit abc123 已在 origin/main
-
-<!-- TASK_COMPLETE -->
 ```
 
-**语音提示**："任务完成"
+## 两端的接入方式不同
 
-**用户操作**：可以开始下一个任务。
+| 客户端 | 提示音接入位置 |
+|--------|--------------|
+| Claude Code | 会话停止事件，配置在 `~/.claude/settings.json` |
+| Codex | 用户级 `notify` 配置，在 `~/.codex/config.toml` |
 
-## 标记使用规范
+两端都由安装器写入，正常安装后不需要手工改这两个文件。
 
-### CONFIRMATION_REQUIRED
-
-**何时使用**：
-- ✅ 需要用户决定（是/否、选项 A/B）
-- ✅ 需要用户补充信息（API Key、配置参数）
-- ✅ 需要用户授权（删除数据、强制推送）
-- ✅ 需要用户执行人工操作（重启服务、运行数据库脚本）
-- ✅ 需要用户切换客户端或设备
-
-**何时不用**：
-- ❌ 普通状态更新（"正在分析代码..."）
-- ❌ 可选建议（"建议优化性能"）
-- ❌ 部分完成（"已完成 50%"）
-- ❌ 纯信息汇报（"发现 3 个文件"）
-
-**示例**：
-
-```markdown
-<!-- 正确 ✓ -->
-检测到高风险命令 rm -rf。是否继续执行？
-<!-- CONFIRMATION_REQUIRED -->
-
-<!-- 错误 ✗ -->
-代码分析中，请稍候...
-<!-- CONFIRMATION_REQUIRED -->
-```
-
-### TASK_COMPLETE
-
-**何时使用**：
-- ✅ 代码实现完成
-- ✅ 必要验证完成（手工测试或单元测试）
-- ✅ Code Review 通过
-- ✅ Git commit & push 完成
-- ✅ 没有剩余必做事项
-
-**何时不用**：
-- ❌ 只完成了代码，未验证
-- ❌ 只完成了验证，未 Review
-- ❌ 只完成了 Review，未提交代码
-- ❌ 代码提交了，但未推送
-- ❌ 还有必做事项（如修复 Review 发现的问题）
-
-**示例**：
-
-```markdown
-<!-- 正确 ✓ -->
-用户登录功能已完成：
-✓ 代码实现
-✓ 开发者验证
-✓ Code Review
-✓ Git 交付
-<!-- TASK_COMPLETE -->
-
-<!-- 错误 ✗ -->
-代码已写完，等待测试。
-<!-- TASK_COMPLETE -->
-```
-
-### 无标记（普通回复）
-
-**何时使用**：
-- ✅ 状态更新
-- ✅ 部分完成
-- ✅ 信息汇报
-- ✅ 可选建议
-- ✅ 无需用户动作的阻塞汇报
-
-**示例**：
-
-```markdown
-<!-- 正确 ✓ -->
-已完成需求分析，正在设计架构...
-
-<!-- 正确 ✓ -->
-发现 5 个相关文件，建议重构 utils.ts。
-
-<!-- 正确 ✓ -->
-遇到 API 限流，等待 5 秒后自动重试...
-```
-
-## 实现细节
-
-### notify-complete.cjs
-
-Stop Hook 调用此脚本播放音频：
-
-```javascript
-#!/usr/bin/env node
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-
-// 读取输入
-const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-
-// 检查是否禁用
-if (process.env.AGENT_COMPLETION_SOUND === '0') {
-  process.exit(0);
-}
-
-// 确定音频文件
-let audioFile;
-if (input.type === 'confirmation-requested') {
-  audioFile = process.env.AGENT_CONFIRMATION_SOUND_FILE
-    || path.join(__dirname, '../audio/confirmation.wav');
-} else if (input.type === 'task-complete') {
-  audioFile = process.env.AGENT_TASK_COMPLETION_SOUND_FILE
-    || path.join(__dirname, '../audio/task-complete.wav');
-} else {
-  audioFile = process.env.AGENT_REPLY_COMPLETION_SOUND_FILE
-    || path.join(__dirname, '../audio/reply-complete.wav');
-}
-
-// 播放音频
-if (fs.existsSync(audioFile)) {
-  // macOS
-  exec(`afplay "${audioFile}"`);
-  // Linux 需要 aplay 或 paplay
-  // exec(`aplay "${audioFile}"`);
-}
-```
-
-### Stop Hook 集成
-
-```javascript
-function handleStopHook(lastResponse) {
-  let notificationType = 'reply-complete';
-  
-  // 检测标记
-  if (lastResponse.includes('<!-- CONFIRMATION_REQUIRED -->')) {
-    notificationType = 'confirmation-requested';
-  } else if (lastResponse.includes('<!-- TASK_COMPLETE -->')) {
-    notificationType = 'task-complete';
-  }
-  
-  // 调用通知脚本
-  const notifyScript = path.join(__dirname, 'notify-complete.cjs');
-  exec(`echo '{"type":"${notificationType}"}' | node ${notifyScript}`);
-  
-  // 继续 Stop Hook 逻辑
-  // ...
-}
-```
-
-## 配置选项
-
-### 禁用语音提示
+## 关掉提示音
 
 ```bash
-# 完全禁用
+# 当前 shell 生效
 export AGENT_COMPLETION_SOUND=0
 
-# 永久设置
+# 永久生效
 echo 'export AGENT_COMPLETION_SOUND=0' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### 自定义音频文件
+想重新打开：
 
 ```bash
-# 自定义确认音
+unset AGENT_COMPLETION_SOUND
+```
+
+## 换成自己的声音
+
+三个环境变量分别指定三类提示音的文件，设了就用你的，没设就用自带的：
+
+```bash
 export AGENT_CONFIRMATION_SOUND_FILE=/path/to/custom-confirmation.wav
-
-# 自定义回复完成音
 export AGENT_REPLY_COMPLETION_SOUND_FILE=/path/to/custom-reply.wav
-
-# 自定义任务完成音
 export AGENT_TASK_COMPLETION_SOUND_FILE=/path/to/custom-task.wav
 ```
 
-**音频文件要求**：
-- 格式：WAV
-- 采样率：16000 Hz 或 44100 Hz
-- 声道：单声道或立体声
-- 时长：建议 1-3 秒
+音频文件要求：WAV 格式，单声道或立体声，建议 1 到 3 秒。
 
-### 创建自定义音频
-
-#### macOS
-
-使用 `say` 命令：
+macOS 下可以直接用系统的 `say` 生成：
 
 ```bash
-# 生成中文语音
 say -v Ting-Ting "需要您确认" -o confirmation.aiff
-
-# 转换为 WAV
 ffmpeg -i confirmation.aiff confirmation.wav
 ```
 
-#### Linux
-
-使用 `espeak` 或 `festival`：
+Linux 下可以用 `espeak`：
 
 ```bash
-# 安装 espeak
 sudo apt-get install espeak
-
-# 生成语音
 espeak -v zh "需要您确认" -w confirmation.wav
 ```
 
-#### 在线工具
+## 听不到声音怎么排查
 
-- [Azure Text-to-Speech](https://azure.microsoft.com/en-us/services/cognitive-services/text-to-speech/)
-- [Google Cloud Text-to-Speech](https://cloud.google.com/text-to-speech)
-- [讯飞语音](https://www.xfyun.cn/)
-
-## 手动触发
-
-在脚本或维护流程中直接触发通知：
+按顺序过一遍：
 
 ```bash
-# 确认提示
-node ~/.agent-workflow/skills/runtime-hooks/scripts/notify-complete.cjs \
-  --source manual <<< '{"type":"confirmation-requested"}'
-
-# 回复完成
-node ~/.agent-workflow/skills/runtime-hooks/scripts/notify-complete.cjs \
-  --source manual <<< '{"type":"reply-complete"}'
-
-# 任务完成
-node ~/.agent-workflow/skills/runtime-hooks/scripts/notify-complete.cjs \
-  --source manual <<< '{"type":"task-complete"}'
-```
-
-## 平台兼容性
-
-### macOS
-
-使用 `afplay` 命令（系统自带）：
-
-```bash
-afplay /path/to/audio.wav
-```
-
-✅ 开箱即用，无需安装额外软件。
-
-### Linux
-
-使用 `aplay`（ALSA）或 `paplay`（PulseAudio）：
-
-```bash
-# ALSA
-aplay /path/to/audio.wav
-
-# PulseAudio
-paplay /path/to/audio.wav
-```
-
-**安装**：
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install alsa-utils
-
-# Fedora/RHEL
-sudo yum install alsa-utils
-```
-
-### Windows
-
-使用 PowerShell：
-
-```powershell
-Add-Type -AssemblyName System.Speech
-$player = New-Object System.Media.SoundPlayer
-$player.SoundLocation = "C:\path\to\audio.wav"
-$player.PlaySync()
-```
-
-<Aside type="note">
-Windows 支持需要修改 `notify-complete.cjs` 脚本。
-</Aside>
-
-## 故障排查
-
-### 语音提示不播放
-
-**症状**：标记已添加，但没有听到语音。
-
-**诊断**：
-
-```bash
-# 1. 检查是否禁用
+# 1. 是不是被关掉了
 echo $AGENT_COMPLETION_SOUND
 
-# 2. 检查音频文件是否存在
-ls ~/.agent-workflow/skills/runtime-hooks/audio/
+# 2. 自带音频文件在不在
+ls <skills-root>/runtime-hooks/audio/
 
-# 3. 手动播放测试
-afplay ~/.agent-workflow/skills/runtime-hooks/audio/confirmation.wav
+# 3. 手动播一下，确认系统能出声
+afplay <skills-root>/runtime-hooks/audio/confirmation.wav
 
-# 4. 检查音量
-# 确保系统音量未静音
+# 4. 确认系统音量没静音
 ```
 
-**解决方案**：
+对应的处理：
 
-```bash
-# 启用语音提示
-unset AGENT_COMPLETION_SOUND
+| 排查结果 | 处理 |
+|---------|------|
+| 第 1 步输出 `0` | `unset AGENT_COMPLETION_SOUND` |
+| 第 2 步目录为空 | 重新跑一次安装器 `node <skills-root>/runtime-hooks/scripts/install.mjs` |
+| 第 3 步能听到、Agent 回复时听不到 | 确认 Hook 已安装：`node <skills-root>/runtime-hooks/scripts/install.mjs --check`；Codex 下还要 `codex` 里执行 `/hooks trust all` |
+| 第 3 步也听不到 | 系统音频问题，与本功能无关 |
 
-# 或
-export AGENT_COMPLETION_SOUND=1
-```
-
-### 播放器找不到
-
-**症状**（Linux）：
-
-```
-sh: 1: afplay: not found
-```
-
-**解决方案**：
-
-修改 `notify-complete.cjs`，使用 Linux 播放器：
-
-```javascript
-// 检测操作系统
-if (process.platform === 'darwin') {
-  exec(`afplay "${audioFile}"`);
-} else if (process.platform === 'linux') {
-  exec(`aplay "${audioFile}"`);
-} else if (process.platform === 'win32') {
-  // Windows 实现
-}
-```
+提示音在 macOS 上开箱即用。其他平台如果始终听不到，把它当可选功能关掉即可，不影响任何开发流程。
 
 ### 音频文件损坏
 
-**症状**：播放时出错或无声。
-
-**诊断**：
+播放报错或完全无声时先确认文件本身：
 
 ```bash
-# 检查文件格式
-file ~/.agent-workflow/skills/runtime-hooks/audio/confirmation.wav
-
-# 预期输出
-confirmation.wav: RIFF (little-endian) data, WAVE audio, ...
+file <skills-root>/runtime-hooks/audio/confirmation.wav
 ```
 
-**解决方案**：
-
-重新生成音频文件，或使用自定义音频。
-
-## 最佳实践
-
-### 1. 明确区分三种状态
-
-```markdown
-<!-- 需要用户决定 -->
-是否删除旧数据？
-<!-- CONFIRMATION_REQUIRED -->
-
-<!-- 普通回复 -->
-已完成数据迁移。
-
-<!-- 任务完成 -->
-数据迁移已完成并验证。
-<!-- TASK_COMPLETE -->
-```
-
-### 2. 不滥用 TASK_COMPLETE
-
-```markdown
-<!-- 错误 ✗ -->
-代码写完了！
-<!-- TASK_COMPLETE -->
-
-<!-- 正确 ✓ -->
-功能已完成：
-✓ 代码实现
-✓ 测试通过
-✓ Review 通过
-✓ 已推送到远端
-<!-- TASK_COMPLETE -->
-```
-
-### 3. 确认提示要清晰
-
-```markdown
-<!-- 不够清晰 -->
-请确认。
-<!-- CONFIRMATION_REQUIRED -->
-
-<!-- 清晰明确 -->
-是否继续删除 users 表的 100 条记录？
-此操作不可撤销。
-<!-- CONFIRMATION_REQUIRED -->
-```
+正常应该识别为 `RIFF (little-endian) data, WAVE audio`。不是的话重新跑安装器，或用上面的方式换成自定义音频。
 
 ## 下一步
 
-- [Stop Hook](/skills/hooks/stop) - 了解 Stop Hook 如何检测标记
-- [最佳实践](/skills/best-practices) - 更多使用技巧
-- [故障排查](/skills/hooks/troubleshooting) - Hooks 常见问题
+- [Stop Hook](/skills/hooks/stop/) - 会话结束时的完整行为
+- [最佳实践](/skills/best-practices/) - 更多使用技巧
+- [故障排查](/skills/hooks/troubleshooting/) - Hooks 常见问题

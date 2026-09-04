@@ -1,0 +1,111 @@
+---
+title: 静态视觉设计（canvas-design）
+description: 先定视觉方向再落成海报级 PDF 或 PNG 静态作品，字体来自内置字体库
+order: 22
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+"做张海报"最容易得到的结果是一张居中大标题加渐变背景的图。`canvas-design` 用一条硬性顺序拦住这条捷径：先确定这套视觉在追求什么、核心原则是什么，再按这个方向落成一件 PDF 或 PNG 作品。方向不是交付附赠的说明，它决定构图、字体和留白。
+
+它替你固定的是工艺标准：文字始终最小化并服务视觉、字重偏细、字体从内置字体库里挑真实字体、任何元素不许出页或重叠。它不做业务界面、不做交互设计、不写代码、不定义产品，也不维护任务状态——只执行既有 TODO 里那一步视觉创作。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "做张海报" | 单页或多页海报级静态作品 |
+| "设计一个封面" | 需要构图、字体和留白都成立的封面 |
+| "做个视觉设计" | 有概念、要视觉表达，不是要页面 |
+| "帮我做张平面稿" | 平面设计交付（PDF / PNG） |
+| "我要一组同一个方向的图" | 多页，同一方向下的明显区分变体 |
+
+触发词概括起来是三组：海报设计、视觉设计、平面设计。
+
+## 什么时候不要用
+
+- **业务界面、管理端页面** → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/)。
+- **交互设计、可点击原型** → [penpot-prototype](/skills/skills-reference/low/penpot-prototype/)，或先由 [frontend-design](/skills/skills-reference/high/frontend-design/) 定方向。静态画布没有状态、没有交互路径。
+- **可运行、可调参数的生成作品** → [algorithmic-art](/skills/skills-reference/low/algorithmic-art/)。流程同构，但那边输出的是能跑的网页。
+- **写代码** → [universal-development](/skills/skills-reference/low/universal-development/)。
+- **决定产品要做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **给已有材料套品牌色和字体** → [brand-guidelines](/skills/skills-reference/low/brand-guidelines/)。那是后处理，本 Skill 是从零创作。
+
+不适用范围概括为四条：业务 UI、代码实现、产品定义、交互设计。
+
+## 前置条件
+
+它没有声明 `gates`，正文规定的真实输入条件有四条：
+
+1. **已有一个 TODO 步骤指向视觉创作**。它只执行既有 TODO 里的这一步。
+2. **输出路径已经定下来**。优先用用户指定的路径，其次沿用仓库已有的文档目录约定；两者都没有时，会在写第一个文件之前先问你文档存储前缀。
+3. **内置字体库可用**。字体必须从这个目录里找，而不是随手用系统默认字体——这一条是硬要求。
+4. **有渲染 PDF / PNG 的能力**。环境不具备时会降级并说明边界。
+
+<Aside type="note">
+确认过的文档前缀只在当前任务内复用，不会被写成团队全局默认值。临时渲染和预览文件不会混进最终交付目录。
+</Aside>
+
+## 怎么用
+
+调用方式和它的生成艺术孪生兄弟一样轻：说清概念、气质或使用场合，不需要你先给版式或色板。内部顺序是固定的：
+
+```text
+用户请求 → 视觉方向 → 画布实现
+```
+
+### 1. 你提供概念，它负责不字面化
+
+它会先找出概念线索，并把它做成**嵌进设计里的引用**，而不是主题的字面图解。熟悉主题的人能直观感受到，其他人只看到一件完成度很高的作品。所以描述情绪、场合和张力，比列出"要有齿轮和地球"更有效。
+
+### 2. 它先交视觉方向，再动手渲染
+
+第一份产物是一份视觉方向说明：这套视觉叫什么、追求什么、核心原则是什么。你可以在这一步就否掉方向，这是整条流程里返工成本最低的位置。
+
+### 3. 按方向做画布，并逐项自查
+
+实现之后它会逐项检查构图、间距、配色和字体，标准是"任何类型的内容都要精致"。文字处理有明确规范：最小化、字重偏细、服务视觉传达，并且字体必须来自内置字体库。
+
+<Aside type="caution">
+"没有元素出页或重叠"是硬要求，不是建议。文字被裁掉一半的海报不算完成品，无论构图多好——这一项你打开文件就能验，值得每次都验。
+</Aside>
+
+### 4. 需要多页时说清
+
+它会沿着同一份视觉方向做更多页面，但要求页面之间有**明显区别**，不是同一版式换文字。多页可以打包进同一个 PDF，也可以输出多个 PNG。
+
+<Aside type="tip">
+参考文档里给了一个很有用的心理标准来约束密度和留白：把页面当作一本咖啡桌书里等待被填满的那一页。它比任何具体尺寸参数都更能决定这张图敢不敢留空。
+</Aside>
+
+### 5. 收口
+
+方向说明和作品文件写进同一个已确认的输出目录；需要提交进仓库时走 [git-commit](/skills/skills-reference/high/git-commit/)，未经授权不做 Git 操作。
+
+## 与其他 Skill 的关系
+
+它的相关列表是平铺的：[algorithmic-art](/skills/skills-reference/low/algorithmic-art/)、[penpot](/skills/skills-reference/low/penpot/)，没有前置或后续分组，所以它是一个**独立入口**。
+
+- **协作**：[algorithmic-art](/skills/skills-reference/low/algorithmic-art/) 是可运行版的孪生 Skill——同样的两步结构、同样的落盘规则，输出自包含网页；[penpot](/skills/skills-reference/low/penpot/) 负责把方向搬进真实设计工具并读写设计文件。
+- **提交**：[git-commit](/skills/skills-reference/high/git-commit/)，在你明确授权之后。
+
+```text
+（既有 TODO 中的视觉创作步骤）
+        ↓
+canvas-design → 视觉方向说明 + PDF / PNG
+        ↓                    ↓
+penpot（搬进设计工具）   algorithmic-art（同一概念的生成式表达）
+```
+
+## 产出与验收
+
+你会拿到一份视觉方向说明，加一件可下载的画布作品（多页时是一个 PDF 或多个 PNG）。
+
+判断真的完成了：
+
+- 打开文件后没有任何元素出页或重叠，文字完整；
+- 字体来自内置字体库，字重和字号服务于视觉而不是塞信息；
+- 构图、间距、配色和字体经得起逐项检查，不是"先出一版看看"；
+- 多页作品在同一方向下彼此有明显区别，不是换标题的同一版式；
+- 交付目录里只有最终产物，临时渲染和预览文件已清掉；
+- 原 TODO 步骤的状态由 [update-status](/skills/skills-reference/medium/update-status/) 更新。

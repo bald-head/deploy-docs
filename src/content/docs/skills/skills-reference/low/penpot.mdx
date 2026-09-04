@@ -1,0 +1,118 @@
+---
+title: Penpot 远程 MCP 与设计读写（penpot）
+description: 把 Codex CLI 接到私有部署已有的远程 Penpot MCP，并在确认活动标签页后读写设计文件
+order: 24
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+要让 Agent 真的动得了设计文件，需要一条完整的链路：私有部署里的远程 Penpot MCP、客户端注册、以及浏览器里那个唯一被连接的标签页。`penpot` 负责这条链路的**客户端一侧**：检测当前会话有没有 Penpot MCP 工具、引导你从 Penpot 复制 Server URL、完成注册并做一次真实握手，然后在确认焦点页面之后做只读或小步写入。
+
+它的范围被刻意收窄了两次。它不部署也不运维 Penpot 服务端；它连接的是私有部署里**已经存在**的远程 MCP，不安装本地 MCP 包、不启动本地服务、不装中转工具。远端返回 5xx、网关或容器异常时，它只完成客户端诊断并把服务端证据交回去，不去改服务。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "帮我把 Penpot 连上" | 会话里还没有 Penpot MCP 工具，需要首次配置 |
+| "Penpot MCP 配一下 / 检查一下" | 已配置但不确定是否有效，需要检查加真实握手 |
+| "读一下我现在打开的这个设计文件" | 只读：页面、选中对象、组件、tokens |
+| "在 Penpot 里把这个改成……" | 小步、可验证、可撤销的写入 |
+| "Penpot 工具超时了" | 故障分层排查（客户端 / 标签页 / 远端） |
+
+触发词概括起来是两组：Penpot、设计工具。适用场景就两件事：配置私有 Penpot 远程 MCP，或通过 MCP 读取和修改当前设计文件。
+
+## 什么时候不要用
+
+- **完整原型绘制、状态矩阵、回读与导出证据链** → [penpot-prototype](/skills/skills-reference/low/penpot-prototype/)。本 Skill 管连接和读写，那个 Skill 管把产品意图画成可验证的原型。
+- **前端组件实现** → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [ui-app](/skills/skills-reference/high/ui-app/)。
+- **视觉方向、设计契约** → [frontend-design](/skills/skills-reference/high/frontend-design/)。
+- **决定产品要做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **安装设计工具、部署 Penpot 服务端** → 不在范围内。
+- **静态海报、平面作品** → [canvas-design](/skills/skills-reference/low/canvas-design/)。
+
+不适用范围概括为四条：代码实现、产品定义、UI 组件开发、设计工具安装。
+
+## 前置条件
+
+它没有声明 `gates`，但平台事实构成了一条不能跳的链：
+
+1. **私有部署已经启用远程 MCP**。Penpot 2.16 起远程 MCP 集成在部署里；你需要在个人账户的 Integrations 里启用 MCP Server、生成或确认 MCP key，然后复制完整 Server URL。
+2. **地址形如 `https://<penpot-host>/mcp/stream?userToken=<secret>`**，走 Streamable HTTP。路径固定，`userToken` 不能为空。
+3. **客户端是 Codex CLI**。注册后完整 URL 会写进用户级 Codex 配置文件。
+4. **写入前必须有唯一活动标签页**。你要在 Penpot 打开目标文件，并通过菜单里的 MCP Server → Connect 把当前标签页设为活动标签页；同一账号只能有一个标签页持有活动连接。
+5. **注册完成后必须新开会话**。当前会话不会热加载新 MCP 工具。
+
+<Aside type="danger">
+`userToken` 是凭据。完整 URL 不得出现在回复、日志、命令回显或仓库里，HTTP 响应正文和配置查询的原始输出也不打印——这些位置都可能带 Token。怀疑泄露时在 Penpot 的 Integrations 里轮换 MCP key，再重新配置。
+</Aside>
+
+## 怎么用
+
+### 1. 它先看会话里有没有工具
+
+已经存在 Penpot MCP 工具时直接进入设计操作，不重复配置。这一步能省掉大部分"是不是又要配一遍"的疑问。
+
+### 2. 没有工具时才走配置
+
+它自带一个配置脚本，能检查当前配置状态（未配置、仍指向 localhost、地址无效），并支持从剪贴板、标准输入或环境变量三种来源注册，优先用剪贴板。替换已有入口时会先说明脱敏后的旧地址；新增失败时回滚旧配置。
+
+<Aside type="caution">
+配置过程中你**不需要把完整 URL 粘进聊天**。正确做法是在 Penpot 里点复制，然后只回一句"已复制"——完整 URL 也不会被拼进可见命令里。
+</Aside>
+
+### 3. 握手通过后重启会话
+
+脚本会真实执行 MCP 初始化和工具列表探测，全部通过后提示你新开 Codex CLI 会话。它不会声称当前会话能热加载。
+
+### 4. 设计操作
+
+你在 Penpot 打开文件并把当前标签页设为活动连接之后，它的动作顺序是：先用只读方式确认当前文件、页面、选中对象、组件和 tokens，再小步写入，每轮变更后回读受影响对象，并报告实际创建或修改的 ID 和数量。
+
+你明确要求绘制、创建或修改，即视为授权对应范围内的写操作；但删除、批量覆盖或跨页面重构仍需单独确认精确范围。无法确认焦点页面时它会停止写入，不猜文件也不猜页面。
+
+<Aside type="note">
+工具返回成功但**没有回读证据**时，它不会宣称设计已完成。只有结构化对象数据、没有截图时，结论会降级为"结构验证通过"，不会声称视觉结果正确。
+</Aside>
+
+### 5. MCP 没连上时会发生什么
+
+| 现象 | 定位 | 它会做什么 |
+| --- | --- | --- |
+| 检查发现没有配置 | 客户端未注册 | 进入首次配置，**不安装任何 npm 包** |
+| 初始化或工具列表失败 | 远端、代理或凭据 | 记录脱敏主机、HTTP 状态和失败阶段，指向远端路径、反向代理和 Token 有效性 |
+| 远端 5xx、网关或容器异常 | 服务端 | 只做客户端诊断，把证据交回服务端负责人，不改 Penpot 服务 |
+| 工具已出现但执行超时 | 标签页或服务端 | 先确认文件仍打开、当前标签页已连接、没有另一标签页抢占 |
+| 只有 Codex App 失败、CLI 直连成功 | App 集成 | 归因到 App 集成层，而不是远端 |
+| CLI 与直接 HTTP 探测都失败 | 远端或凭据层 | 归因到服务侧，不推给客户端 |
+
+它对已知 Issue 的引用也有边界：只有真实复现了相同阶段和行为，才会把某个上游 Issue 当作相关证据，而不是拿它当现成结论。
+
+## 与其他 Skill 的关系
+
+它的相关列表是平铺的：[penpot-prototype](/skills/skills-reference/low/penpot-prototype/)、[frontend-design](/skills/skills-reference/high/frontend-design/)。实际使用中它是设计链路的**连接层**。
+
+- **上游**：[frontend-design](/skills/skills-reference/high/frontend-design/) 给方向和设计契约。
+- **下游**：[penpot-prototype](/skills/skills-reference/low/penpot-prototype/) 在连接可用之后做完整原型与验证证据；工程实现交给 [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)。
+
+```text
+frontend-design（方向）
+        ↓
+penpot（注册远端 MCP、握手、确认活动标签页、只读或小步写）
+        ↓
+penpot-prototype（绘制 + 回读 + 导出 + 复审）
+        ↓
+ui-pc / ui-app（工程还原）
+```
+
+## 产出与验收
+
+交付时它必须说明五件事：Codex CLI 的 MCP 是否已注册、远端握手和工具列表是否通过、Penpot 活动标签页是否已确认、执行了哪些只读或写入操作、仍需重启或服务端处理的事项。所有 URL 只显示协议、主机、路径和参数名，参数值统一写成已脱敏。
+
+判断真的完成了：
+
+- 握手和工具列表都真实通过，而不是"配置文件写好了"；
+- 每次写入之后都有对受影响对象的回读，报告的是实际 ID 和数量；
+- 需要视觉判断的结论有截图支撑，否则明确降级为结构验证；
+- 报告里没有任何未脱敏的 URL、Token 或响应正文；
+- 服务端问题被交回给服务端负责人，而不是被客户端"绕过"。

@@ -1,0 +1,148 @@
+---
+title: 开发过程文档（development-process-doc-writer）
+description: 依据源码、需求、变更和验证记录，写出可追溯的中文开发过程文档，而不是靠回忆补一份说明
+order: 30
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+功能上线之后总有人问：这个接口为什么这么设计、字段是谁定的、当时怎么验证的。`development-process-doc-writer` 就是把答案固定下来的那一步：它按证据优先级读需求、源码、diff 和验证输出，产出一份记录"做了什么、为什么做、怎么实现、怎么验证"的中文开发过程文档。
+
+它的立场是**事实抄录，不是创作**。`SKILL.md` 写得很明确：不要编造实现细节；源文档和代码不一致时，要么把差异说清楚，要么以代码为实现事实并注明文档是按代码更新的。同时它的流程边界是仅执行既有 TODO 的开发过程文档步骤，不维护任务状态、不改代码。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "写一份开发过程文档" | 功能做完了，需要一份带背景、定义、代码和验证的记录 |
+| "把这个模块的实现整理成文档" | 已有源码，需要按章节结构梳理出可读版本 |
+| "从 `docs/` 下这几个 md 生成一份完整的" | 已有零散文档，需要合并去重成一份 |
+| "把核心代码和各种定义都放进去" | 明确要求包含代码片段、DTO、表字段、错误码 |
+| "上线前要交接，把系统文档补齐" | 触发交付审查文档集，走 `references/shipping-artifacts.md` |
+| "顺便把今天日报的内容并进去" | 要求文档覆盖日报里列出的全部内容 |
+
+触发词来自 `SKILL.md` 的 `triggers`：开发过程文档、技术文档。触发场景还补了一条：为交付审查建立系统事实文档时同样适用。
+
+<Aside type="caution">
+`triggers` 里有"技术文档"，但 `not_for` 同时排除了"技术文档编写"。区别在于产物性质：本 Skill 写的是**回溯已发生实现的过程记录**，取材必须有源码或文档支撑；面向读者的教学型、对外型技术写作不属于它。
+</Aside>
+
+## 什么时候不要用
+
+- **通用技术写作、对外文档、需要反复共创的长文** → [doc-coauthoring](/skills/skills-reference/medium/doc-coauthoring/)。
+- **正式报告、状态更新、发布说明、会议纪要** → [internal-comms](/skills/skills-reference/low/internal-comms/)。过程文档不是汇报材料。
+- **产品定义、需求与验收** → [product-manager](/skills/skills-reference/critical/product-manager/)。文档不能反过来定义产品要做什么。
+- **写代码或改代码** → [universal-development](/skills/skills-reference/low/universal-development/) 或对应专业 Skill。它只描述实现，不产生实现。
+- **每天一段的工作汇报** → [daily-report-writer](/skills/skills-reference/low/daily-report-writer/)。日报是摘要，过程文档要带证据。
+- **仓库还没有任何团队共享文档骨架** → 先用 [init-docs](/skills/skills-reference/medium/init-docs/) 建立最少必要的共享文档，再回来写具体过程文档。
+
+`not_for` 明确排除：技术文档编写、正式报告、产品定义、代码实现。
+
+## 前置条件
+
+frontmatter 没有 `gates`，但正文的证据优先级本身就是门槛——没有可引用的来源就不该开写：
+
+1. **必须存在可引用的源**。优先级依次是：用户点名的文件或目录（例如 `docs/*.md`）、仓库已有的 Markdown / Word / API / 字段字典文档、实现该行为的源码、用户要求纳入当前工作时的 git diff 与 git log 与测试输出、用户提供的笔记。
+2. **需要用户确认是否包含代码与定义**。用户说"核心代码""各种定义"时才贴代码片段；贴的必须忠实于仓库，不能顺手换风格。
+3. **需要确定项目/模块名**。质量检查里专门要求项目名不能来自不相关示例。
+4. **交付审查场景需要先有真实能力**。`references/shipping-artifacts.md` 要求：能力不存在时在架构概览里写一行"不适用及证据"，不生成空壳文档。
+
+不满足会发生什么：文档会出现无法追溯的实现描述、与代码矛盾却被静默抹平的规则，或者一堆没有内容的空章节——这正是引用规则和质量检查要挡掉的三种情况。
+
+## 怎么用
+
+### 1. 确认取材范围与证据优先级
+
+```text
+1 用户点名的文件/目录（docs/*.md 等）
+2 仓库既有 Markdown / Word / API / 字段字典文档
+3 实现该行为的源码文件
+4 git diff / git log / 测试输出（仅当用户要求纳入当前工作）
+5 用户提供的笔记
+```
+
+源文档与代码冲突时：把差异写出来，或以代码为实现事实并注明"文档按代码更新"。不允许选一个看起来顺眼的版本悄悄采用。
+
+### 2. 套用九章默认结构
+
+用户没给模板时使用这份骨架：
+
+```markdown
+# YYYY-MM-DD 开发过程文档：<项目名称或模块名称>
+
+## 一、基础信息
+## 二、开发背景
+## 三、接口/功能定义
+## 四、数据结构或字段定义
+## 五、核心代码实现
+## 六、异常处理和边界规则
+## 七、联调或使用说明
+## 八、验证记录
+## 九、开发结论
+```
+
+各章的取材要求写在 `SKILL.md` 里：三章列接口、请求/响应字段与业务规则；四章列 DTO、表、配置项、枚举、错误码；六章列错误码、校验、权限、空值与默认值；七章写前端联调、测试工具与运行命令；八章写测试命令、构建结果与人工验证。
+
+### 3. 处理代码与定义
+
+| 规则 | 具体做法 |
+| --- | --- |
+| 片段优先 | 贴小而相关的片段，不整文件搬运 |
+| 保留出处 | 需要时写上文件名或源引用 |
+| 忠实原文 | 不改写成别的代码风格，除非明确标注是伪代码 |
+| 定义要全 | 请求/响应 DTO、表字段、配置键、错误码、加密规则、索引按相关性纳入 |
+
+### 4. 从既有 Markdown 合并时按四步走
+
+1. 先列出或搜索目标 Markdown 文件；
+2. 起草前先读完相关文件；
+3. 提取标题、需求、定义、验证记录和结论；
+4. 重复信息合并成一处，而不是反复粘贴；同时保持源文档的事实范围不被扩大。
+
+### 5. 交付审查场景再读一份参考
+
+用户要求为上线、交接或审计补齐系统文档时，按需读取 `references/shipping-artifacts.md`。它定义的是语义集合而不是固定文件名：
+
+- **最小核心**：架构与系统概览、关键流程、权限与数据边界、配置与密钥、测试覆盖图；
+- **条件文档**：只有真实存在该能力时才写，例如邮件通知、定时任务、公共页面/SEO、Webhook 与支付、Agent 自动化；
+- **事实与意图分区**：当前实现、预期规则、建议改进（标 Proposed）、未知（给验证路径）必须区分。
+
+<Aside type="danger">
+三类产物不能混写：描述当前系统的文档**不得夹带执行指令**；`AGENTS.md` / `CLAUDE.md` 这类 Agent 规则必须由真实约束派生，不是架构说明书；测试文档必须分开列"已有测试""建议但未实现""需真实环境或人工""完全无覆盖"。混在一起会让读者把建议当成现状。
+</Aside>
+
+### 6. 落盘
+
+用户要求写到某个路径时：目录不存在就创建、默认文件名 `development-process.md`、不主动提交、写完回报创建路径。
+
+<Aside type="note">
+写入位置遵循仓库个人产物约定：个人的开发过程记录、交接与进度类文档写到 `docs/<developer-id>/` 下对应子目录，`<developer-id>` 取当前仓库 Git `user.name`。仓库级 `docs/` 根只放团队共享文档，其他开发者目录只读。用户已指定路径时直接沿用，不改写其目录。
+</Aside>
+
+## 与其他 Skill 的关系
+
+`SKILL.md` 的 `related_skills` 是不分方向的列表：[daily-report-writer](/skills/skills-reference/low/daily-report-writer/)、[internal-comms](/skills/skills-reference/low/internal-comms/)。按实际链路：
+
+- **上游**：实现与验证由 [universal-development](/skills/skills-reference/low/universal-development/)、[dev](/skills/skills-reference/high/dev/) 完成，缺陷结论来自 [code-review](/skills/skills-reference/high/code-review/)；没有这些事实就没有可写的证据。
+- **协作**：日报内容需要并入文档时配合 [daily-report-writer](/skills/skills-reference/low/daily-report-writer/)；仓库缺共享文档骨架时配合 [init-docs](/skills/skills-reference/medium/init-docs/)。
+- **下游**：同一批事实要变成对内沟通或发布说明时转 [internal-comms](/skills/skills-reference/low/internal-comms/)；文档中的稳定项目事实由 [project-details](/skills/skills-reference/high/project-details/) 归并进 `PROJECT-MEMORY.md`。
+
+```text
+dev / universal-development（实现） → code-review（缺陷结论）
+        ↓
+development-process-doc-writer（过程文档 + 交付审查文档集）
+        ↓
+internal-comms（对外沟通）   project-details（稳定事实归并）
+```
+
+## 产出与验收
+
+- **主产物**：一份按九章结构（或用户模板）组织的中文文档，默认文件名 `development-process.md`，回复中给出创建路径。
+- **交付审查场景**：最小核心文档齐备，条件文档只覆盖真实存在的能力，不存在的能力有一行"不适用及证据"。
+- **状态不变**：TODO 状态未被改动，Git 未被操作（除非用户明确要求提交）。
+
+质量检查的五条就是验收标准：项目名正确且不来自无关示例；用户要求覆盖日报时日报内容全部在内；要求的核心代码与定义都在；每段描述都能追到引用的文档或代码；结论与真实完成状态一致。
+
+<Aside type="tip">
+"结论与真实完成状态一致"是最容易翻车的一条。实现只跑通了主路径、失败路径还没验证时，第九章就写清楚这点，并在第八章列出未验证边界。写成"已全部验证"而后被发现，比诚实标注未覆盖的代价大得多。
+</Aside>

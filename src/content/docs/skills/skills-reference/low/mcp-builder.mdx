@@ -1,0 +1,146 @@
+---
+title: MCP 服务开发（mcp-builder）
+description: 构建 MCP 服务、工具契约和连接器——用 Schema、注解和错误语义让 LLM 真的能靠这些工具完成任务
+order: 18
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+MCP 服务的质量标准和普通后端 API 不一样：它不是"接口通了就行"，而是**LLM 能不能靠这些工具完成真实任务**。工具名是否自解释、参数描述里有没有示例、输出是不是结构化的、报错信息能不能让模型自己纠正、分页要怎么让模型接着翻——这些决定了一个 MCP 服务好不好用。`mcp-builder` 就是围绕这套标准来的：定工具契约、写 Schema、标注解、接认证、处理错误与分页。
+
+它做的是"构建 MCP 服务"，不是"使用 MCP 服务"——`not_for` 明确把"MCP使用"排除在外。它也不做业务 API 和前端。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "写一个 MCP server" | 从零构建 MCP 服务 |
+| "给这个内部系统做个 MCP 连接器" | 外部服务接入 MCP |
+| "加一个 MCP 工具" | 工具契约与 Schema 设计 |
+| "工具返回的东西模型看不懂" | 输出 Schema 与结构化内容 |
+| "这个工具要标成只读吗" | 工具注解（readOnly / destructive / idempotent / openWorld） |
+| "用 stdio 还是 HTTP" | 传输方式选择（在 best practices 里） |
+| "MCP 工具报错要怎么写" | 可执行的错误消息与处理 |
+
+触发词来自 `SKILL.md` 的 `triggers`：MCP开发、工具集成。正文的触发场景是：构建 MCP 服务、工具契约和连接器。
+
+## 什么时候不要用
+
+- **使用已有的 MCP 服务** → 不是本 Skill。`not_for` 直接列了"MCP使用"：连不上、要配置某个已有 server，都不属于这里。
+- **普通业务 API 开发** → [api-development](/skills/skills-reference/high/api-development/)。`not_for` 排除"业务API"。
+- **前端开发** → [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)。`not_for` 排除"前端开发"。
+- **产品定义与验收** → [product-manager](/skills/skills-reference/critical/product-manager/)。`not_for` 排除"产品定义"。
+- **认证、密钥与输入安全策略本身** → [security-guard](/skills/skills-reference/high/security-guard/)。见下面的协作边界表。
+
+## 前置条件
+
+`SKILL.md` 没有声明 `gates`，但正文写了三条真实要求：
+
+1. **唯一 TODO 里有当前执行实例独占领取的 `[~]` 项**，能读出 Owner、功能点、入口、用户结果、稳定验收、验证档位、依赖、并行写集和交付面；修改不越过目录前缀与独占资源键。
+2. **改动路径从目标 Git 根、当前功能和相邻实现确定**。用户已经要求构建或修改 MCP 时就直接动手，不为已经明确的事再走一遍选型。
+3. **只有协议、权限、安全或部署方案存在未决取舍时才调用 [tech-decision](/skills/skills-reference/high/tech-decision/)**。语言、传输、SDK、依赖和托管方式属于生产写入前要定的事项。
+
+<Aside type="caution">
+MCP 代码必须准确注释公开契约、错误、安全和复杂流程。注释缺失或失真不得通过 Review、提交或交付——这是硬门禁，不是风格建议。
+</Aside>
+
+边界不清时返回 `scope-change-detected`。本 Skill 不创建/更新 TODO、不改状态、不操作 Git。
+
+## 怎么用
+
+<Aside type="note">
+`SKILL.md` 正文直接从 **Phase 2: Implementation** 开始，没有单独展开 Phase 1；Phase 1 对应的材料在 Reference 段以"Load During Phase 1/2"的形式给出（协议与 SDK 文档），而语言/传输/SDK/托管的取舍按协作边界表交给 [tech-decision](/skills/skills-reference/high/tech-decision/)。看到编号从 2 开始不是文件缺页。
+</Aside>
+
+### 1. 搭项目结构（2.1）
+
+按语言查对应指南，两份都在 `reference/` 目录下（注意是单数 `reference`，不是 `references`）：
+
+| 语言 | 指南 | 覆盖内容 |
+| --- | --- | --- |
+| TypeScript | `reference/node_mcp_server.md` | 项目结构、`package.json`、`tsconfig.json`、Zod schema 模式、用 `server.registerTool` 注册工具、完整示例、质量检查清单 |
+| Python | `reference/python_mcp_server.md` | 模块组织、依赖、服务初始化模式、Pydantic 模型示例、用 `@mcp.tool` 注册工具、完整示例、质量检查清单 |
+
+### 2. 先做共享基础设施（2.2）
+
+四件事，做在具体工具之前：带认证的 API client、错误处理辅助、响应格式化（JSON / Markdown）、分页支持。这一步做完，后面每个工具都少写一遍同样的胶水。
+
+### 3. 逐个实现工具（2.3）
+
+每个工具都要交齐五样东西：
+
+**输入 Schema**：用 Zod（TypeScript）或 Pydantic（Python）；带上约束和清晰描述；在字段描述里给示例。
+
+**输出 Schema**：尽可能定义 `outputSchema`；用现代 SDK 时在工具响应里使用 `structuredContent`（TypeScript SDK 特性）。这能帮客户端理解和处理工具输出。
+
+**工具描述**：功能的简洁摘要、参数说明、返回类型 Schema。
+
+**实现**：I/O 用 async/await；错误处理要给**可执行的**消息；该支持分页的支持分页；用现代 SDK 时同时返回文本内容和结构化数据。
+
+**注解**：四个 hint 都要明确给出取值。
+
+```text
+readOnlyHint    : true / false
+destructiveHint : true / false
+idempotentHint  : true / false
+openWorldHint   : true / false
+```
+
+<Aside type="tip">
+这四个注解不是元数据摆设，客户端会据此决定是否需要用户确认、能不能重试、能不能并发调用。把一个会删数据的工具标成 `readOnlyHint: true`，等于把确认环节从流程里摘掉了。
+</Aside>
+
+### 4. 按需加载参考资料
+
+- **MCP 协议**：从 sitemap 起步 `https://modelcontextprotocol.io/sitemap.xml`，再用 `.md` 后缀取具体页面。
+- **`reference/mcp_best_practices.md`**：通用 MCP 准则——服务与工具命名约定、响应格式选择（JSON 还是 Markdown）、分页最佳实践、传输选择（streamable HTTP 还是 stdio）、安全与错误处理标准。
+- **SDK 文档**：Python SDK 与 TypeScript SDK 取官方当前 README 或 release 文档（`modelcontextprotocol/python-sdk`、`modelcontextprotocol/typescript-sdk`），并**记录访问日期、版本或 commit**。
+
+<Aside type="caution">
+SDK 文档要记录版本或 commit，是因为 MCP SDK 的 API 面还在变。写下"按某版 README 实现"能让后来的人判断这段代码是否已经过期；不记录的话，半年后没人说得清当时依据的是哪一版。
+</Aside>
+
+## 与其他 Skill 的关系
+
+`related_skills` 只有一项（`api-development`），但正文的 Collaboration Boundaries 表把协作面写得更全：
+
+| Skill | 关系 |
+| --- | --- |
+| [tech-decision](/skills/skills-reference/high/tech-decision/) | 生产写入前选定语言、传输、SDK、依赖和托管方式 |
+| [api-development](/skills/skills-reference/high/api-development/) | 对齐工具输入/输出 Schema、错误语义、Long/日期/null 契约与外部 API 兼容 |
+| [security-guard](/skills/skills-reference/high/security-guard/) | 负责 OAuth/API key、请求头、DNS rebinding、文件/路径/URL/命令类输入、`ctx.elicit`、日志与密钥处理 |
+| [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) | 在用示例之前，先核实现有 SDK、客户端、inspector 命令、包管理器与仓库工具 |
+| [code-review](/skills/skills-reference/high/code-review/) | 注释、安全、Map/Any、版本、脚本和证据问题的主门禁；本 Skill 不绕过 Review |
+| [test-development](/skills/skills-reference/medium/test-development/) | 只有用户明确要求写或改测试时才进入 |
+| [git-commit](/skills/skills-reference/high/git-commit/) | 精确暂存提交推送；任务文档与实际改动放在同一个逻辑提交里 |
+
+```text
+tech-decision（语言/传输/SDK/托管）
+        ↓
+mcp-builder（基础设施 → 工具 Schema → 注解 → 错误与分页）
+   ↙          ↓            ↘
+api-development  security-guard  utils-toolkit
+        ↓
+code-review → git-commit
+```
+
+## 产出与验收
+
+正文给出了一份固定的 Output Contract，交付时逐行填：
+
+```text
+目标功能与实际路径：
+confirmed MCP/spec/SDK sources：
+selected language/transport and alternatives：
+tool contract table：
+security/auth/permission boundary：
+implementation or documentation changes：
+verification commands and results：
+unverified official docs/client/deployment boundaries：
+```
+
+判断真的完成了：工具契约表里每个工具都有输入 Schema、输出 Schema、描述和四个注解取值；引用的协议与 SDK 来源带访问日期或版本；验证命令和结果是真跑过的；未验证的官方文档、客户端和部署边界单独列出来，而不是省略掉。
+
+<Aside type="danger">
+未经授权不做 Git 操作、不发布、不破坏数据。MCP 服务往往握着外部系统的凭据和写权限，"顺手连上真实环境试一下"是这个 Skill 里代价最高的动作。
+</Aside>

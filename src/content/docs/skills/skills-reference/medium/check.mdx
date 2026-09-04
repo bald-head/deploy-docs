@@ -1,0 +1,241 @@
+---
+title: 规范检查（check）
+description: 按目标仓库已经证明存在的规范检查实现，跑最小必要的编译与静态检查，不替代完整缺陷审查
+order: 23
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+`check` 回答一个很窄的问题：这段代码符合**这个仓库**的规范吗。
+
+它不靠脑内那套"后端一般应该怎么写"。判定之前它先建一份有来源的档案——你的约束、仓库自己的规则文件、构建与依赖配置、相邻的生产源码——然后只按这些证据下结论。找不到来源的规则最多标成"建议"，不会报成阻断问题。这个区别很实际：拿别的项目的规矩来判这个项目的罪，产生的是一堆没人愿意修也修不动的意见。
+
+它不做完整缺陷审查。同一份 diff 的问题发现入口只有一个，那是 [code-review](/skills/skills-reference/high/code-review/)。`check` 补的是仓库明确写下来的那部分规范，加上最小必要的编译与静态检查。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "跑一下检查" | 功能写完，交给 Review 之前先自检 |
+| "提交前检查一下" | 准备 commit，先确认编译和 lint 不会挂 |
+| "看看这个模块有没有问题" | 指定文件或模块的规范核对 |
+| "规范检查" / "标准验证" | 包结构、依赖方向、公开 API、数据库约定是否符合仓库约定 |
+| "只跑静态检查" | 只要 formatter / typecheck / 静态分析，不要完整审查 |
+| "权限注解有没有漏" | 仓库硬规则的定点核对 |
+
+## 什么时候不要用
+
+- **要找 Bug、要判断这个 diff 能不能交付** → [code-review](/skills/skills-reference/high/code-review/)。那边审缺陷和交付证据，这边只审仓库已证明的规范。
+- **要写测试或补测试** → [test-development](/skills/skills-reference/medium/test-development/)，而且得是你这一轮明确要求。`check` 可以跑已有测试，但不会新增或修改测试源码。
+- **要写实现代码** → [universal-development](/skills/skills-reference/low/universal-development/) 或对应专业 Skill。`check` 是实现之后的动作。
+- **要定产品** → [product-manager](/skills/skills-reference/critical/product-manager/)；**要做架构设计** → [architecture-design](/skills/skills-reference/high/architecture-design/)。
+
+## 前置条件
+
+**得有明确的检查对象。** 一份 diff、几个文件、一个模块都行。什么都不指定的话检查范围会退化成全仓扫描，跑很久，结论还没重点。
+
+**仓库里得有可验证的规范。** lint、formatter、编译器或静态分析的配置，是"阻断"这个判定的依据。一个都没有的时候它只能给建议，给不了结论——这不是它偷懒，是确实没有东西可以据以判定。
+
+**你要的是"符不符合仓库标准"，不是"有没有 Bug"。** 想要后者就直接走 `code-review`，否则同一份 diff 会被读两遍，第二遍复述第一遍。
+
+<Aside type="caution">
+它不按类名机械判定。"必须继承某个基类""必须用某个转换工具""必须是三层结构"这类结论，除非仓库规则或源码明确要求，否则不成立。类名、包名、基类、响应包装、权限注解、Mapper / Repository、对象转换、路径约定——这些全部要从你的源码里发现，不是从惯例里推。
+</Aside>
+
+## 使用示例
+
+### 场景 1：提交前自检
+
+**你的输入**：
+
+```text
+订单模块写完了，提交前跑一下检查。
+```
+
+**你会拿到的产出**：
+
+```text
+检查范围
+  order-service/src/main/java/com/acme/order/**（本次改动 7 个文件）
+  db/migration/V12__order.sql
+  依赖、构建产物和生成代码未纳入
+
+规则来源
+  .editorconfig + spotless-maven-plugin        格式
+  checkstyle.xml（模块级 severity=error）      命名与包结构
+  AGENTS.md#数据库约定                          ID 与表关联
+  相邻源码 UserController / UserServiceImpl     响应包装与权限注解写法
+
+已运行命令与结果
+  mvn -q -pl order-service spotless:check      通过
+  mvn -q -pl order-service compile             通过
+  mvn -q -pl order-service checkstyle:check    2 处 error
+
+阻断问题
+- db/migration/V12__order.sql:8 — 新建业务表用了自增主键。
+  依据：AGENTS.md#数据库约定 要求业务表 ID 走 IdWorker，
+  且 user / product 两张表已按此实现。
+  最小修复：主键改为 bigint 由应用层生成，去掉 AUTO_INCREMENT。
+
+- OrderController.java:41 — 返回了 OrderEntity。
+  依据：checkstyle 自定义规则 NoEntityInController（severity=error）。
+  最小修复：改返回 OrderVO，转换复用 OrderConvert#toVO。
+
+警告
+- OrderServiceImpl.java:96 — 批量插入未分批，单次可能超过 5000 条。
+  依据：相邻实现 ProductServiceImpl:132 按 500 分批。
+  证据不足以判为阻断（没有明确写下来的规则），但风险真实。
+
+建议
+- OrderQuery.java:18 — 字段名 sTime / eTime 与仓库其余查询对象的
+  startTime / endTime 不一致。
+
+未验证边界
+  未运行任何测试；未连接数据库，迁移脚本只做静态核对；
+  前端部分不在本次范围。
+
+结论：不通过（2 个阻断问题）
+```
+
+结论只有三种：通过、不通过、部分验证。"部分验证"用在范围内跑不全的情况，它会写清哪一段没跑。
+
+### 场景 2：它拒绝按惯例判定的样子
+
+```text
+你：这个 Controller 没继承 BaseController，报个问题吧。
+
+它：不报。全仓 23 个 Controller 里 6 个继承 BaseController、17 个没有，
+    AGENTS.md 和 checkstyle 里都没写这条要求。
+
+    我可以按你说的加一条"建议"，但它不是阻断问题——
+    如果你们确实定了这条规矩，写进 AGENTS.md 或 checkstyle，
+    下次它就是有来源的阻断项，而不是靠我记着。
+```
+
+这一条看起来是它在推卸，实际是在保护你：没有来源的"阻断"会让检查结论变得不可预测，同一段代码换个人跑得出不一样的结论。
+
+### 场景 3：配置里的凭据不算泄密
+
+**你的输入**：
+
+```text
+我刚把测试环境的数据库密码写进 application-test.yml，检查一下这个 PR。
+```
+
+**你会拿到的产出**：
+
+```text
+检查范围  config/application-test.yml、deploy/docker-compose.test.yml
+
+结果
+  未报告凭据泄密。你已经明确要求把连接信息写进这两个配置文件，
+  它们属于本次精确范围，因此不脱敏、不删除、不排除、不再问你一遍。
+
+  发现 1 个真实问题：
+- deploy/docker-compose.test.yml:22 — 端口映射 3306:3306 暴露到 0.0.0.0。
+  依据：同目录 docker-compose.dev.yml 用的是 127.0.0.1:3306。
+  最小修复：绑定回环地址。
+
+结论：部分验证（未在测试环境实际启动验证连通性）
+```
+
+<Aside type="danger">
+配置、部署和认证接入文件里的用户名、密码、Token 和服务凭据，不分内外网、不分明文与否，都不会被当成泄密误报。理由是这类误报的实际后果最糟：你明确要求写进去了，它却反复拦你、脱敏你、把文件踢出范围，最后你只能绕过检查——真正的问题也一起被绕过去了。
+</Aside>
+
+### 场景 4：要快的时候怎么跑
+
+```text
+你：赶时间，别一遍遍跑检查了。
+
+它：切实现优先档。这一轮的做法：
+    - 不再作为独立回合被反复叫起
+    - 实现收敛后，每个受影响的构建根在 compile / typecheck / lint 里
+      只挑一个最能判别问题的命令跑一次
+    - 同一个构建根这一轮已经跑过并通过的，直接复用结果
+
+    order-service   已选 mvn compile      通过（复用 12 分钟前的结果）
+    web             已选 pnpm typecheck   通过
+
+    普通功能不跑全仓测试，也不跑那些跟本次改动无关的 validator。
+```
+
+### 场景 5：已经 Review 过了
+
+```text
+你：code-review 刚出了 5 条 finding，我改完了，再 check 一遍？
+
+它：不重跑整轮。这一份 diff 的问题清单已经有了，我只做两件事：
+    1. 核对那 5 条对应的规则现在是否满足 —— 5/5 已关闭
+    2. 重跑受影响的那一个命令 —— mvn -q -pl order-service compile 通过
+
+    结论：通过。没有重复生成一份和 Review 内容重叠的报告。
+```
+
+## 和 code-review 怎么分
+
+两者都会读同一份 diff，但问的问题不同，也不该跑两遍：
+
+| | `check` | [code-review](/skills/skills-reference/high/code-review/) |
+| --- | --- | --- |
+| 问什么 | 符不符合这个仓库写下来的规范 | 有没有缺陷、能不能交付 |
+| 判定依据 | 仓库的配置、规则文件、相邻源码 | 代码本身的正确性与验收证据 |
+| 典型产出 | 阻断 / 警告 / 建议，每条带来源 | findings，带严重度与修复 |
+| 跑几次 | 每份 diff 最小必要的那几个命令 | 每份 diff 一次完整 Review |
+
+同一份 diff 已经有 Review findings 时，`check` 复用它们，只核对相关规则和最小命令。反过来，通用的安全、数据、契约门禁沿用 Review 的分级结果，`check` 不另起一套。
+
+## 条件化详细参考
+
+目录里的 `references/conditional-detailed-reference.md` 保存了完整细节，**不是废弃稿**。任务涉及其中主题时按章节读，不必等所有标识逐项匹配上。
+
+用它的时候有个区分：通用原则、流程、检查表、风险和方案比较可以直接吸收；框架 API、代码模板、固定包名、模块名、类名、字段、配置键、版本和数量必须先跟你的仓库核对过再用。只加载当前相关的章节——把一份长指南整包塞进上下文，本身就会让检查结论变糊。
+
+## 与其他 Skill 的关系
+
+**上游**：[universal-development](/skills/skills-reference/low/universal-development/) —— 先有实现才有可检查的对象。
+
+**下游**：[code-review](/skills/skills-reference/high/code-review/) —— 规范过了再做完整缺陷与交付审查。
+
+**协作**：[backend-annotations](/skills/skills-reference/low/backend-annotations/)、[git-commit](/skills/skills-reference/high/git-commit/)
+
+```text
+dev / universal-development → check（规范 + 最小编译验证）
+                                → code-review（一次完整缺陷审查）→ git-commit
+                                  ↑
+                        backend-annotations（注解规范的事实来源）
+```
+
+## 常见坑
+
+**拿它当 Review 用。** 它不找缺陷。逻辑错误、并发问题、越权、事务边界——这些要 `code-review`。把 `check` 通过当成"可以交付"，是这个页面最想拦住的误用。
+
+**期待它报出你心里那条规矩。** 你们团队口头约定的规范，对它是不存在的。想让它稳定判定，把规矩写进仓库的规则文件或 lint 配置——顺带你团队里的人也不用再靠记忆了。
+
+**让它反复跑。** 同一份 diff 检查两遍、三遍，第二遍开始就只是在消耗时间。改完之后核对相关规则加一个命令就够。
+
+**指望它补测试来凑证据。** 证据不足时它报剩余风险或阻塞，不会写测试代码补上——那需要你这一轮明确授权。
+
+**把"检查通过"扩大到全仓。** 通过只代表跑过的那个范围通过，不代表整个仓库、更不代表生产环境。
+
+## 最佳实践
+
+- **指定范围。** 给一个模块或一份 diff，结论会精确得多，也快得多。
+- **看"规则来源"那一段。** 每条问题出自哪个配置或文档，是判断这条该不该修的关键；没有来源的那些，本来就是可选建议。
+- **赶时间就明说。** 它会切成实现优先档，只挑最能判别问题的那一个命令跑。
+- **让规矩落进配置。** 一条规矩写进 lint 之后，检查结论就不再依赖谁来跑。
+
+<Aside type="note">
+没拿到修改授权时它保持只读。证据不足时它如实报剩余风险或阻塞，不会用新增测试代码去凑证据。
+</Aside>
+
+## 下一步
+
+- [code-review](/skills/skills-reference/high/code-review/) - 完整缺陷与交付审查
+- [backend-annotations](/skills/skills-reference/low/backend-annotations/) - 注解规范的事实来源
+- [git-commit](/skills/skills-reference/high/git-commit/) - 检查通过之后提交
+- [test-development](/skills/skills-reference/medium/test-development/) - 确实需要补测试（需另行授权）
+- [universal-development](/skills/skills-reference/low/universal-development/) - 回去修被报出来的问题
+

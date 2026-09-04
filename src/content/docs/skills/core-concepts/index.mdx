@@ -59,7 +59,7 @@ Skills Framework 由四个核心组件构成：
 - **frontmatter 元数据**：触发词、前置条件、冲突规则、依赖关系
 - **references/**：可选的参考文档
 
-详见：[Skill 系统详解](/skills/core-concepts/skill-system)
+详见：[Skill 系统详解](/skills/core-concepts/skill-system/)
 
 ### 2. 路由机制
 
@@ -69,7 +69,7 @@ Skills Framework 由四个核心组件构成：
 - **路由决策树**：74 个场景、587 个触发词、优先级排序
 - **Runtime Hook 动态提示**：上下文感知、状态机检查
 
-详见：[路由机制](/skills/core-concepts/routing)
+详见：[路由机制](/skills/core-concepts/routing/)
 
 ### 3. Runtime Hook
 
@@ -81,7 +81,7 @@ Skills Framework 由四个核心组件构成：
 - **Stop**：自动完成检查、续作下一任务
 - **SubagentStart / SubagentStop**：子智能体上下文和交接
 
-详见：[Runtime Hook](/skills/core-concepts/runtime-hooks)
+详见：[Runtime Hook](/skills/core-concepts/runtime-hooks/)
 
 ### 4. 项目记忆
 
@@ -91,7 +91,7 @@ Skills Framework 由四个核心组件构成：
 - **Reuse map**：组件、工具类、API 复用地图
 - **Boundaries**：不使用的技术、禁止的模式
 
-详见：[项目记忆](/skills/core-concepts/project-memory)
+详见：[项目记忆](/skills/core-concepts/project-memory/)
 
 ## 工作流程
 
@@ -135,11 +135,9 @@ Skills Framework 由四个核心组件构成：
 ```
 1. task-todo-workflow
    建立流程状态机：
-   intake → requirements-analysis → requirements-confirmation
-   → technical-plan → technical-confirmation → task-breakdown
-   → code-generation → business-development → code-review
-   → test-generation → test-run → user-acceptance
-   → git-delivery → complete
+   规划阶段（需求、方案、拆解）→ 实施阶段（开发、Review、验证）
+   → 交付阶段（提交推送）→ 完成
+   规划没走完时，改生产代码会被拦下
 
 2. product-manager
    - 研究现有类似功能
@@ -249,24 +247,15 @@ Feature 修改的文件列表，用于检测并行冲突：
 新项目或新功能的强制推进流程：
 
 ```
-intake（需求录入）
-→ requirements-analysis（需求分析）
-→ requirements-confirmation（需求确认，需 --confirmed）
-→ technical-plan（技术方案）
-→ technical-confirmation（方案确认，需 --confirmed）
-→ task-breakdown（任务拆分）
-→ code-generation（代码生成阶段）
-→ business-development（业务开发）
-→ code-review（代码审查）
-→ test-generation（测试生成阶段）
-→ test-run（测试运行）
-→ user-acceptance（用户验收）
-→ git-delivery（Git 交付）
-→ complete（完成）
+需求录入 → 需求分析 → 需求确认
+→ 技术方案 → 方案确认 → 任务拆分
+→ 代码生成 → 业务开发 → 代码审查
+→ 测试生成 → 测试运行 → 用户验收
+→ Git 交付 → 完成
 ```
 
 <Aside type="caution">
-**PreToolUse 防护**：在 `business-development` 前，禁止直接修改生产文件，只允许只读调查、状态机命令和规划文档写入。
+**PreToolUse 防护**：规划阶段完成前，禁止直接修改生产文件，只允许只读调查和规划文档写入。
 </Aside>
 
 ## 设计约束
@@ -295,7 +284,7 @@ Skills Framework **是**：
 
 探索各个核心概念的详细内容：
 
-- [Skill 系统详解](/skills/core-concepts/skill-system) - Skill 的结构、元数据、协作方式
-- [路由机制](/skills/core-concepts/routing) - 三层路由、冲突解决、优先级
-- [Runtime Hook](/skills/core-concepts/runtime-hooks) - Hook 生命周期、命令防护、TODO 管理
-- [项目记忆](/skills/core-concepts/project-memory) - 记忆结构、按需加载、自动维护
+- [Skill 系统详解](/skills/core-concepts/skill-system/) - Skill 的结构、元数据、协作方式
+- [路由机制](/skills/core-concepts/routing/) - 三层路由、冲突解决、优先级
+- [Runtime Hook](/skills/core-concepts/runtime-hooks/) - Hook 生命周期、命令防护、TODO 管理
+- [项目记忆](/skills/core-concepts/project-memory/) - 记忆结构、按需加载、自动维护

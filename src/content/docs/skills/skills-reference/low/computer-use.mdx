@@ -1,0 +1,138 @@
+---
+title: 桌面应用操作（computer-use）
+description: 通过 Orca CLI 读取本地桌面应用的窗口状态、截图并执行安全的点击与输入；真正的命令清单由 orca 二进制自己下发
+order: 16
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`computer-use` 让你去操作本机的桌面应用窗口——读它的可访问性树、截图、点控件、输入文字、按键、滚动、拖拽、设值。它也覆盖浏览器窗口、webview 和 Orca 自己的界面。
+
+这一页要先讲清一件事：这个 Skill 的 `SKILL.md` **是一个 discovery stub，不是用法指南**。它自己写明了这一点——完整且与版本匹配的 computer-use 参考由 `orca` 二进制本身提供，故意不放进文件里，这样它就永远不会和真正执行你命令的那个二进制版本漂移。所以本页能给你的是：什么时候用它、怎么挑对可执行文件、怎么把真正的指南拉出来；具体子命令和参数不在这里，也不该从记忆里猜。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "看看 Spotify 现在放的是什么" | 读取桌面应用当前状态 |
+| "帮我点一下那个按钮" | 桌面应用 UI 操作（点击、输入、按键） |
+| "截个屏我看看" | 桌面截图 |
+| "读一下 Slack 里的内容" | 读取应用窗口与可访问性树 |
+| "这个应用现在是什么状态" | 获取 app state |
+| "列一下现在开着哪些应用" | 应用/窗口枚举 |
+
+触发面覆盖桌面应用操作、窗口内容读取、截图与可访问性树这一类说法，中英文都收；具体触发词在 Skill 自己的 frontmatter 里维护。上面这张表就是最省事的用法——照着左边那样说话即可，不需要记词。
+
+## 什么时候不要用
+
+- **Web 页面的业务流程测试** → [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/)。它做真实浏览器的端到端业务测试；本 Skill 做桌面应用窗口读取与 UI 操作。目标其实是 Web 业务流程时，`related_skills` 里把它列为 `alternative`，直接换过去。
+- **远端服务器运维与部署** → [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/)。本 Skill 只操作本机桌面应用。
+- **磁盘与存储占用分析** → [storage-analyzer](/skills/skills-reference/low/storage-analyzer/)。它是 macOS 只读存储分析；本 Skill 是界面交互。
+- **写代码** → [dev](/skills/skills-reference/high/dev/) 或对应专业 Skill。
+
+## 前置条件
+
+`gates` 三条：
+
+1. **操作目标是本地桌面应用窗口，而不是网页业务流程**。判断错了就会用错工具链，拿到的证据也不可复现。
+2. **运行环境已解析到可用的 `orca` / `orca-dev` / `orca-ide` 入口**。没解析出可执行文件就动手，最好的结果是命令失败，最坏的结果见下面那条 danger。
+3. **动作限定在安全边界内**：读取、截图和可逆 UI 操作，不含破坏性系统操作。
+
+目标窗口或允许的动作不明确时，`related_skills.before` 指向 [grilling](/skills/skills-reference/medium/grilling/)，先把范围问清再动手。
+
+## 怎么用
+
+### 1. 为本次会话解析出可执行文件（只解析一次）
+
+按顺序判断，选定后在后续每条命令里复用同一个：
+
+| 条件 | 使用 |
+| --- | --- |
+| 环境变量 `ORCA_CLI_COMMAND` 已设置 | 用它的值（Orca 为托管的 WSL 会话导出这个变量） |
+| 会话暴露 `ORCA_DEV_REPO_ROOT` 的 dev checkout | `orca-dev` |
+| Linux、且不在 Orca 托管的终端里 | `orca-ide` |
+| 其余情况 | `orca` |
+
+<Aside type="danger">
+在 Orca 托管终端之外的 Linux 上，**绝不要执行裸 `orca`**：那里的 `orca` 通常解析到 GNOME Orca 屏幕阅读器（`/usr/bin/orca`），会在用户机器上直接开始朗读。这种情况用 `orca-ide`。
+</Aside>
+
+下文用 `ORCA` 表示你解析出来的那个可执行文件名。**它是占位符，运行前要替换掉**：不要创建 shell 变量，也不要真的去执行 `ORCA`。这条规则在 POSIX shell、PowerShell 和 cmd.exe 里都一样。
+
+<Aside type="caution">
+选定的可执行文件跑不起来时，报告它的原始错误并停下。不要退而去试另一个可执行文件——那可能静默指向另一个 Orca 构建，之后所有结论都对不上。
+</Aside>
+
+### 2. 先把完整指南拉出来
+
+```text
+ORCA skills get computer-use
+```
+
+这条命令会打印**与将要处理你后续命令的那个二进制完全匹配**的完整指南：列应用/窗口、读 UI，以及驱动点击、输入和其他可访问性动作。先读它，再跑你需要的那一条命令。
+
+<Aside type="caution">
+不要凭记忆或凭这份 stub 的缓存副本去猜子命令和参数。它们在 Orca 各个版本之间会变，而这份文件已经刻意不再列出它们。
+</Aside>
+
+### 3. 确认应用在运行，并优先用 JSON 输出
+
+```text
+ORCA status --json     # 确认 app 起来了
+ORCA open --json       # 没起来时启动它
+```
+
+Agent 驱动的调用一律优先加 `--json`——结构化输出才好判定与复用。
+
+### 4. 老版本不认 `skills get` 时的兜底
+
+只有在选定的二进制**明确报告 `skills get` 是未知命令**时才走这条路。其他失败不能作为"二进制太老"的证据——那种情况应该报告错误，而不是猜或换可执行文件。
+
+确认是前置指南版本的二进制时，只用这三条有界的只读命令建立方位感：
+
+```text
+ORCA status --json
+ORCA computer capabilities --json
+ORCA computer list-apps --json
+```
+
+然后告诉用户：升级 Orca 就能通过 `ORCA skills get computer-use` 恢复完整的版本匹配指南。超出这三条命令的需求，去问用户，而不是去猜一套这个老二进制可能并不支持的命令面。
+
+<Aside type="tip">
+这个 Skill 的设计取舍值得记住：`SKILL.md` 主动放弃列命令，换来的是"文档永远不会比二进制旧"。所以遇到"文档里没写"的场景，正确反应是去跑 `ORCA skills get computer-use`，而不是去补文档。
+</Aside>
+
+## 与其他 Skill 的关系
+
+**上游（before）**：[grilling](/skills/skills-reference/medium/grilling/)——目标窗口与允许动作不明确时先澄清一次。
+
+**下游（after）**：[bug-detective](/skills/skills-reference/high/bug-detective/)——拿界面证据（截图、可访问性树、实际状态）继续定位故障。
+
+**协作（complement）**：[real-browser-automation](/skills/skills-reference/medium/real-browser-automation/)——一个任务里网页部分交给它，桌面应用部分留在本 Skill。
+
+**替代（alternative）**：[real-browser-automation](/skills/skills-reference/medium/real-browser-automation/)——目标本来就是 Web 业务流程时直接改用它。这是 `related_skills` 里除三组常规关系之外额外声明的一组。
+
+```text
+grilling（确认窗口与允许动作）
+      ↓
+computer-use（解析 ORCA → skills get → 读取/截图/操作）
+      ↓
+bug-detective（用界面证据定位故障）
+
+网页部分：computer-use ←→ real-browser-automation
+纯 Web 流程：直接用 real-browser-automation
+```
+
+## 产出与验收
+
+这个 Skill 不往仓库里写文件，它的产出是**证据和状态变化**：
+
+- 从可访问性树或截图得到的应用状态，标明是哪个应用、哪个窗口、什么时刻。
+- 实际执行过的 UI 动作序列，以及每一步之后观察到的结果。
+- 本次使用的可执行文件（`ORCA_CLI_COMMAND` 的值、`orca-dev`、`orca-ide` 还是 `orca`）——换了机器和会话，这个结论不能直接复用。
+
+判断真的完成了：命令是从 `ORCA skills get computer-use` 打印的指南里来的，不是猜的；每个断言都能对应一次真实的读取或截图；被拒绝或不支持的动作原样报告了错误，没有"换个可执行文件再试试"。
+
+<Aside type="note">
+本页不列具体子命令和参数，是因为源 `SKILL.md` 刻意不提供它们。任何声称记得 Orca 命令细节的说法都应该当成过期信息处理——先跑一次 `ORCA skills get computer-use`。
+</Aside>

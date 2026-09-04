@@ -1,0 +1,271 @@
+---
+title: 项目记忆（project-details）
+description: 维护唯一 PROJECT-MEMORY.md 里的稳定事实、复用地图和边界，并在动手之前把它们变成 reuse / extend / not-applicable 的结论
+order: 28
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+每次你提出问题或需求时，Runtime 会自动定位目标仓库、确保唯一的项目记忆文件存在，并回读一段有界摘要。`project-details` 是唯一有权把稳定事实原位归并进那个文件的 Skill。它解决的是一个非常具体的问题：换设备、换 runtime、上下文被压缩之后，"这个能力已经有 Owner 了、不要再写一份"这类结论不会丢，也不会退化成每个 Feature 各写一遍的平行实现。
+
+它的硬约束只有一句：**只写稳定事实，不写任务状态。** 它不改 TODO 的 checkbox，不动执行实例，不写进度统计、过程叙述、完整 diff、临时路径或会话摘要。任务状态在这套体系里只有一个源——当前开发者唯一的 TODO，由 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 维护。项目记忆不是 Context、不是 Evidence、不是 Journal，也不是第二状态源。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "把这个记到项目记忆里" | 一条写进正确章节的稳定事实，不是追加在文件末尾的流水 |
+| "以后这个项目都按这个来" | 后续每个 Feature 开工前都会读到的编码标准 |
+| "不对，我们这个项目的分页是从 0 开始的" | 当轮就原位改掉，不用等下次会话 |
+| "这个能力仓库里是不是已经有了" | 真实 Owner、入口、调用方，以及"复用/扩展/不适用"的结论 |
+| "换了台电脑，接着上次那个功能做" | 上次已经定下来的边界和 Owner，不用你重新讲一遍 |
+| "开始写之前先确认项目细节全不全" | 一份"已记录 / 缺失 / 不适用"的定向核对，不是全仓扫描报告 |
+
+<Aside type="caution">
+判断这个文件有没有被用歪，看里面出现了什么。出现 checkbox、进度百分比、"今天做了什么"、完整 diff、贴进去的会话摘要、`context.json` 之类的结构化上下文快照，或者一段两周后就不成立的 HEAD 描述——那说明它正在被当成第二状态源。内容太长的时候，长的部分回到源码注释或既有设计文档，记忆里只留一个链接加一句结论。
+</Aside>
+
+## 什么时候不要用
+
+- **要定义产品做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+- **要写业务代码** → [universal-development](/skills/skills-reference/low/universal-development/) 或 [dev](/skills/skills-reference/high/dev/)。
+- **要划模块、数据所有权和部署边界** → [architecture-design](/skills/skills-reference/high/architecture-design/)。
+- **要建、勾选或统计 TODO** → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)、[add-todo](/skills/skills-reference/medium/add-todo/)、[update-status](/skills/skills-reference/medium/update-status/)、[progress](/skills/skills-reference/medium/progress/)。这里不勾任何任务。
+- **记忆文件还不存在或主要章节为空** → 先走 [init-docs](/skills/skills-reference/medium/init-docs/) 的记忆引导模式采集事实，再回到这里归并。分工是：`init-docs` 负责首次采集和初始化，`project-details` 负责归并、维护和执行前回读；`init-docs` 不会创建第二份记忆文件。
+- **完全不认识的仓库，需要一份整体概览** → [start](/skills/skills-reference/high/start/)。
+- **要精确定位某个类、路由、配置在哪一行** → [project-navigator](/skills/skills-reference/medium/project-navigator/)。
+- **要把方法沉淀成跨项目通用经验** → [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/)。项目具体事实仍归这里。
+
+## 前置条件
+
+三件事得先成立：这条结论是从仓库或你的明确确认里核对过的稳定事实，不是一次性实现细节；仓库里只有一个记忆入口，根目录 `PROJECT-MEMORY.md`（已经有 `docs/PROJECT-MEMORY.md` 或 `docs/project-memory.md` 就沿用它）；有活动 Feature 的时候，写这个文件必须落在当前 Feature 的写集里。
+
+这三条各自防的是一类具体事故：
+
+| 少了哪一条 | 会发生什么 |
+| --- | --- |
+| 唯一入口 | 仓库里出现两三份记忆，互相矛盾，谁也不知道该信哪份 |
+| 落在当前写集里 | 在别人正在改的路径上写文件，冲突或者悄悄覆盖 |
+| 事实核对过 | 一条过期结论被固化成"项目标准"，后面每个 Feature 都照着错的做 |
+
+记忆文件是空的时候，不会硬撑着写。它会先让 [init-docs](/skills/skills-reference/medium/init-docs/) 从仓库的 `AGENTS.md` / `CLAUDE.md`、README、构建入口和少量源码入口把事实捞出来，只留核对过的入口、命令、Owner 和边界——客户端指令、模板和个人偏好不会被搬进项目记忆。
+
+## 怎么用
+
+### 场景一："这个能力仓库里是不是已经有了"
+
+这是最高频的一次调用，也是它最省钱的地方。你会拿到的不是"好像有"，而是带证据的结论：
+
+```text
+问：要加一个导出任务的重试，仓库里有现成的重试机制吗？
+
+记忆应用：
+  RetryTemplate 包装在 TaskExecutor 里，是异步任务重试的唯一 Owner
+    入口 core/task/TaskExecutor.java:88
+    生产调用方 OrderSyncJob、StockSnapshotJob
+    -> reuse（本次导出任务直接走同一入口）
+  分页工具只覆盖列表查询，本次需要游标        -> extend
+  多租户隔离在本模块不启用                    -> not-applicable
+```
+
+`reuse` 那一条之所以能下结论，是因为它同时给出了定义位置和至少一个真实调用方。只有名字看起来像、没有定义和调用证据的东西，不会被写成"可复用能力"——那种写法会让下一个人放心地去复用一个不存在的东西。
+
+判断复用还是各写一份，不是看代码长得像不像：职责、输入输出、错误语义和以后的变化方向一致，就复用或扩展现有 Owner；只是写法相似但业务规则不同，或者硬抽出来会制造跨模块依赖，那就保持各自实现。已经有 Owner 的能力，不会被静默地再写一份。
+
+### 场景二："不对，我们这个项目的分页是从 0 开始的"
+
+你随口纠正的一句话，如果会影响到多个页面或多个接口，当轮就会被归并进记忆——不等规划开始，不等 Feature 收口，也不等下一次会话。因为下一次会话里，这句话就不存在了。
+
+归并后的样子（原位改，不追加新段）：
+
+```markdown
+## Contracts
+- 列表分页：`pageNo` 从 0 开始计数，`pageSize` 上限 200
+  来源：用户确认 2026-09-04，替代此前"从 1 开始"的旧描述
+  消费者：管理端所有列表页、开放 API v2
+```
+
+留意"替代此前……"那一句。旧结论不会被留在文件里和新结论并存——两套标准同时存在，比没有标准更糟。
+
+### 场景三："换了台电脑，接着上次那个功能做"
+
+新机器上什么都没有，但记忆在仓库里。回读的结果会真的约束接下来往哪写：
+
+```text
+当前 Feature：订单批量导出
+来源复核：PROJECT-MEMORY.md · Reuse map / Boundaries / Contracts
+相关 Owner 与消费者：TaskExecutor（异步任务）、ExportPermission（权限点）
+细节覆盖：已记录 6 / 缺失 1（导出文件保留期限）/ 不适用 2
+记忆应用：
+  异步任务统一走 TaskExecutor      -> reuse
+  导出结果落对象存储，不落本地盘   -> reuse
+  文件保留期限没有记录             -> 缺失，作为开放问题回问
+```
+
+最后那条"缺失"很重要：它不会被猜一个默认值填上，会作为开放问题回到你这里。
+
+### 场景四：这条事实到底该不该进记忆
+
+判断路线其实只有一个核心问题：这条东西以后还有别人要看吗。
+
+```text
+这条结论只有当前这一个地方在用吗？
+├─ 是 → 不进记忆。写成源码注释，或者干脆什么都不写
+└─ 否 → 继续问：
+     ├─ 后面有人要靠它决定"复用现有的还是新写一个"吗？   → 进
+     ├─ 漏掉它会不会长出平行实现、字段类型对不上、
+     │   权限或租户越界、部署不一致、改了没法回滚？        → 进
+     ├─ 换台机器、换个部署形态、接外部系统时还得一致吗？   → 进
+     └─ 你明确说过"以后都按这个来"吗？                     → 进
+```
+
+不进记忆的那一类很好认：这次是怎么改的、临时命令、调试时看到的一个现象、只有一个调用点的小细节、文件名和局部变量、看一眼定义就知道的事。这些进了记忆只会稀释它——一个塞满一次性内容的记忆文件，等于没有记忆文件。
+
+### 场景五：`PROJECT-MEMORY.md` 长什么样
+
+六个固定章节，靠原位归并和删掉失效结论保持紧凑，没有字数或行数门禁。一份真实用起来的文件大致是这样：
+
+```markdown
+# Project Memory
+
+## Quick facts
+- 后端 Spring Boot 3.2 / Java 21，入口 `AdminApplication`，本地 `./mvnw spring-boot:run`
+- 管理端 Vue 3 + Element Plus，入口 `apps/admin`，`pnpm dev` 起在 5173
+
+## Reuse map
+- `TaskExecutor`：异步任务唯一 Owner，入口 core/task，调用方 OrderSyncJob / StockSnapshotJob
+  扩展方式 = 注册新 JobHandler；禁止另起线程池
+- `ExportPermission`：导出类权限点统一在此声明，禁止在 Controller 里裸判角色
+
+## Boundaries
+- 导出结果只落对象存储，不写本地磁盘（容器无持久卷）
+- 租户隔离只在 saas 模块启用，本仓库其余模块单租户
+
+## Contracts
+- 列表分页 `pageNo` 从 0 开始，`pageSize` 上限 200
+- 金额字段统一 `BigDecimal(18,4)`，对外序列化为字符串
+
+## Commands
+- 最小验证：`./mvnw -pl core test -Dtest=TaskExecutorTest`
+
+## Open decisions
+- 导出文件保留期限（待产品确认）
+```
+
+表格只用来放精确的映射、参数和 Owner；正文只放长期成立的结论。像"这周在重构 core"这种句子不会出现在这里。
+
+### 场景六：三方说法冲突了
+
+真实项目里最常见的一幕：代码是一个样，旧设计文档写的是另一个样，你刚才又说了第三个样。它不会挑一个顺手的信：
+
+```text
+代码：金额按 BigDecimal(18,2) 存
+旧文档：金额保留 4 位小数
+你刚说：对，是 4 位，2 位是早期实现没改过来
+
+结论：
+  已批准要求 = 4 位（你的确认 + 旧文档一致）
+  代码现状 = 2 位，记为实现缺陷，不反向覆盖标准
+  处理：记忆里写 4 位并标注"现有实现待修"，缺陷进 TODO
+```
+
+反过来的情形同样有规则可循：如果你的新要求和已批准的文档打架，先走 [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) 把受影响的范围和 TODO 更新掉，再回来改记忆——不会留下两套模糊标准让后面的人自己猜。
+
+<Aside type="danger">
+碰到旧的 `context.json`、`context.jsonb` 或者几份重复的项目细节文件，它只会读一次、把稳定事实搬进记忆。删除、归档、改名都需要你明确点头，不会在普通回合顺手清理掉。
+</Aside>
+
+## 常见误用
+
+| 现象 | 实际该走 |
+| --- | --- |
+| 想让它记住"这个 Feature 做到哪一步了" | 状态只有一个源：[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 维护的唯一 TODO |
+| 想让它统计进度 | [progress](/skills/skills-reference/medium/progress/) 只读统计，[update-status](/skills/skills-reference/medium/update-status/) 更新状态 |
+| 把整段排障过程贴进去，怕以后忘 | 排障过程不是稳定事实；结论进记忆，过程进源码注释或 PR |
+| 记忆是空的，直接要求它归并 | 先 [init-docs](/skills/skills-reference/medium/init-docs/) 采集，再回来归并 |
+| 让它扫全仓，输出一份完整项目细节报告 | 只做当前 Feature、直接调用链和相邻实现的定向核对 |
+| 让它告诉你某个方法在哪一行 | [project-navigator](/skills/skills-reference/medium/project-navigator/) 定位，这里只沉淀结论 |
+| 让它把"我们团队都这么干"写成通用经验 | 跨项目方法走 [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/) |
+| 每个 Feature 存一份带日期的记忆副本 | 只有一份文件，靠原位归并演进 |
+
+## 与其他 Skill 的关系
+
+### 记忆和 TODO 的分工
+
+这一条最值得讲透，因为它决定了两个文件都不会烂掉：
+
+```text
+PROJECT-MEMORY.md              唯一 TODO
+─────────────────────────      ─────────────────────────
+分页从 0 开始（长期成立）       [~] 订单批量导出（当前在做）
+TaskExecutor 是异步唯一 Owner   [x] 导出权限点接入（已完成）
+导出不落本地盘（部署约束）      [ ] 导出失败重试（等技术结论）
+```
+
+左边这些一年后大概还成立；右边这些下周就全变了。把右边的东西写进左边，记忆很快就没人信了；把左边的东西写进右边，换台电脑就丢。
+
+同一条事实也不会在三个地方各存一份全文：稳定结论进记忆，复杂的"为什么这么写"进源码注释，做到哪一步进唯一 TODO。
+
+### 谁在什么时候叫它
+
+| Skill | 关系 |
+| --- | --- |
+| [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) / [next](/skills/skills-reference/medium/next/) / [dev](/skills/skills-reference/high/dev/) | 领取、续作、恢复一个 Feature 的时候顺手叫它回读，并把记忆路径记进来源锚点 |
+| [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) | 你的新结论和文档或代码打架时，先由它算清影响面 |
+| [project-navigator](/skills/skills-reference/medium/project-navigator/) / [code-patterns](/skills/skills-reference/low/code-patterns/) / [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/) | 给出模块位置、真实 Owner 和相邻写法的现场证据 |
+| [json-serialization](/skills/skills-reference/low/json-serialization/) / [api-development](/skills/skills-reference/high/api-development/) | 供给字段、精度、时间和兼容事实，反过来也照着记忆实现 |
+| [database-design](/skills/skills-reference/high/database-design/) / [database-ops](/skills/skills-reference/high/database-ops/) | 供给 Schema、ORM、迁移和数据归属事实 |
+| [tenant-management](/skills/skills-reference/medium/tenant-management/) / [security-guard](/skills/skills-reference/high/security-guard/) | 供给隔离边界、权限、审计和凭据来源 |
+| [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/) | 双向：既提供也消费页面结构、类型和设计系统细节 |
+| [server-docker-deployment](/skills/skills-reference/medium/server-docker-deployment/) / [architecture-design](/skills/skills-reference/high/architecture-design/) | 供给机器、网络、配置和回滚事实 |
+| [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/) | 只接跨项目通用方法；本项目的具体事实留在这里 |
+
+典型链路：
+
+```text
+（每次请求）Runtime 回读记忆摘要
+      ↓
+init-docs（记忆为空时采集） → project-details（归并 + 回读结论）
+      ↓                              ↓
+project-navigator（定位证据）   tech-decision / dev / code-review（实际采用）
+```
+
+## 产出与验收
+
+留在仓库里的东西只有一处：目标仓库唯一的 `PROJECT-MEMORY.md`（或沿用的 `docs/PROJECT-MEMORY.md`、`docs/project-memory.md`）里被原位更新的那几段，必要时再加一条 `AGENTS.md` 里的短引用。本轮没有稳定新事实就不改文件，也不会多出报告、日期副本或 Feature 副本。
+
+回复里给出的结论大致是这个形状：
+
+```text
+当前 Feature 与细节主题：订单批量导出 / 异步任务与权限
+来源复核：PROJECT-MEMORY.md · Reuse map、Boundaries、Contracts
+相关模块、Owner 与消费者：core/task（TaskExecutor）、admin/order
+细节覆盖：已记录 6 / 缺失 1 / 不适用 2
+记忆应用：TaskExecutor -> reuse；分页游标 -> extend；租户隔离 -> not-applicable
+创建或更新的项目记忆：Contracts 新增分页计数口径
+未验证边界或冲突：导出文件保留期限未定
+```
+
+判断真的完成了，看四条：
+
+1. **章节归位**：新事实进了对的那一节，而不是追加在文件末尾。
+2. **每条相关事实都有应用结论**：`reuse / extend / not-applicable` 齐全，而且下游真的按它执行了，不是列出来给人看。
+3. **没有第二状态源**：文件里没有 checkbox、进度、执行日志、完整 diff 或会话摘要。
+4. **同一事实不三处复制**：记忆、注释、TODO 各管一段，不互相抄全文。
+
+<Aside type="tip">
+"回读"很容易被做成表演——把记忆念一遍然后照原计划写代码。判断它有没有真的生效，看结论有没有改变动作：入口换了、Owner 复用了、某个方案因为边界被否了。如果回读前后计划一模一样，那这一步其实没发生。
+</Aside>
+
+<Aside type="note">
+记忆更新跟着同一个业务 Feature 一起提交，不会为一次记忆更新单独建任务。已经记得准、和源码也一致的部分直接回读，不重新生成报告；发现记错了就原位改掉并同步受影响的代码，不留新旧两套标准。
+</Aside>
+
+## 下一步
+
+- 记忆还是空的 → [init-docs](/skills/skills-reference/medium/init-docs/)
+- 不认识这个仓库 → [start](/skills/skills-reference/high/start/)
+- 要找具体位置 → [project-navigator](/skills/skills-reference/medium/project-navigator/)
+- 拿着结论开工 → [next](/skills/skills-reference/medium/next/) → [dev](/skills/skills-reference/high/dev/)
+- 范围真的变了 → [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/)
+

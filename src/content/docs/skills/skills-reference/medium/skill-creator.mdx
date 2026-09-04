@@ -1,0 +1,228 @@
+---
+title: Skill 创建（skill-creator）
+description: 创建新 Skill，或实施用户已经确认的 Skill 结构与跨 Skill 公共能力改动
+order: 25
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+`skill-creator` 是把一个想法变成一个能单独分发的目录的那一步。它替你做的第一个决定其实是**别建**：先看隔壁有没有已经在管这件事的 Skill，能扩展、能复用就不再造一个平行职责。只有当本地找不到任何能接这活的 Skill、这件事确实有自己独立的触发场景、而且运行时真的有人会去读它，才值得开一个新目录。
+
+它只管内容。写完之后由 [add-skill](/skills/skills-reference/medium/add-skill/) 把目录放进 CLI 真的会扫描的位置、同步索引、验证这一轮模型看得见它。已有 Skill 的日常修正走 [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "创建一个 Skill" / "新建 Skill" | 已经确认本地没有能接这活的 Skill |
+| "写个 Skill 处理 X" | 有独立触发场景，运行时也有明确的消费者 |
+| "做个 Skill" | 从一句需求开始，还没有任何目录 |
+| "把这个 Skill 目录重构一下" | 正文太长要拆 `references/`，重复操作要下沉 `scripts/` |
+| "按刚才确认的方案改公共能力" | 你已经拍定了跨 Skill 的公共改动，要人去实施 |
+
+<Aside type="tip">
+你明确说了要建、要改，这句话本身就是写入授权，它会直接动手，不再多要一轮确认。但 commit、push、发布、改客户端配置仍然要你单独授权。
+</Aside>
+
+## 什么时候不要用
+
+- **只是要改现有 Skill 的某条规则或流程** → [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)。新建平行职责的代价是两个 Skill 长期互抢触发词，而且没人知道该改哪一个。
+- **要注册、要同步索引、要验证客户端能发现** → [add-skill](/skills/skills-reference/medium/add-skill/)。写内容和让它被发现是两件事。
+- **同一个毛病在好几个 Skill 上反复出现** → [skill-evolution](/skills/skills-reference/low/skill-evolution/)。那是规则一致性问题，不是缺一个新 Skill。
+- **想找现成的用，不想自己写** → [find-skills](/skills/skills-reference/medium/find-skills/)。
+- **只是想用某个 Skill 干活** → 直接用它。
+- **要做的是产品定义、业务功能、写代码** → [product-manager](/skills/skills-reference/critical/product-manager/)、[universal-development](/skills/skills-reference/low/universal-development/) 或对应专业 Skill。
+
+## 前置条件
+
+**得有一句以上的需求。** "做个自动化 Skill"这种输入，它会先把意图、触发语义、目标目录和非目标问清楚——否则产出的是一个谁都不会命中的目录。
+
+**本地不能已经有能接这活的 Skill。** 这一条不满足，结论就该是"扩展现有那个"，而不是继续建目录。
+
+**你确认过要新建。** 这是防止 Skill 目录被自作主张撑大的最后一道闸。
+
+<Aside type="danger">
+参考别人的 Skill 仓库时，那些东西只能当规则和结构的参照，以及"这样做是有效的"的证据。**不要照着上游的目录名一个一个建平行 Skill**——正确做法是把里面真正管用的机制，融进本地已经在管这件事的那个 Skill 里。
+</Aside>
+
+## 使用示例
+
+### 场景 1：结论是别建
+
+**你的输入**：
+
+```text
+写个 Skill 专门检查接口返回的错误码格式对不对。
+```
+
+**它会先看隔壁，然后告诉你**：
+
+```text
+## 结论：不新建，扩展 error-handler
+
+已在管这件事    error-handler —— 错误码、异常语义、参数校验响应
+触发词会打架    "错误码"、"返回格式" 两边都会命中，新建等于制造二选一
+真正缺的部分    error-handler 正文没有覆盖"契约层的错误码枚举一致性检查"
+
+## 建议动作
+把这条检查加进 error-handler，而不是开新目录。
+要我改的话，这属于既有 Skill 的修正，交给 skill-optimizer 更合适。
+```
+
+这一步的输出必须是一个明确结论。如果结论是扩展或复用，它的工作就转成在既有 Skill 上改，而不是继续往下建目录。
+
+### 场景 2：真的要建
+
+**你的输入**：
+
+```text
+线上日志排查每次都靠人翻，规则也不统一。
+建个 skill 专门做日志取证，本地确实没有管这块的。
+```
+
+**你会拿到的产出**：
+
+```text
+## 创建的文件
+log-forensics/SKILL.md                     入口规则：触发边界 + 取证流程 + 停门条件
+log-forensics/references/log-patterns.md   常见异常模式与对应证据要求（正文里链得到）
+log-forensics/scripts/collect.mjs          按时间窗与关键字抽取日志片段（确定性操作）
+
+## 每个文件的运行时消费者
+SKILL.md          命中触发词时由客户端读取
+log-patterns.md   正文在"识别异常模式"一步显式引导去读
+collect.mjs       流程第 2 步直接执行，替代手工 grep 组合
+
+## 最小校验
+frontmatter    name / description 合法，description 说清了何时使用
+引用可达       references/log-patterns.md 在正文中有直接链接
+脚本语法       node --check scripts/collect.mjs 通过
+
+## 未覆盖边界
+不做告警配置、不接 APM、不替代 bug-detective 的调用链定位
+```
+
+**它明确不会创建的东西**：
+
+```text
+✗ 一份和 TODO 平行的状态文件
+✗ 固定格式的完成报告模板
+✗ 没有任何人会读的 Schema / 配置骨架
+✗ 从别的 Skill 抄过来的职责
+```
+
+替换旧能力时，旧脚本、旧产物和所有引用要跟着删掉。留着不用的文件比没有更糟——它还会继续被读进上下文，还会让下一个人以为它有用。
+
+### 场景 3：目录臃肿，要重构
+
+**你的输入**：
+
+```text
+这个 Skill 的 SKILL.md 长到 600 行了，每次都全读一遍。
+```
+
+**它会重新分配内容位置**：
+
+```text
+留在正文（每次都要）        触发边界、主流程、停门条件、输出约定
+下沉 references/（按需读）  三个长示例、平台差异清单、历史兼容说明
+下沉 scripts/（确定性操作） 原来正文里那段 8 步手工命令序列
+
+SKILL.md  612 行 → 148 行
+references/ +2 个文件，都能从正文直接点到
+scripts/    +1 个脚本，正文只留一行调用
+```
+
+<Aside type="caution">
+流程变轻不等于能力可以缺。规划类 Skill 该覆盖的产品、设计、架构结果一样都不能少；实施类 Skill 该覆盖的真实纵向交付也不能砍。能删的只有重复读取、重复状态、重复验证，和那些没有任何人消费的中间文书。
+</Aside>
+
+## 内容该放哪
+
+| 内容类型 | 放哪里 | 为什么 |
+| --- | --- | --- |
+| 每次命中都要用的核心流程 | `SKILL.md` 正文 | 它是唯一保证会被读到的地方 |
+| 长示例、专项细节、平台差异 | `references/` | 按需读；但必须能从正文直接点到，否则等于不存在 |
+| 确定性的重复操作 | `scripts/` | 让模型执行而不是复述步骤，省上下文也少出错 |
+
+frontmatter 里 `name` 和 `description` 必须准确，而 `description` 真正的作用是让模型判断什么时候该用它——写成一句能力介绍，它就永远不会被命中。正文则要留住做完这件事真正需要的那些能力和边界。
+
+## 如果建的是实施类或规划类 Skill
+
+**实施类**默认从当前开发者那份唯一 TODO 里取当前项，包括谁负责、功能点和入口、用户结果、验收、依赖、要写哪些目录、交付面、验证深度这些字段。写清它取哪些字段，比写一堆流程更重要。
+
+其中"要写哪些目录"这一项必须落成可比较的字符串——仓库相对目录前缀加上独占资源键。原因很实际：两个执行者并行时，系统靠它判断依赖有没有就绪、谁先领到、有没有人写到别人的地盘里去。写成一句"负责用户模块"是算不出互斥的。
+
+反过来，有三样东西不要预先填进 TODO：该调哪个专业 Skill、要改哪些具体文件、Review 走什么路径。它们从客户端原生的 Skill 清单、目标源码和 Git diff 里现查更准；预填只会在代码变化后变成误导。
+
+<Aside type="note">
+**规划类**不能靠"流程精简"把规划能力本身砍掉。产品研究、[brainstorm](/skills/skills-reference/medium/brainstorm/)、产品定义、该有的 UI/UX、架构、逐 Feature 技术选型，一样都不能少，最后压成一份覆盖功能点和菜单入口的 TODO。
+</Aside>
+
+## 目录里那个 HTML 模板
+
+`assets/eval_review.html` 是给 eval set 做人工复核用的页面模板（里面留着一个 `__SKILL_NAME_PLACEHOLDER__` 占位符）。它是可选工具，不是必经步骤——不要给每个新 Skill 都生成一份评测页面。
+
+## 与其他 Skill 的关系
+
+**上游**：无。它可以直接当起点。
+
+**下游**：[add-skill](/skills/skills-reference/medium/add-skill/)
+
+**协作**：[skill-optimizer](/skills/skills-reference/medium/skill-optimizer/)、[skill-evolution](/skills/skills-reference/low/skill-evolution/)
+
+管理 Skill 的这四个别混：
+
+| Skill | 干什么 | 什么时候轮到它 |
+| --- | --- | --- |
+| [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) | 认出问题并往下派 | 你纠正了一次行为，需要判断这算不算规则问题 |
+| skill-creator（本页） | 建目录 / 重构 / 实施已定方案 | 要新目录，或要动结构与公共能力 |
+| [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) | 改一个已有 Skill | 触发语义、流程、门槛、输出约定要调 |
+| [skill-evolution](/skills/skills-reference/low/skill-evolution/) | 沉淀跨 Skill 的长期规则 | 同一个根因在好几个 Skill 上反复出现 |
+
+```text
+认出 → 派活 → 干活 → 沉淀
+auto-optimizer → skill-creator / skill-optimizer → skill-evolution
+                          ↓
+                      add-skill（注册 + 同步索引 + 验证发现）
+```
+
+## 常见坑
+
+**照着别人的仓库一比一建目录。** 上游有 12 个 Skill 不代表你也需要 12 个。名字一样、职责重叠的目录建出来，最后是两边都不完整。
+
+**建完就以为能用了。** 内容和"客户端真的看得见"是两件事，注册那一段交给 [add-skill](/skills/skills-reference/medium/add-skill/)。
+
+**`description` 写成能力介绍。** 它是给模型判断"这一轮该不该用你"的，不是给人看的宣传语。写不清何时使用，这个 Skill 就只能靠显式调用活着。
+
+**references 建了但正文点不到。** 正文没有直接链接的参考文件，运行时不会被读到，等于没写。
+
+**换了实现却留着旧脚本。** 旧文件不删，下一个人会同时读到两套互相矛盾的做法。
+
+**为了让正文短而砍掉能力。** 精简的对象是重复，不是职责。
+
+## 最佳实践
+
+- **先把非目标写出来。** 非目标写不出来，说明职责边界还没想清楚，这时候别急着建目录。
+- **每个文件都问一句"谁会读它"。** 答不出消费者的文件就不该存在。
+- **目录要能单独搬走。** 运行时必读的规则、模板、脚本都在自己目录里，不依赖仓库根文件，也不引用兄弟 Skill 的相对路径——跨 Skill 协作只按名字声明，并写清对方缺席时怎么降级或停下。
+- **校验跑一次就够。** 跑一次最小校验：frontmatter 合不合法、引用的文件在不在、脚本能不能过语法，或者直接用仓库现成的目录检查，然后做一次 Review。不要为一次创建安排好几轮验证。
+- **建完就交给 add-skill。** 它自己不会把你带进注册流程。
+
+<Aside type="note">
+怎么算真的完成了：把这个目录单独复制到另一台机器的 Codex 或 Claude Code 里，它仍然跑得起来。
+</Aside>
+
+## 下一步
+
+- [add-skill](/skills/skills-reference/medium/add-skill/) - 注册、同步索引、验证客户端能发现它
+- [skill-optimizer](/skills/skills-reference/medium/skill-optimizer/) - 建完之后要改行为
+- [skill-evolution](/skills/skills-reference/low/skill-evolution/) - 同一根因反复出现时的长期治理
+- [find-skills](/skills/skills-reference/medium/find-skills/) - 也许外面已经有现成的
+- [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) - 从一次纠正判断该不该动规则
+
+
+
+

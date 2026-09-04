@@ -1,0 +1,316 @@
+---
+title: PC 状态管理（store-pc）
+description: 按目标仓库真实的状态方案设计、实现或排查 PC/Web 的共享状态、Store、selector、Hook/composable 与持久化恢复
+order: 43
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+一个筛选框被塞进全局单例，一个布尔量同时代表三个互不相关的请求，退出登录之后上一个账号的列表还留在内存里——前端状态的毛病大多出在"放错了位置"，很少是语法写错。这个 Skill 先帮你想清楚"这份数据归谁"，再照着仓库里现在真正在用的那套方案把它写出来。
+
+它管的是需要被多个组件、多个页面同时看见的那部分数据：存在哪、谁能改、什么时候作废、要不要落进浏览器、刷新之后怎么长回来。页面长什么样交给 [ui-pc](/skills/skills-reference/high/ui-pc/)，接口返回什么字段交给 [api-development](/skills/skills-reference/high/api-development/)；而只有当前组件自己关心的开关和输入框，根本不需要它出场。
+
+## 什么时候用
+
+| 你会这样说 | 你会拿到什么 |
+| --- | --- |
+| "状态管理这块帮我看看" | 一份归属判断，加上落地后的字段与读写入口 |
+| "加一个 Pinia store" | 按仓库现有 store 写法新增的模块，含 getter 与 reset |
+| "这份数据两个页面都要用" | 跨页读取路径，以及谁负责更新它 |
+| "抽个 composable 出来" | 把重复的取数、订阅、清理收进一个可复用单元 |
+| "刷新一下数据就没了" | 持久化实现，附带版本、损坏、配额三条恢复分支 |
+| "换了账号还能看到上一个人的数据" | 失效时机排查与清理点补全 |
+| "两个请求抢着写同一个字段" | 并发处理，丢弃过期响应 |
+
+## 什么时候不要用
+
+- 要写组件、调布局、抠视觉 → [ui-pc](/skills/skills-reference/high/ui-pc/)。它负责界面，这里只负责界面背后那份数据。
+- 要改接口字段、状态码、分页协议 → [api-development](/skills/skills-reference/high/api-development/)。
+- 只是一个弹层开关、一个输入框的值、hover 态 → 留在组件里就好。搬进全局是在给未来的重构提前埋账。
+- 还没定页面结构和交互稿 → 先过 [frontend-design](/skills/skills-reference/high/frontend-design/)。
+- 想引入一个新的状态库或持久化包 → 先让 [tech-decision](/skills/skills-reference/high/tech-decision/) 比过候选和退出成本。
+- 目标是移动端或跨端应用 → [ui-app](/skills/skills-reference/high/ui-app/) 那条线。
+
+## 前置条件
+
+需要两件事：仓库里已经有一个跑得起来的 PC/Web 前端；这个前端用哪套状态方案已经定下来了。第二条尤其关键——方案没定就先写 store，最常见的结果是仓库里同时存在两套全局状态，之后每加一个功能都要决定"这次用哪边"，而这笔账很难还。
+
+<Aside type="caution">
+如果发现要做的事已经超出"把已确认的数据组织好"——比如需要新增一个后端字段、改变某个功能的可见范围——那说明范围本身变了，应该退回去先把需求说清楚，而不是在 store 里替产品做决定。
+</Aside>
+
+## 使用示例
+
+### 示例 1：一个订单列表页，各部分数据分别落在哪
+
+你说："订单列表要加筛选和详情抽屉，状态怎么放？"
+
+拆开之后是这样安排的：
+
+| 这份数据 | 落点 | 理由 |
+| --- | --- | --- |
+| 抽屉是否展开 | 组件内 `ref` | 关掉页面就该消失，没人需要它 |
+| 关键词、状态、页码 | URL query | 用户要能把当前视图发给同事 |
+| 列表数据、请求中标志 | 已有的请求缓存层 | 服务端数据由缓存层管过期，不再抄一份 |
+| 表格列宽、每页条数偏好 | Store + 持久化 | 跨页面复用，且换设备可以不同 |
+| 当前登录人与其权限位 | Store（登出即清） | 多处读取，且必须在身份变化时归零 |
+
+### 示例 2：Pinia 产出的样子
+
+```ts
+// src/stores/order-filter.ts
+import { defineStore } from 'pinia'
+
+export interface OrderFilter {
+  keyword: string
+  status: OrderStatus | 'all'
+  ownerId: string | null
+}
+
+export const useOrderFilterStore = defineStore('order-filter', {
+  state: (): OrderFilter => ({ keyword: '', status: 'all', ownerId: null }),
+
+  getters: {
+    // 派生值用 getter，不再单独存一个字段
+    queryPayload: (s) => ({
+      keyword: s.keyword.trim(),
+      status: s.status === 'all' ? undefined : s.status,
+      ownerId: s.ownerId ?? undefined,
+    }),
+    hasCondition: (s) => s.keyword !== '' || s.status !== 'all' || s.ownerId !== null,
+  },
+
+  actions: {
+    apply(patch: Partial<OrderFilter>) {
+      Object.assign(this, patch)
+    },
+    clear() {
+      this.$reset()
+    },
+  },
+})
+```
+
+### 示例 3：请求状态按键区分，而不是一个全局标志
+
+你说："页面上三个请求，转圈的时候整页都灰了。"
+
+拿到的是一个按资源键分槽的写法（这里用 Zustand，Pinia/Redux 同理）：
+
+```ts
+type Phase = 'idle' | 'pending' | 'success' | 'error'
+
+interface Slot<T> {
+  phase: Phase
+  data: T | null
+  message: string | null
+}
+
+const empty = <T>(): Slot<T> => ({ phase: 'idle', data: null, message: null })
+
+export const useOrderStore = create<{
+  slots: Record<string, Slot<OrderPage>>
+  load: (key: string, params: OrderFilter) => Promise<void>
+}>((set, get) => ({
+  slots: {},
+
+  async load(key, params) {
+    set((s) => ({ slots: { ...s.slots, [key]: { ...empty(), phase: 'pending' } } }))
+    try {
+      const data = await api.queryOrders(params)
+      set((s) => ({ slots: { ...s.slots, [key]: { phase: 'success', data, message: null } } }))
+    } catch (e) {
+      set((s) => ({
+        slots: { ...s.slots, [key]: { phase: 'error', data: null, message: toMessage(e) } },
+      }))
+    }
+  },
+}))
+```
+
+界面这边能分辨的就不止"转圈 / 不转圈"了：
+
+```tsx
+const slot = useOrderStore((s) => s.slots['order-list'] ?? empty<OrderPage>())
+
+if (slot.phase === 'pending') return <TableSkeleton />
+if (slot.phase === 'error') return <ErrorRetry message={slot.message} onRetry={retry} />
+if (slot.data && slot.data.total === 0) return <EmptyHint />
+return <OrderTable page={slot.data!} />
+```
+
+### 示例 4：快速切筛选条件时，旧结果盖掉新结果
+
+你说："连点几下状态标签，表格里出来的是上一次的数据。"
+
+两种写法都会给出来，取仓库里已经在用的那一种：
+
+```ts
+// 写法 A：请求序号，够用且不依赖 fetch 实现
+let ticket = 0
+async function reload(params: OrderFilter) {
+  const mine = ++ticket
+  const data = await api.queryOrders(params)
+  if (mine !== ticket) return // 已经有更新的请求发出去了，这次结果直接丢
+  commit(data)
+}
+
+// 写法 B：AbortController，能真正取消掉在途请求
+let inflight: AbortController | null = null
+async function reload(params: OrderFilter) {
+  inflight?.abort()
+  inflight = new AbortController()
+  try {
+    commit(await api.queryOrders(params, { signal: inflight.signal }))
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') throw e
+  }
+}
+```
+
+### 示例 5：持久化，连带版本与坏数据一起处理
+
+你说："列宽偏好刷新就没了，存一下。"
+
+存下来只是第一行代码，剩下的分支才是这个示例的重点：
+
+```ts
+const KEY = 'acme:order-table-prefs'
+const VERSION = 3
+
+type Prefs = { pageSize: number; widths: Record<string, number> }
+const fallback: Prefs = { pageSize: 20, widths: {} }
+
+export function hydrate(): Prefs {
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return fallback
+
+    const box = JSON.parse(raw) as { v?: number; data?: unknown }
+    if (box.v !== VERSION) return migrate(box) ?? fallback // 版本不对：迁移或丢弃
+    return { ...fallback, ...(box.data as Prefs) }
+  } catch {
+    localStorage.removeItem(KEY) // 内容坏了：清掉，不要让它每次启动都炸
+    return fallback
+  }
+}
+
+export function persist(next: Prefs) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ v: VERSION, data: next }))
+  } catch {
+    // 配额满或隐私模式：功能继续走内存态，不弹错给用户
+  }
+}
+```
+
+<Aside type="danger">
+浏览器里的 localStorage 是脚本可读的。凭据、权限位、身份上下文和个人信息不要在这里再存一份；确实要放，就得接受被同页脚本读到的风险，并且把过期、退出、换账号三处清理都写上。
+</Aside>
+
+### 示例 6：身份变化时把该清的清掉
+
+你说："退出登录再登另一个账号，看板还是上一个人的。"
+
+产出通常是一个集中的清理点，而不是在每个页面里补 `if`：
+
+```ts
+// src/stores/reset-on-identity-change.ts
+const identityScoped = [useOrderFilterStore, useDashboardStore, useDraftStore]
+
+export function resetIdentityScopedStores() {
+  identityScoped.forEach((use) => use().clear())
+  queryClient.clear() // 请求缓存层也要一起，否则清了 store 还能从缓存读回来
+  ;['acme:order-table-prefs'].forEach((k) => localStorage.removeItem(k))
+}
+
+// 登出、切换账号、权限变更三个入口都调它
+authBus.on('logout', resetIdentityScopedStores)
+authBus.on('account-switched', resetIdentityScopedStores)
+```
+
+### 示例 7：可复用的 composable
+
+```ts
+// src/composables/use-order-list.ts
+export function useOrderList(filter: Ref<OrderFilter>) {
+  const store = useOrderFilterStore()
+  const rows = ref<Order[]>([])
+  const phase = ref<Phase>('idle')
+
+  const stop = watch(
+    () => store.queryPayload,
+    async (payload) => {
+      phase.value = 'pending'
+      rows.value = await api.queryOrders(payload)
+      phase.value = 'success'
+    },
+    { immediate: true },
+  )
+
+  onScopeDispose(stop) // 订阅一定要有对应的解除，否则页面切走还在跑
+  return { rows, phase }
+}
+```
+
+### 示例 8：收尾时你会看到的回复
+
+```text
+改动文件
+  src/stores/order-filter.ts          新增
+  src/composables/use-order-list.ts   新增
+  src/stores/reset-on-identity-change.ts  加入 useOrderFilterStore
+
+字段归属
+  keyword/status  来自 URL，store 只做本次会话内的缓存
+  pageSize        持久化，v3，换账号不清（属于设备偏好）
+  ownerId         登出即清
+
+跑过的验证
+  pnpm typecheck、pnpm lint 通过
+  手工主路径：筛选 → 分页 → 打开详情 → 退出登录 → 换账号登录，列表已归零
+
+没验证的
+  Safari 隐私模式下 localStorage 写入被拒的分支（本机无法复现）
+```
+
+## 与其他 Skill 的关系
+
+| 关系 | Skill | 说明 |
+| --- | --- | --- |
+| 前置 | [frontend-design](/skills/skills-reference/high/frontend-design/) | 先有页面结构和交互稿，才知道哪些数据要共享 |
+| 前置 | [tech-decision](/skills/skills-reference/high/tech-decision/) | 要换或新增状态库时，先在这里比过 |
+| 协作 | [api-development](/skills/skills-reference/high/api-development/) | 请求与错误的形状两边要对齐 |
+| 后续 | [ui-pc](/skills/skills-reference/high/ui-pc/) | 界面接上 store 暴露出来的读写口 |
+| 平行 | [ui-app](/skills/skills-reference/high/ui-app/) | 同一份业务在跨端侧的对应实现 |
+
+```text
+frontend-design → store-pc → ui-pc → code-review
+                     ↕
+              api-development
+```
+
+## 常见坑
+
+**为了"统一入口"把 URL 参数和请求缓存都抄进 Store。**  这不是收敛，是多造了一份需要同步的真相。之后每个 bug 都要先回答"两边哪个是对的"。
+
+**一个 `loading` 撑起整页。**  三个请求共用一个标志，任意一个慢就整页灰掉；错误也只能显示一句话。按资源键分槽的成本比想象中低，见示例 3。
+
+**只清 UI 不清数据。**  退出登录时把界面跳回登录页，内存里的旧数据没动——下一个人登进来，某个还没重新取数的组件就把上一个人的内容渲染出来了。
+
+**持久化只写了 happy path。**  版本变了、JSON 坏了、配额满了，这三种都会在真实用户那里发生。示例 5 的三个分支不是防御性冗余。
+
+**用 `Record<string, any>` 装固定字段。**  字段集合本来就是定的，就写成具名类型；只有键真的在运行时才决定的集合才该用映射，而且要说清键和值分别是什么。
+
+## 下一步
+
+- [ui-pc](/skills/skills-reference/high/ui-pc/) — 把状态接进真实页面
+- [api-development](/skills/skills-reference/high/api-development/) — 请求与错误契约
+- [frontend-design](/skills/skills-reference/high/frontend-design/) — 页面结构与交互基线
+- [code-review](/skills/skills-reference/high/code-review/) — 改完走一次完整审查
+- [ui-app](/skills/skills-reference/high/ui-app/) — 跨端侧的对应实现
+
+
+
+
+

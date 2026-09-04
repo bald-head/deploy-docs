@@ -1,5 +1,5 @@
 ---
-title: api-development
+title: API 开发 - api-development
 description: API 开发 - 设计实现 API 契约、校验、错误语义和文档
 order: 8
 ---
@@ -8,552 +8,122 @@ import { Aside } from '@astrojs/starlight/components'
 
 ## 概述
 
-`api-development` 是 **High 优先级** Skill，负责设计实现 API 契约、校验、错误语义和文档。
+接口能调通只是最低门槛。真正花时间的都在后面：字段改名之后已发布的客户端还能不能用、批量提交一半成功算什么结果、雪花 long 主键到了浏览器会不会掉精度、分页翻深了总数还要不要算。
 
-**适用场景**：
-- 设计和实现 REST API
-- 定义 API 契约和校验规则
-- 实现错误处理和文档
+`api-development` 的做法是先把契约定下来再写框架代码——消费者是谁、输入输出长什么样、错误怎么表达、权限和幂等边界在哪、兼容策略是什么。落地时它只用目标仓库确实存在的东西：检测到 Spring Web 才用对应的请求绑定与异常映射注解，检测到 Bean Validation 才用对应版本的约束注解（不混用 `javax` 与 `jakarta`），检测到 SpringDoc / OpenAPI 3 才按文档规则写模型。证据不齐时它只给候选设计和待验证项，不会虚构统一响应类型、注解、包名、分页类型、错误码或文档地址。
 
-**不适用场景**：
-- 前端 UI 实现 → 使用 `ui-pc` 或 `ui-app`
-- 数据库物理设计 → 使用 `database-design`
-- 业务逻辑实现 → 使用 `universal-development`
+它管的是接口这一层：契约、校验、错误语义、文档。数据怎么存、页面怎么写、威胁怎么防，各有各的 Skill。
 
-## 快速开始
+## 什么时候用
 
-### 开发 API 的完整流程
+| 你会这样说 | 场景 |
+| --- | --- |
+| "加一个提交审批的接口" | 新增业务接口，要定请求、响应、错误和权限 |
+| "这个参数怎么校验" | 结构、格式、集合元素、跨字段规则各自的落点 |
+| "前端说返回的 id 对不上" | 大整数精度、序列化与跨层字段映射 |
+| "批量删除要能一次传多个" | 空集合、重复项、部分成功、原子性、上限 |
+| "改字段名会不会把老客户端搞坏" | 兼容性判断、版本、灰度与迁移方案 |
+| "接口文档得能自动出" | 文档依赖与配置，文案来自真实代码而不是手写示例 |
+| "重复点两次会创建两条" | 幂等键、重复提交、并发冲突、超时重试 |
 
-```bash
-# 1. 确认前置规划
-# - 架构设计 (architecture-design)
-# - 技术选型 (tech-decision)
-# - 数据库设计 (database-design)
+触发面覆盖新增接口、改接口、定契约、补校验、错误语义和文档集成这几类说法，具体触发词由 Skill 自己的 frontmatter 维护。
 
-# 2. 发现项目 API 规范
-# 查看现有 API 实现
-ls src/main/java/controller/
-cat src/main/java/controller/UserController.java
+## 什么时候不要用
 
-# 3. 开始实现
-"实现用户登录 API"
+- **表结构、索引、迁移** → [database-design](/skills/skills-reference/high/database-design/)；**持久层与数据存取实现** → [database-ops](/skills/skills-reference/high/database-ops/)。它只定契约，不决定数据怎么落地。
+- **一整条增删改查纵向交付** → [crud-development](/skills/skills-reference/high/crud-development/)。本 Skill 到接口这一层为止，业务规则和页面不在内。跨层的纵向编排与收口交 [dev](/skills/skills-reference/high/dev/)。
+- **威胁建模、鉴权体系、安全审计** → [security-guard](/skills/skills-reference/high/security-guard/)；**行级与字段级可见范围** → [data-permission](/skills/skills-reference/high/data-permission/)。
+- **异常处理实现、错误码落地、日志** → [error-handler](/skills/skills-reference/medium/error-handler/)。本 Skill 定接口形态，它实现处理逻辑。
+- **序列化表示与兼容细节** → [json-serialization](/skills/skills-reference/low/json-serialization/)；**接口上的横切注解**（限流、防重、脱敏、加密）→ [backend-annotations](/skills/skills-reference/low/backend-annotations/)。
+- **实时推送** → [websocket-sse](/skills/skills-reference/medium/websocket-sse/)；**定时与异步任务** → [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/)。
+- **客户端怎么消费这些接口** → [alova-client-usage](/skills/skills-reference/low/alova-client-usage/)、[alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/)、[worma-guidelines](/skills/skills-reference/low/worma-guidelines/)。它们消费契约，不定义契约。
+- **服务边界怎么切** → [architecture-design](/skills/skills-reference/high/architecture-design/)。
 
-# 4. 实施顺序
-# → 请求 DTO 定义
-# → 响应 VO 定义
-# → Controller 实现
-# → 参数校验
-# → 错误处理
-# → API 文档
+## 前置条件
 
-# 5. 测试
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"123456"}'
+三条门槛的共同目的是：不让契约靠猜。
 
-# 6. Review
-/code-review
-```
+1. **接口类型和网关策略已经从仓库事实或架构结论里定下来**。同一个标识放在路径、查询还是请求体，会连带影响网关、权限和日志，先定下来才谈方法选择。
+2. **有相邻的生产接口可以参照，或者有明确的接口规范**。没有参照物时，命名、响应包装和错误映射只能编，编出来的第一版必然返工。
+3. **认证授权策略已确认，或者明确不需要**。鉴权决定路径放不放行、失败用哪个状态码、越权的负向用例怎么写。
 
-## 使用示例
+取事实的优先级是固定的：当前 TODO 的功能 → 目标源码适用的仓库规则与构建依赖 → 相邻源码、配置和现有验证 → 最后才是 Skill 里的示例。确认顺序同样固定：规则 → 依赖 → 配置 → 定义与初始化 → 生产调用 → 测试。
 
-### 场景 1：实现登录 API
+## 怎么用
 
-**TODO 中的功能**：
-```markdown
-- [ ] `USER-LOGIN-API` 用户登录 API；Owner: alice-chen
-  - 来源: PRD#用户登录
-  - 目标: 提供邮箱密码登录接口
-  - 验收:
-    - AC-001: 接受邮箱和密码
-    - AC-002: 返回 JWT Token
-    - AC-003: 参数校验和错误处理
-  - 交付面: api / backend
-```
+七步执行流程：
 
-**实施步骤**：
+1. **建立契约表**：消费者、入口、方法与动作、请求、响应、状态码与业务码、权限、幂等、兼容、SLA。
+2. **搜索可复用契约**：同业务的请求/响应对象、分页、错误、转换器和相邻接口。不要只因为方法名不同，就复制出一份同构类型。
+3. **选定契约档案**，并把证据和例外记下来。
+4. **实现最小闭环**：请求绑定、校验、业务调用、响应映射、错误处理、文档。
+5. **核对消费者**：前端类型、SDK、消息 Schema、网关、权限、序列化。只验证服务端能编译不算完成。
+6. **验证正反路径**：成功、参数错误、资源不存在、重复、越权、并发、批量、超时、兼容。
+7. **交付证据**：事实来源、变更文件、契约差异、测试命令、示例、未验证边界。
 
-1. **定义请求 DTO**：
-   ```java
-   // src/main/java/dto/LoginRequest.java
-   @Data
-   public class LoginRequest {
-       @NotBlank(message = "邮箱不能为空")
-       @Email(message = "邮箱格式不正确")
-       private String email;
-       
-       @NotBlank(message = "密码不能为空")
-       @Size(min = 6, max = 20, message = "密码长度6-20位")
-       private String password;
-   }
-   ```
+### 契约档案：先选一个，并写下为什么
 
-2. **定义响应 VO**：
-   ```java
-   // src/main/java/vo/LoginResponse.java
-   @Data
-   public class LoginResponse {
-       private String token;
-       private Long userId;
-       private String username;
-       private Long expiresIn;
-   }
-   ```
+这是最容易被误用的地方——把某一种风格当成所有项目的默认。四种档案的适用条件不同：
 
-3. **实现 Controller**：
-   ```java
-   // src/main/java/controller/AuthController.java
-   @RestController
-   @RequestMapping("/api/v1/auth")
-   @Tag(name = "认证", description = "用户认证相关接口")
-   public class AuthController {
-       
-       @Autowired
-       private AuthService authService;
-       
-       @PostMapping("/login")
-       @Operation(summary = "用户登录", description = "邮箱密码登录")
-       public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-           LoginResponse response = authService.login(request);
-           return Result.ok(response);
-       }
-   }
-   ```
+- **仓库兼容档案**（改存量项目时的默认）：保持与相邻接口和已发布客户端兼容。现状确实有缺陷时，先列影响、迁移和版本策略，不静默改动方法、字段名、状态码或响应包装。
+- **标准 HTTP 档案**（没有专门约束时）：按读取、创建、替换、局部修改、删除的语义选方法，并明确安全性、幂等性与缓存行为。成功和失败的状态码要表达真实结果，不是所有响应都回 200。
+- **本项目接口基线**（项目发起人已确认）：新增业务接口统一 `POST`，业务参数放进一个专用请求体对象；分页、筛选、详情标识、状态标识、批量标识和动作参数都不放进 query、path 或路径变量。JSON 成功结果走项目统一响应包装，不塞进 Header、路径或裸 `Map`。文件上传是唯一输入例外：用 `multipart/form-data` 加明确的文件对象，动作仍然是 `POST`。
+- **全 POST 严格档案**：只有用户、规则文件或稳定的相邻源码明确采用时才启用。启用它不等于可以放弃标准 HTTP 语义——健康检查、文件流、回调地址、Webhook、缓存读取，以及需要向第三方兼容的接口，例外与否只能由真实契约说了算。
 
-4. **实现业务逻辑**：
-   ```java
-   // src/main/java/service/AuthService.java
-   @Service
-   public class AuthService {
-       
-       @Autowired
-       private UserMapper userMapper;
-       
-       @Autowired
-       private JwtTokenProvider tokenProvider;
-       
-       public LoginResponse login(LoginRequest request) {
-           // 查询用户
-           UserEntity user = userMapper.selectByEmail(request.getEmail());
-           if (user == null) {
-               throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
-           }
-           
-           // 验证密码
-           if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-               throw new BusinessException(ErrorCode.INVALID_PASSWORD, "密码错误");
-           }
-           
-           // 生成 Token
-           String token = tokenProvider.generateToken(user.getId());
-           
-           // 构造响应
-           LoginResponse response = new LoginResponse();
-           response.setToken(token);
-           response.setUserId(user.getId());
-           response.setUsername(user.getUsername());
-           response.setExpiresIn(tokenProvider.getExpirationTime());
-           
-           return response;
-       }
-   }
-   ```
-
-5. **全局异常处理**：
-   ```java
-   // src/main/java/exception/GlobalExceptionHandler.java
-   @RestControllerAdvice
-   public class GlobalExceptionHandler {
-       
-       @ExceptionHandler(BusinessException.class)
-       public Result<Void> handleBusinessException(BusinessException e) {
-           return Result.error(e.getCode(), e.getMessage());
-       }
-       
-       @ExceptionHandler(MethodArgumentNotValidException.class)
-       public Result<Void> handleValidationException(MethodArgumentNotValidException e) {
-           String message = e.getBindingResult()
-               .getFieldErrors()
-               .stream()
-               .map(FieldError::getDefaultMessage)
-               .collect(Collectors.joining(", "));
-           return Result.error(ErrorCode.INVALID_PARAM, message);
-       }
-   }
-   ```
-
-6. **测试**：
-   ```bash
-   # 正常登录
-   curl -X POST http://localhost:8080/api/v1/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{
-       "email": "test@example.com",
-       "password": "123456"
-     }'
-   
-   # 响应:
-   # {
-   #   "code": 200,
-   #   "message": "success",
-   #   "data": {
-   #     "token": "eyJhbGciOiJIUzI1NiIs...",
-   #     "userId": 1,
-   #     "username": "test",
-   #     "expiresIn": 86400
-   #   }
-   # }
-   
-   # 参数校验
-   curl -X POST http://localhost:8080/api/v1/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{
-       "email": "invalid-email",
-       "password": "123"
-     }'
-   
-   # 响应:
-   # {
-   #   "code": 400,
-   #   "message": "邮箱格式不正确, 密码长度6-20位",
-   #   "data": null
-   # }
-   ```
-
-### 场景 2：实现分页查询 API
-
-**TODO 中的功能**：
-```markdown
-- [ ] `USER-LIST-API` 用户列表查询 API；Owner: alice-chen
-  - 目标: 分页查询用户列表
-  - 验收:
-    - AC-001: 支持分页（page, pageSize）
-    - AC-002: 支持条件筛选（username, email）
-    - AC-003: 支持排序（按创建时间降序）
-```
-
-**实施步骤**：
-
-1. **定义查询参数**：
-   ```java
-   // src/main/java/dto/UserQuery.java
-   @Data
-   public class UserQuery {
-       @Min(value = 1, message = "页码最小为1")
-       private Integer page = 1;
-       
-       @Min(value = 1, message = "每页大小最小为1")
-       @Max(value = 100, message = "每页大小最大为100")
-       private Integer pageSize = 20;
-       
-       private String username;
-       private String email;
-       private String sortBy = "createTime";
-       private String sortOrder = "desc";
-   }
-   ```
-
-2. **定义分页响应**：
-   ```java
-   // src/main/java/vo/PageResult.java
-   @Data
-   public class PageResult<T> {
-       private Long total;
-       private Integer page;
-       private Integer pageSize;
-       private List<T> records;
-       
-       public static <T> PageResult<T> of(Long total, Integer page, Integer pageSize, List<T> records) {
-           PageResult<T> result = new PageResult<>();
-           result.setTotal(total);
-           result.setPage(page);
-           result.setPageSize(pageSize);
-           result.setRecords(records);
-           return result;
-       }
-   }
-   ```
-
-3. **实现 Controller**：
-   ```java
-   @RestController
-   @RequestMapping("/api/v1/users")
-   public class UserController {
-       
-       @GetMapping
-       @Operation(summary = "用户列表", description = "分页查询用户列表")
-       public Result<PageResult<UserVO>> list(@Valid UserQuery query) {
-           PageResult<UserVO> result = userService.list(query);
-           return Result.ok(result);
-       }
-   }
-   ```
-
-4. **实现业务逻辑**：
-   ```java
-   @Service
-   public class UserService {
-       
-       public PageResult<UserVO> list(UserQuery query) {
-           // 构建查询条件
-           QueryWrapper<UserEntity> wrapper = new QueryWrapper<>();
-           if (StringUtils.isNotBlank(query.getUsername())) {
-               wrapper.like("username", query.getUsername());
-           }
-           if (StringUtils.isNotBlank(query.getEmail())) {
-               wrapper.like("email", query.getEmail());
-           }
-           wrapper.orderBy(true, "desc".equals(query.getSortOrder()), query.getSortBy());
-           
-           // 分页查询
-           Page<UserEntity> page = new Page<>(query.getPage(), query.getPageSize());
-           IPage<UserEntity> result = userMapper.selectPage(page, wrapper);
-           
-           // 转换为 VO
-           List<UserVO> records = result.getRecords()
-               .stream()
-               .map(this::convertToVO)
-               .collect(Collectors.toList());
-           
-           return PageResult.of(result.getTotal(), query.getPage(), query.getPageSize(), records);
-       }
-   }
-   ```
-
-### 场景 3：适配现有 API 规范
-
-**发现项目规范**：
-
-```bash
-# 1. 查看现有 API
-cat src/main/java/controller/OrderController.java
-
-# 2. 发现规范:
-# - 统一响应格式: Result<T>
-# - 统一异常处理: GlobalExceptionHandler
-# - 参数校验: @Valid + Bean Validation
-# - API 文档: Springdoc OpenAPI 3
-# - 路径规范: /api/v1/{resource}
-# - 命名规范: Request/Response 后缀
-```
-
-**按规范实现**：
-
-```java
-// 1. 复用统一响应
-@Data
-public class Result<T> {
-    private Integer code;
-    private String message;
-    private T data;
-    
-    public static <T> Result<T> ok(T data) {
-        Result<T> result = new Result<>();
-        result.setCode(200);
-        result.setMessage("success");
-        result.setData(data);
-        return result;
-    }
-    
-    public static <T> Result<T> error(Integer code, String message) {
-        Result<T> result = new Result<>();
-        result.setCode(code);
-        result.setMessage(message);
-        return result;
-    }
-}
-
-// 2. 复用异常定义
-public class BusinessException extends RuntimeException {
-    private Integer code;
-    
-    public BusinessException(ErrorCode errorCode, String message) {
-        super(message);
-        this.code = errorCode.getCode();
-    }
-}
-
-// 3. 使用 Springdoc 注解
-@RestController
-@RequestMapping("/api/v1/products")
-@Tag(name = "商品管理")
-public class ProductController {
-    
-    @GetMapping("/{id}")
-    @Operation(summary = "获取商品详情")
-    @Parameter(name = "id", description = "商品ID", required = true)
-    public Result<ProductResponse> getById(@PathVariable Long id) {
-        ProductResponse response = productService.getById(id);
-        return Result.ok(response);
-    }
-}
-```
-
-## 关键规则
-
-### 1. 先发现项目规范
-
-```bash
-# 必须先确认
-1. API 类型、版本策略
-2. 请求/响应格式
-3. 参数校验方式
-4. 错误处理机制
-5. API 文档工具
-6. 现有 API 示例
-```
-
-### 2. 完整的契约定义
-
-```java
-// 正确: 完整定义
-@Data
-public class CreateOrderRequest {
-    @NotNull(message = "商品ID不能为空")
-    private Long productId;
-    
-    @NotNull(message = "数量不能为空")
-    @Min(value = 1, message = "数量至少为1")
-    private Integer quantity;
-    
-    @NotBlank(message = "收货地址不能为空")
-    private String address;
-}
-
-// 错误: 缺少校验
-@Data
-public class CreateOrderRequest {
-    private Long productId;  // 缺少校验
-    private Integer quantity;  // 缺少校验
-    private String address;  // 缺少校验
-}
-```
-
-### 3. 统一错误处理
-
-```java
-// 正确: 全局异常处理
-@RestControllerAdvice
-public class GlobalExceptionHandler {
-    
-    @ExceptionHandler(BusinessException.class)
-    public Result<Void> handleBusinessException(BusinessException e) {
-        return Result.error(e.getCode(), e.getMessage());
-    }
-}
-
-// 错误: 每个接口自己处理
-@PostMapping
-public Result<Void> create(@RequestBody CreateRequest request) {
-    try {
-        service.create(request);
-        return Result.ok();
-    } catch (Exception e) {
-        return Result.error(500, e.getMessage());
-    }
-}
-```
-
-### 4. 完整的 API 文档
-
-```java
-// 正确: 完整文档
-@RestController
-@Tag(name = "用户管理", description = "用户相关接口")
-public class UserController {
-    
-    @PostMapping
-    @Operation(summary = "创建用户", description = "创建新用户账号")
-    @ApiResponse(responseCode = "200", description = "创建成功")
-    @ApiResponse(responseCode = "400", description = "参数错误")
-    public Result<UserResponse> create(@Valid @RequestBody CreateUserRequest request) {
-        // ...
-    }
-}
-```
-
-## Skill 协调
-
-`api-development` 协调以下专业 Skill：
-
-| 阶段 | 调用 Skill |
-|------|-----------|
-| 前置 | architecture-design, tech-decision, database-design |
-| 实施 | universal-development |
-| 后置 | security-guard, error-handler, code-review |
-
-<Aside type="note">
-API 契约定义、实现和文档在同一遍中完成，不分开成多个 Feature。
+<Aside type="caution">
+基线只作用于**本次明确新增**的业务接口。既有接口已经完善时保持原有方法、参数绑定和客户端契约；修实现、补校验、补权限、补租户、补审计都不触发机械改造。要动已经公开的契约，必须由批准需求划定范围，并同步处理兼容、客户端和迁移。
 </Aside>
+
+### 几条绕不开的约束
+
+- 对外契约用稳定的业务语义，不把持久化实体、ORM 分页对象、内部异常或第三方原始响应直接暴露出去。
+- 校验分两层：结构、格式、集合元素和跨字段规则在参数层；依赖数据库、权限、库存或状态机的判断留在业务层。
+- 用户能看到的参数错误和业务错误用简体中文；服务端保留 cause 和关联证据，堆栈、SQL、路径、Token、密钥都不下发到客户端。
+- 分页要明确页码或游标、稳定排序、最大页大小和总数成本；过滤与排序字段走白名单加参数化查询。
+- 写接口的幂等键、重复提交、并发冲突和超时重试都要显式定义——HTTP 方法本身推不出业务幂等。
+- 批量接口得把这些都说清：传空数组算什么、重复项怎么处理、要不要保证顺序、一半成功算成功还是整批回滚、单次最多多少条、失败之后能不能重试。
+- 主键是雪花 long 而消费方是 JavaScript 时，按双方已确认的契约以字符串下发，否则越过安全整数范围的值会静默失真。
+- 同一个属性在 Java 里、在 JSON 里、在数据库列上、在 Header 里各叫什么，要一层一层看过；任何一层都不能拿来推断另一层。
+- 统一响应、分页、转换、权限、日志、防重和异常类只复用仓库里已经存在且有生产调用的实现，不按示例名称另起一套。
 
 ## 与其他 Skill 的关系
 
-### 选择决策
+**上游（before）**：[architecture-design](/skills/skills-reference/high/architecture-design/)、[tech-decision](/skills/skills-reference/high/tech-decision/)、[database-design](/skills/skills-reference/high/database-design/)
+
+**下游（after）**：[security-guard](/skills/skills-reference/high/security-guard/)、[error-handler](/skills/skills-reference/medium/error-handler/)、[code-review](/skills/skills-reference/high/code-review/)
+
+**协作（complement）**：[data-permission](/skills/skills-reference/high/data-permission/)、[universal-development](/skills/skills-reference/low/universal-development/)
 
 ```text
-API 契约和实现 → api-development
-数据库设计 → database-design
-安全防护 → security-guard
-业务逻辑 → universal-development
+architecture-design / tech-decision / database-design（边界、选型、数据先定）
+  → api-development（契约表 → 复用检索 → 选档案 → 最小闭环 → 消费者核对 → 正反路径）
+      ├─ data-permission（登录之后能看到哪些行）
+      └─ universal-development（接口背后的一般业务逻辑）
+            → security-guard / error-handler
+                  → code-review（同一 diff 只做一次）
 ```
 
-### Related Skills
+改生产代码之前，它先按 [code-review](/skills/skills-reference/high/code-review/) 里的生产规则渐进披露取当轮该用的那几档：universal 那一档任何改动都要消费，涉及 Java、SpringDoc（OpenAPI 3）或 NextDoc4j 时才加载对应的条件规则。规则源拿不到时它直接返回 `production-rules-unavailable`，而不是在本地凑一份降级门禁。命中 NextDoc4j 时它按集成规范完成依赖、BOM、配置、插件与 Gateway 接入。
 
-**前置依赖**:
-- `architecture-design` - 架构设计
-- `tech-decision` - 技术选型
-- `database-design` - 数据库设计
+## 产出与验收
 
-**后续推荐**:
-- `security-guard` - 安全防护
-- `error-handler` - 错误处理
-- `code-review` - 代码审查
+输出固定六段：已确认的协议、框架与相邻接口来源；选定的契约档案及依据；请求、响应、错误与兼容契约；实现或修改的文件；客户端、网关与文档的同步情况；测试命令与结果；迁移、回滚与未验证边界。
 
-## 最佳实践
+判断真的完成了，把这几件事逐条对上：
 
-### 1. 复用项目规范
+- 选定档案和实际实现对得上——方法、路径、动作、版本一致；
+- 入参侧写明了来源、必填与否、默认值、空值、集合元素和跨字段规则；
+- 出参侧不含持久化对象、内部异常和敏感字段；
+- 全局错误契约那一侧对齐了 HTTP 状态、业务码和中文提示；
+- 负向用例真的跑了：越权、跨租户、归属不符、重复提交、并发冲突；
+- 边界用例真的跑了：翻页深度、排序白名单、过滤白名单、批量条数上限；
+- 大整数、金额、日期时区、枚举、文件和空值的序列化两端一致；
+- 文档由代码或 Schema 生成，里面没有凭据也没有编出来的示例；
+- 已发布客户端的兼容判断、迁移步骤和回滚路径都写下来了；
+- 契约或接口测试是真的执行过的，不是只跑了一遍静态扫描。
 
-```java
-// 正确: 复用现有
-public class Result<T> {
-    // 使用项目已有的统一响应格式
-}
+<Aside type="note">
+它不创建或更新 TODO、不改功能状态、不操作 Git，只把路由顺序、修改或只读结论、验证结果和未覆盖边界交回 feature owner。当前功能的用户结果、菜单入口、验收或交付边界无法从 TODO、源码和直接来源确定时，它返回 `scope-change-detected`，而不是自己把范围撑大。
+</Aside>
 
-// 错误: 创建新的
-public class ApiResponse<T> {
-    // 新建不同的响应格式
-}
-```
 
-### 2. 完整的参数校验
-
-```java
-// 必须包含
-@NotNull、@NotBlank、@Size
-@Min、@Max、@Pattern
-@Email、@Valid
-
-// 自定义校验消息
-@NotBlank(message = "用户名不能为空")
-```
-
-### 3. 清晰的错误语义
-
-```java
-// 正确: 明确错误
-throw new BusinessException(
-    ErrorCode.USER_NOT_FOUND,
-    "用户不存在: " + userId
-);
-
-// 错误: 模糊错误
-throw new RuntimeException("error");
-```
-
-## 下一步
-
-- [database-design](/skills/skills-reference/medium/database-design) - 数据库设计
-- [security-guard](/skills/skills-reference/high/security-guard) - 安全防护
-- [error-handler](/skills/skills-reference/medium/error-handler) - 错误处理
-- [code-review](/skills/skills-reference/high/code-review) - 代码审查
-- [universal-development](/skills/skills-reference/high/universal-development) - 通用开发

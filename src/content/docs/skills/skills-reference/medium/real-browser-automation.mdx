@@ -1,0 +1,260 @@
+---
+title: 真实浏览器自动化（real-browser-automation）
+description: 在真实 Chromium/Chrome 里实际完成登录、点击、填写、提交、查询、审批等业务操作，并同时收集页面状态、接口响应、控制台错误和截图证据
+order: 41
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+"页面能打开"和"业务能走通"之间隔着一整条真实交互链：焦点、遮罩、异步、会话、权限、后端的实际响应。用 HTTP 请求或只读 DOM 检查去代替这条链，得到的结论看起来一样，用起来完全不一样。
+
+`real-browser-automation` 就在你实际看到的那个浏览器里干活：点真按钮、填真表单、等真接口，同时把四类证据一起收下来——页面状态、网络响应、控制台错误、截图。四类都齐、而且互相说得通，才叫走通了；只要有一类对不上，它会明确指出来而不是含糊报个通过。
+
+它不实现页面（那是 [ui-pc](/skills/skills-reference/high/ui-pc/) / [ui-app](/skills/skills-reference/high/ui-app/)），不写单元和集成测试（那是 [test-development](/skills/skills-reference/medium/test-development/)），也不设计测试方案。它同样不预设你的目录、框架、端口、认证方式和接口命名——有浏览器入口就能用。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "用真实浏览器测一下登录" | 要真实会话、真实表单提交和登录后断言 |
+| "帮我跑个端到端" | 完整业务路径验收，不是接口探测 |
+| "测下这个下单流程" | 多步动作 + 接口核对 + 状态变化 |
+| "页面回归" | 改完之后核对真实页面还能不能走通 |
+| "用 Playwright 点一遍" | 明确要求浏览器交互操作 |
+| "前端接口联调" | 页面动作与后端响应、SSE 内容一起核对 |
+| "把审批流走一遍看看" | 审批、编辑、上传、筛选等真实入口操作 |
+
+<Aside type="caution">
+你说"测一下登录 / 下单 / 提交 / 审批"时，它默认真的去走一遍，不会停在打开 URL 或读一眼 DOM。要它只看不动，说清"只读检查""不要操作"。
+</Aside>
+
+## 什么时候不要用
+
+- **要写单元或集成测试** → [test-development](/skills/skills-reference/medium/test-development/)。
+- **要实现或修改页面** → [ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)。
+- **要决定测哪些层、设计场景** → [test-strategy](/skills/skills-reference/medium/test-strategy/)。
+- **只需要接口层证据** → [api-development](/skills/skills-reference/high/api-development/) 或对应后端 Skill。启动真实浏览器换不回额外信息时，那是多余成本。
+- **只想静态看一眼页面结构** → 不用它。
+- **要定产品做什么** → [product-manager](/skills/skills-reference/critical/product-manager/)。
+
+## 前置条件
+
+**得有明确的操作目标。** 哪个角色、进哪个页面、做什么动作、什么算成功。缺这几样，测试会退化成随机点击，跑完也说不清证明了什么。
+
+**页面得真的能访问。** 找不到稳定入口时它会先报缺口，**不会凭经验去猜 URL 或选择器**——猜出来的路径跑通了也是巧合，跑不通更浪费时间。
+
+**纯后端功能它会明说不适用。** 确实没有浏览器入口的功能，它记"不适用"并附上真实调用方的证据，不会拿一个静态页面或一份 mock 冒充验收。
+
+## 连接方式
+
+优先复用你已经开着的那个 Chrome——包括里面已有的登录态：
+
+```bash
+# 先做只读探测，确认 CDP 可达、当前有哪些页面
+node scripts/inspect-cdp.mjs --endpoint http://127.0.0.1:9222 \
+     --screenshot .codex-artifacts/cdp.png
+
+# 只看当前项目的页面
+node scripts/inspect-cdp.mjs --endpoint http://127.0.0.1:9222 \
+     --url-prefix http://localhost:5173
+```
+
+脚本输出脱敏 JSON：能不能连上、有哪些页面、标题是什么。截图失败它仍然会给页面信息，并在 `screenshotError` 里写清原因。
+
+没有可连接的浏览器时，它会告诉你需要启动一个带 `--remote-debugging-port` 的 Chrome，而不是自己换一条路。
+
+<Aside type="danger">
+探测成功只代表连上了，不代表业务测过了。真正的业务测试必须在连接之后用浏览器交互操作完成——点击、填写、提交。连不上浏览器时改用纯 `fetch` 跑一遍然后报"测试通过"，是这个 Skill 存在的意义所要排除的那件事。
+</Aside>
+
+## 使用示例
+
+### 场景 1：登录
+
+**你的输入**：
+
+```text
+用真实浏览器测一下登录，账号 qa01 / Test@1234。
+```
+
+**你会拿到的产出**：
+
+```text
+## 执行步骤
+1  已有会话检查        当前页 /login，无有效会话 → 走完整登录
+2  填写                 用户名 qa01（by label「用户名」）、密码（by label「密码」）
+3  提交                 点击「登录」，等待 POST /api/v1/auth/login
+4  断言                 URL → /dashboard；顶栏出现「qa01」；侧边菜单 7 项
+
+## 网络证据（脱敏）
+POST /api/v1/auth/login   200   code=0    142ms
+GET  /api/v1/user/menus   200   code=0     38ms
+
+## 页面状态
+URL      http://localhost:5173/dashboard
+标题     控制台 - Acme
+可见文本  「今日订单 128」「待处理 6」
+
+## 控制台
+console.warn ×1  「[vue-router] No match for /favicon.ico」→ 与本次流程无关
+pageerror        无
+requestfailed    无
+
+## 截图
+.codex-artifacts/login-01-before.png
+.codex-artifacts/login-02-submitted.png
+.codex-artifacts/login-03-dashboard.png
+
+## 结论
+通过。四类证据一致；你原有的浏览器会话未被关闭或登出。
+```
+
+### 场景 2：一条多步业务路径 + 接口核对
+
+**你的输入**：
+
+```text
+测下单流程：搜商品、加购、下单、看订单详情。顺便确认那个 SSE 的进度推送是对的。
+```
+
+**你会拿到的产出**：
+
+```text
+## 步骤与断言
+1  搜索「机械键盘」      GET /api/v1/products?keyword=… 200，结果 12 行
+2  加入购物车            POST /api/v1/cart 200，购物车角标 0 → 1
+3  提交订单              POST /api/v1/orders 200，返回 orderNo=A2026…
+4  SSE 进度              GET /api/v1/orders/A2026…/stream
+                         收到 3 个事件：created → paid → confirmed
+                         终止条件用的是 confirmed 事件，不是 networkidle
+5  订单详情              状态显示「已确认」，金额 ¥459.00 与提交值一致
+
+## 发现一个不一致
+步骤 4 的第 2 个事件里 amount 字段是 45900（分），
+详情页直接渲染成「¥45900.00」，只有列表页做了单位换算。
+位置：src/web/pages/order/detail.vue:64
+截图：.codex-artifacts/order-05-detail-amount.png
+
+## 清理
+本次创建的订单 A2026… 已取消并删除；购物车已清空。
+
+## 结论
+不通过。业务链路能走完，但详情页金额单位错误，属于应用缺陷。
+```
+
+### 场景 3：高风险动作停在确认前
+
+```text
+你：把这批数据删掉，测一下批量删除。
+
+它：已执行到最终确认前，未执行删除。
+
+    影响范围：勾选 34 条，弹窗提示「删除后不可恢复」
+    当前环境：http://localhost:5173（本地）
+    截图：.codex-artifacts/bulk-delete-confirm.png
+
+    这 34 条里有 6 条是 2024 年的历史数据，不像是本次测试造的。
+    确认要删的话，告诉我"确认删除这 34 条"，我再点。
+```
+
+删除、发布、上线、付款、发送外部通知、提交不可回退的审批——这几类它都会停在最后一步并把影响范围摊给你看。
+
+<Aside type="danger">
+真实浏览器连接带着你本人的权限。执行前它会核对当前域名和页面；未经你明确授权，不动生产数据、不提交不可逆动作，也不会把凭据发到没确认过的域名上。
+</Aside>
+
+### 场景 4：需要你本人介入
+
+```text
+它：卡在验证码这一步了。
+
+    当前位置：/login，已填好用户名和密码，图形验证码需要人工识别。
+    我保持这个浏览器会话不动，你在页面上把验证码填了、点登录，
+    然后说一声"继续"，我从登录后的第一个断言接着往下走。
+```
+
+验证码、SSO 跳转、二次确认、人工审批都走这条路：暂停在当前步骤、说清需要你做什么、复用同一个会话继续，而不是重开一个干净浏览器让你重新登一遍。
+
+### 场景 5：失败报告长什么样
+
+失败不会被一句"测试未通过"糊过去。它会分清是谁的问题：
+
+```text
+## 失败：步骤 3「提交订单」
+
+请求      POST /api/v1/orders  500
+响应摘要   {"code":50001,"message":"库存服务不可用"}（脱敏）
+控制台     pageerror ×1  Uncaught (in promise) TypeError:
+                        Cannot read properties of undefined (reading 'orderNo')
+页面状态   停在提交页，按钮转圈不停，无错误提示
+选择器     button[data-testid="submit-order"]（定位正常）
+截图      .codex-artifacts/order-03-fail.png
+
+## 归类
+环境故障 + 应用缺陷，两件事：
+- 库存服务 500 → 环境问题，不是本次改动引入
+- 后端报错时前端没有兜底，按钮永久转圈且用户看不到原因 → 应用缺陷
+
+## 复现条件
+库存服务返回 5xx 时必现。可用请求拦截模拟。
+```
+
+## 按需读的参考
+
+- `references/playwright-cdp.md` — 连接与操作模式
+- `references/evidence-and-diagnostics.md` — 网络、SSE、控制台和截图证据
+- `references/auth-and-recovery.md` — 登录、验证码、遮罩与失败恢复
+
+## 与其他 Skill 的关系
+
+**上游**：[ui-pc](/skills/skills-reference/high/ui-pc/)、[ui-app](/skills/skills-reference/high/ui-app/)、[test-strategy](/skills/skills-reference/medium/test-strategy/)
+
+**下游**：[code-review](/skills/skills-reference/high/code-review/)、[update-status](/skills/skills-reference/medium/update-status/)
+
+**协作**：[test-development](/skills/skills-reference/medium/test-development/)、[api-development](/skills/skills-reference/high/api-development/)
+
+```text
+ui-pc / ui-app → real-browser-automation → code-review → update-status
+      ↑                    ↑
+ test-strategy      test-development（需要脚本化测试资产时）
+```
+
+## 常见坑
+
+**用 HTTP 请求代替用户动作。** 直接 POST 一个下单接口，绕过了表单校验、按钮禁用状态、异步等待和错误提示——这四处恰好是前端最容易出问题的地方。同理，直接改 DOM 或写 localStorage 也不算用户操作过。
+
+**把"按钮已点击"当成成功。** 异步流里点击只是开始。要等的是业务完成事件或最终状态；SSE 和长轮询更不能只等网络空闲，那个信号跟业务完成没关系。
+
+**用重试掩盖失败。** 定位失败先重新读页面状态和可见控件，再调选择器；对着同一个提交按钮连点五次，只会造出五条脏数据。
+
+**选择器写死 CSS 下标。** `div:nth-child(3) > span` 这类选择器在下一次样式调整时就会失效。可访问名称、标签文字、角色和 `data-testid` 稳定得多。
+
+**测完不清理。** 造出来的订单、用户、上传文件如果留在环境里，下一次测试的断言就开始受它们影响，而且很难看出是被上一轮污染的。
+
+**顺手把用户的会话登出了。** 复用你的浏览器意味着也复用你的登录态。除非你要求，它不会关掉你的页面或退出你的账号。
+
+<Aside type="tip">
+Cookie、Authorization 头、验证码、密码、Token、完整的 localStorage 和个人数据都不会出现在日志、截图说明或最终回复里。留下的网络证据只有方法、路径、状态码、耗时、字段名和必要的业务标识。
+</Aside>
+
+## 最佳实践
+
+- **把角色和数据一起给它。** "用 qa01 测审批"比"测一下审批"少绕好几圈。
+- **先开着你要测的那个浏览器。** 复用现有会话能省掉整个登录流程，也更接近真实情况。
+- **高风险动作提前说清授权范围。** 明确到"这 34 条可以删"，它才会点最终确认；说"随便测"它一定停在确认前。
+- **要求它给证据路径。** 截图和网络摘要的价值在于事后能复核；只有结论没有路径的报告，等于要你重跑一遍。
+
+<Aside type="note">
+怎么算真的完成了：四类证据齐备并且互相说得通；本次造的数据、页面和 trace 已清理；你原有的浏览器会话没被动过；任何停在确认前的高风险动作都明确写着"未执行"，而不是含糊地混进通过里。
+</Aside>
+
+## 下一步
+
+- [ui-pc](/skills/skills-reference/high/ui-pc/) - 页面本身要改
+- [test-development](/skills/skills-reference/medium/test-development/) - 需要可复跑的脚本化测试资产
+- [test-strategy](/skills/skills-reference/medium/test-strategy/) - 先想清测哪些层
+- [code-review](/skills/skills-reference/high/code-review/) - 拿到证据之后的那一次审查
+- [update-status](/skills/skills-reference/medium/update-status/) - 用证据更新任务状态
+

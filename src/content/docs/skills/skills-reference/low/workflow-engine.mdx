@@ -1,0 +1,239 @@
+---
+title: 工作流引擎（workflow-engine）
+description: 在不预设引擎的前提下实现或排查流程定义、实例、任务办理、状态迁移与业务联动，守住版本、权限、幂等和一致性边界
+order: 15
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+一句"加个三级审批"底下压着一堆没人先讲清的事：单子跑到一半有人改了流程图会怎样，驳回是回上一步还是直接作废，网络抖动重发一次会不会走两遍，业务表写成功而流程没起来该从哪儿修。`workflow-engine` 就是把这些讲清楚并落地的能力。
+
+它有一条很硬的原则：**不替你选引擎，也不假设你在用哪个引擎**。项目跑的是 WarmFlow、Flowable、Camunda，是一张自己维护的迁移表，还是几个 `if` 拼出来的审批链，都得先从仓库里读出来。据此产出的接口、表和排障路径才对得上你的代码。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "加一个三级审批" | 多节点流程定义与流转落地 |
+| "待办列表和已办列表" | 任务查询范围与办理人可见性 |
+| "驳回之后回到哪一步" | 驳回、退回的语义确认与实现 |
+| "申请人要能撤回" | 撤回、终止这类命令的前置状态 |
+| "转办给别人 / 加个签" | 转办、委派、加减签 |
+| "流程改了，在跑的单子怎么办" | 定义版本与运行实例的兼容策略 |
+| "审批通过了但业务状态没变" | 流程事件与业务数据的一致性排障 |
+| "点了两次，走了两遍" | 幂等与并发办理冲突 |
+
+<Aside type="caution">
+需求里出现"状态"两个字，不代表要上流程引擎。一个订单只有 `待付款 / 已付款 / 已发货` 三个值、靠接口顺序推进，普通 CRUD 就够；引擎会把版本、办理人、审计、迁移一整套成本一起带进来。
+</Aside>
+
+## 什么时候不要用
+
+- **单表状态字段的增删改查** → [crud-development](/skills/skills-reference/high/crud-development/)
+- **定时、延迟、重试任务** → [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/)。定时触发不是流转。
+- **通知怎么发** → [sms-mail](/skills/skills-reference/low/sms-mail/)。这里只决定"哪个节点事件要发通知"。
+- **谁能看到哪些单子** → [data-permission](/skills/skills-reference/high/data-permission/)。办理权限和数据可见范围是两层。
+- **流程图页面与图形渲染** → [ui-pc](/skills/skills-reference/high/ui-pc/) 或 [mermaid](/skills/skills-reference/low/mermaid/)
+- **Git 分支流程** → [git-workflow](/skills/skills-reference/high/git-workflow/)。同名不同事。
+
+## 前置条件
+
+开这个 Skill 之前，手上最好已经有三样东西。
+
+需求确实是多节点流转，而不是一个 `status` 字段。判断方法很直接：如果不存在"由谁在什么条件下推进到下一步"这个问题，就不需要引擎。
+
+引擎已经定了。项目里已有引擎时，能指出它的依赖坐标、流程表和服务入口；还没有时，先让 [tech-decision](/skills/skills-reference/high/tech-decision/) 出结论并写清回退路径。跳过这一步，最常见的结果是产出一套调用不存在的 API 的代码。
+
+业务状态和流程状态的关系已经想清楚：谁是权威、由哪个事件更新、不一致时以哪边为准。这条不定，后面必然出现"流程显示已通过、业务还是待审"这种谁都不敢动的数据。
+
+<Aside type="danger">
+流程数据的破坏面比普通业务表大得多。历史任务和审批意见一旦被删掉，"这单当时谁批的、写了什么"就永久没有答案，审计上不可接受。所以生产库的流程数据不会被直接删除来"修状态"。
+</Aside>
+
+## 使用示例
+
+### 示例 1：请假单三级审批
+
+你说：`给请假单加三级审批，部门主管 → HR → 分管副总，任何一级驳回都回到申请人`
+
+拿到的第一件东西是把业务单和流程实例绑起来的表，唯一键直接兜住重复发起：
+
+```sql
+CREATE TABLE wf_instance_ref (
+  id             BIGINT       NOT NULL COMMENT '主键',
+  process_code   VARCHAR(64)  NOT NULL COMMENT '稳定流程编码，如 LEAVE_APPLY',
+  definition_ver INT          NOT NULL COMMENT '该实例锁定的定义版本',
+  business_key   VARCHAR(64)  NOT NULL COMMENT '业务单号',
+  instance_id    VARCHAR(64)  NOT NULL COMMENT '引擎侧实例 id',
+  tenant_id      BIGINT       NOT NULL COMMENT '租户',
+  state          VARCHAR(32)  NOT NULL COMMENT 'RUNNING/APPROVED/REJECTED/CANCELED',
+  create_time    DATETIME(3)  NOT NULL COMMENT '创建时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_biz (tenant_id, process_code, business_key),
+  KEY idx_instance (instance_id)
+) COMMENT '流程实例与业务单据绑定';
+```
+
+第二件是把幂等键写进契约的发起入口，而不是留给调用方自觉：
+
+```java
+public record StartCommand(
+        @NotBlank String processCode,   // 稳定编码，不是引擎内部 definitionId
+        @NotBlank String businessKey,   // 业务单号
+        @NotBlank String requestId,     // 幂等键，客户端生成
+        Map<String, Object> variables
+) {}
+
+@PostMapping("/leave-flows")
+public R<StartResult> start(@RequestBody @Valid StartCommand cmd) {
+    return R.ok(leaveFlowAppService.start(cmd));
+}
+```
+
+第三件是重复提交时的确定行为——同一个 `requestId` 第二次进来不再产生第二条实例：
+
+```json
+{
+  "code": 200,
+  "data": { "instanceId": "PI-20260904-0031", "state": "RUNNING", "duplicated": true }
+}
+```
+
+### 示例 2：待办与已办
+
+你说：`待办列表要能按流程类型筛，已办列表要显示我当时写的意见`
+
+产出会把"办理范围"和"数据范围"分成两个条件，而不是揉进同一个 SQL：
+
+```java
+public interface TaskQueryService {
+    PageResult<TodoItemVO> pageTodo(TodoQuery query, Principal current);
+    PageResult<DoneItemVO> pageDone(DoneQuery query, Principal current);
+}
+```
+
+已办查询通常以自己维护的审批记录表为主表，避免受制于引擎历史表的分页与索引能力：
+
+```sql
+SELECT r.instance_id, r.node_code, r.action, r.opinion, r.finished_at,
+       i.process_code, i.business_key
+FROM   wf_approval_record r
+JOIN   wf_instance_ref    i ON i.instance_id = r.instance_id
+WHERE  r.tenant_id = ? AND r.operator_id = ?
+  AND (? IS NULL OR i.process_code = ?)
+ORDER BY r.finished_at DESC
+LIMIT ?, ?;
+```
+
+### 示例 3："审批通过了，业务状态没变"
+
+你说：`这单流程显示已结束，但订单还是待审核`
+
+这类问题拿到的是一张逐环给出实际观测值的定位表，只认第一个不一致点：
+
+```text
+① 请求参数     ok    taskId=T-882  processCode=LEAVE_APPLY
+② 办理人权限   ok    当前身份命中候选组 dept:运营
+③ 任务与版本   ok    实例锁定 v3；定义已发布 v4，两者互不影响
+④ 引擎事务     ok    task complete 已提交
+⑤ 业务状态     FAIL  leave_apply.state 仍为 PENDING  ← 第一个不一致点
+⑥ 事件投递     --    无出箱记录
+
+结论：监听器与引擎共用同一事务，异常被吞后事件根本没落库
+```
+
+修复方向是把"改业务状态"从监听器里搬出来，走一张可重投、可去重的事件表：
+
+```sql
+CREATE TABLE wf_outbox (
+  id           BIGINT      NOT NULL COMMENT '主键',
+  event_id     VARCHAR(64) NOT NULL COMMENT '幂等键，消费方按此去重',
+  instance_id  VARCHAR(64) NOT NULL COMMENT '流程实例',
+  business_key VARCHAR(64) NOT NULL COMMENT '业务单号',
+  from_state   VARCHAR(32) NULL     COMMENT '迁移前状态',
+  to_state     VARCHAR(32) NOT NULL COMMENT '迁移后状态',
+  status       TINYINT     NOT NULL COMMENT '0 待投递 1 已投递 2 失败',
+  retry_count  INT         NOT NULL DEFAULT 0 COMMENT '重试次数',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_event (event_id),
+  KEY idx_pending (status, id)
+) COMMENT '流程事件出箱';
+```
+
+### 示例 4：流程改版，老单子还在跑
+
+你说：`流程新加了一个法务节点，已经在审的单子不能受影响`
+
+产出是一份写明取舍和顺序的版本策略，而不是一句"改一下流程图"：
+
+```text
+新实例      使用 v4
+在跑实例    继续锁定 v3，不做迁移
+待办兼容    v3/v4 的节点编码都要能翻译成中文节点名，否则老单子待办显示空白
+上线顺序    发布 v4 定义 → 发应用 → 灰度一轮 → 才停用 v3
+回退        v4 停用后新单回落 v3；已按 v4 跑起来的实例不回退，单独处理
+```
+
+### 示例 5：并发办理
+
+你说：`两个人同时点了通过，日志里出现了两条通过记录`
+
+产出是带期望版本的命令契约和一条确定的冲突返回：
+
+```java
+public record CompleteCommand(
+        @NotBlank String taskId,
+        @NotBlank String requestId,     // 幂等键
+        @NotNull  Integer expectedVer,   // 乐观并发，来自查询结果
+        String opinion
+) {}
+```
+
+```json
+{ "code": 409, "message": "该任务已被其他人办理，请刷新后重试", "traceId": "b7f2c1a9" }
+```
+
+## 与其他 Skill 的关系
+
+**先做**：[tech-decision](/skills/skills-reference/high/tech-decision/) 定引擎与回退方案，[database-design](/skills/skills-reference/high/database-design/) 定流程表与业务表的关系。
+
+**后做**：[code-review](/skills/skills-reference/high/code-review/) 对本次流程改动做一次完整 Review，[check](/skills/skills-reference/medium/check/) 按仓库后端规范核对实现。
+
+**配合**：[api-development](/skills/skills-reference/high/api-development/)（流程操作的接口契约）、[data-permission](/skills/skills-reference/high/data-permission/)（办理范围之外的行级可见性）、[sms-mail](/skills/skills-reference/low/sms-mail/)（节点事件对接通知通道）。
+
+```text
+tech-decision → database-design
+                     ↓
+              workflow-engine
+          ↙          ↓          ↘
+api-development  data-permission  sms-mail
+                     ↓
+              code-review → check
+```
+
+## 常见坑
+
+**按名字猜命令语义。** 同一个动词在不同引擎里可能指完全不同的事：有的回到上一节点，有的直接终止实例。得查你正在用的那个版本的文档。
+
+**用时间窗当幂等。** "5 秒内同一用户同一接口只放一次"挡得住误双击，挡不住十分钟后的重试和回调重放。幂等键要绑定业务主体和请求语义。
+
+**在监听器里直接改业务表。** 引擎事务和业务事务的边界一含糊，最后拿到的就是示例 3 那种没法自动修复的数据。
+
+**把 `synchronized` 当集群协调。** 单 JVM 的互斥在多实例部署里不保证任何事。
+
+**流程变量当仓库用。** 完整 Token、密钥、几百 KB 的对象塞进流程变量，之后既没法审计也没法迁移。
+
+**只测通过路径。** 真正出问题的是驳回、无权限、并发办理、事件重放和节点重启，每一项都要单独跑一遍。
+
+<Aside type="note">
+没有可运行的数据库、集群或真实通知通道时，只能说静态契约成立。"迁移已验证""跨实例送达正常"这类结论需要有实际执行记录，否则会被明确写进未验证边界。
+</Aside>
+
+## 下一步
+
+- [tech-decision](/skills/skills-reference/high/tech-decision/) - 先把引擎和回退方案定下来
+- [database-design](/skills/skills-reference/high/database-design/) - 流程表与业务表的结构设计
+- [data-permission](/skills/skills-reference/high/data-permission/) - 办理范围之外的行级可见性
+- [scheduled-jobs](/skills/skills-reference/medium/scheduled-jobs/) - 超时催办、定时归档这类触发
+- [sms-mail](/skills/skills-reference/low/sms-mail/) - 节点事件对接短信与邮件
+- [code-review](/skills/skills-reference/high/code-review/) - 流程改动的一次完整 Review

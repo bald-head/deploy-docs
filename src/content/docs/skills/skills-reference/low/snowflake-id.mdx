@@ -1,0 +1,249 @@
+---
+title: 雪花 ID（snowflake-id）
+description: 在已选定雪花方案后实现和配置 Java 分布式 ID 生成器，覆盖位布局、节点分配、时钟回拨与验证边界
+order: 8
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+雪花 ID 的坑几乎都不在算法上。算法就是"时间戳 + 机器号 + 序列号"拼成一个 64 位整数，几十行代码的事。真正会出事的是部署：两个实例拿到同一个机器号，立刻开始生成重复 ID；基准时间或位宽在环境之间不一致，历史 ID 就再也解不回正确时间；`long` 传到浏览器，末几位无声无息地变成 `000`。
+
+`snowflake-id` 负责的正是这部分——生成器实现、配置注入、集成方式和验证。它给出的实现不依赖第三方 ID JAR，机器号缺失时直接让应用启动失败，而不是悄悄回退成 `0`。
+
+主键类型、索引和迁移归 [database-design](/skills/skills-reference/high/database-design/) 与 [database-ops](/skills/skills-reference/high/database-ops/)；要不要用雪花归 [tech-decision](/skills/skills-reference/high/tech-decision/)；`long` 出到前端的精度问题归 [json-serialization](/skills/skills-reference/low/json-serialization/)。
+
+## 什么时候用
+
+| 你会这样说 | 对应场景 |
+| --- | --- |
+| "加一个分布式 ID 生成器" | 已确定由 Java 应用层生成 ID，需要落地 |
+| "这个 IdWorker 怎么配" | 位宽、基准时间、机器号的配置与注入 |
+| "workerId 配在哪里" | 多实例部署的机器号分配与校验 |
+| "时钟回拨会不会生成重复" | 回拨保护的实际行为与上限 |
+| "一秒能生成多少个" | 位宽名义容量与真实吞吐的区别 |
+| "线上出现了重复主键" | 机器号冲突排查 |
+
+## 什么时候不要用
+
+- **还在比较 ID 方案（自增 / UUID / 号段 / 外部 ID 服务 / 雪花）** → [tech-decision](/skills/skills-reference/high/tech-decision/)
+- **要设计主键类型、索引或写迁移** → [database-design](/skills/skills-reference/high/database-design/)、[database-ops](/skills/skills-reference/high/database-ops/)
+- **前端拿到的 ID 末几位不对** → [json-serialization](/skills/skills-reference/low/json-serialization/)。它管对外表示，这里管生成。
+- **只是想找个现成工具类** → [utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)
+- **ID 生成之外的时钟同步、NTP 配置** → 属于运维侧
+
+## 前置条件
+
+三件事没定，写出来的代码大概率要返工。
+
+**语言和生成方是谁。** 由应用生成还是由数据库/中间件生成，这个决定改的是完全不同的地方。
+
+**数据库自增和外部 ID 服务已经被排除。** 如果这一步跳过了，等于把选型藏进了一次实现里；真要换回去，已经生成的历史 ID 得整体迁移。
+
+**机器号由谁分配、怎么注入。** 这条最容易被跳过，也最致命——不知道谁分配，就一定会出现两个实例共用同一个号。
+
+<Aside type="danger">
+同一套位布局下，每个运行实例的机器号组合必须唯一——冲突的后果不是"概率变高"，是直接生成重复 ID。服务 A 和服务 B 就算是两个仓库两套代码，只要共享一套布局，也不能用同一个号。把机器号写进 YML 然后所有服务复制同一份配置，属于典型的踩法。
+</Aside>
+
+## 位布局
+
+64 位怎么切分是一切配置的基础。以机器号 6 位、序列 6 位为例：
+
+```text
+ bit 63       62 ─────────────── 12      11 ─── 6      5 ─── 0
+┌──────┬───────────────────────────┬─────────────┬────────────┐
+│  0   │  时间差（相对 baseTime）    │  workerId   │  sequence  │
+└──────┴───────────────────────────┴─────────────┴────────────┘
+ 符号位            51 bit                 6 bit         6 bit
+   ↑ 恒为 0，保证 long 始终为正数
+```
+
+三段位宽此消彼长：机器号位数决定最多能跑多少个实例，序列位数决定单实例每毫秒能出多少个 ID，剩下的才是时间戳能覆盖的年限。改任何一段都会改变 ID 的解析方式，所以**全部实例和所有解析方必须用同一份布局**。
+
+## 使用示例
+
+### 示例 1：接入生成器
+
+你说：`给这个 Spring Boot 服务加上分布式 ID`
+
+配置键的形状是这样的，值全部由部署侧注入，仓库里不写死机器号：
+
+```yaml
+distributed-id:
+  base-time-millis: 1700000000000    # 全部实例必须一致，且不晚于当前时间
+  worker-id: ${ID_WORKER_ID}         # 必填，没有默认值
+  worker-id-bit-length: 6
+  sequence-bit-length: 6
+```
+
+启动时就把缺失拦住，而不是等到线上出现重复主键才发现：
+
+```java
+@Bean
+IdWorker idWorker(IdWorkerProperties props) {
+    if (props.getWorkerId() == null) {
+        throw new IllegalStateException("distributed-id.worker-id 未配置，拒绝启动");
+    }
+    return new IdWorker(props.toOptions());   // 全应用共享同一个实例
+}
+```
+
+```text
+启动日志（缺配置时）
+ERROR Application run failed
+  java.lang.IllegalStateException: distributed-id.worker-id 未配置，拒绝启动
+```
+
+### 示例 2：多实例的机器号从哪来
+
+你说：`这个服务要跑 4 个副本`
+
+产出是一个可审计的分配方式，而不是"复制配置时记得改一下"。Kubernetes 里 `StatefulSet` 的序号天然唯一且重启后不变，最省事：
+
+```yaml
+env:
+  - name: POD_NAME
+    valueFrom:
+      fieldRef: { fieldPath: metadata.name }
+command: ["sh", "-c"]
+args: ["export ID_WORKER_ID=${POD_NAME##*-}; exec java -jar /app/app.jar"]
+```
+
+用 Compose 手工分配也可以，但必须进版本控制，让"谁占了哪个号"是可查的：
+
+```yaml
+services:
+  order-svc-a:
+    environment: [ID_WORKER_ID=11]
+  order-svc-b:
+    environment: [ID_WORKER_ID=12]
+```
+
+多个服务共享同一套布局时，会拿到一张台账：
+
+```text
+机器号  服务            实例        分配日期
+11      order-service   副本 a      2026-08-12
+12      order-service   副本 b      2026-08-12
+21      pay-service     副本 a      2026-08-20
+22      pay-service     副本 b      2026-08-20
+30-39   预留给 report-service
+```
+
+### 示例 3：时钟回拨
+
+你说：`运维说这台机器做过时间校正，会不会生成重复 ID`
+
+产出是把两种模式的行为说清，并给出观测点：
+
+```text
+毫秒模式  回拨发生时用保留序列与逻辑时间继续保证唯一；
+          序列耗尽后按配置的上限做有界漂移，上限设为 0 则等真实的下一毫秒。
+秒级模式  固定等到真实的下一秒，不允许漂移。
+
+持续回拨、漂移超上限、时间差即将耗尽 → 阻塞等待或快速失败，并打告警。
+```
+
+```text
+日志（时间被回调 5 秒后）
+WARN  IdWorker clock moved backwards by 5013ms, using reserved sequence
+WARN  IdWorker drift count 1874/2000, approaching limit
+ERROR IdWorker drift exhausted, rejecting request
+```
+
+<Aside type="caution">
+并发测试里那个"8 万"是 8 个线程各生成 1 万个 ID 的**样本总量**，不是并发数，也不是吞吐承诺。生成方法在单个 JVM 内是串行的，把样本总量写成"支持 8 万并发"会误导容量规划。
+</Aside>
+
+### 示例 4：ID 出到前端
+
+你说：`前端说订单 ID 对不上`
+
+雪花 ID 是 19 位十进制数，超出了 JavaScript 的安全整数范围。产出是一条贯穿各层的精度契约：
+
+```text
+数据库列   BIGINT
+ORM 字段   Long
+JSON       string（面向 JavaScript 客户端）
+OpenAPI    type: string, format: int64
+日志       原样打印，不做截断
+缓存 key   字符串化后拼接
+消息体     与 JSON 表示一致
+```
+
+```json
+{ "orderId": "1734901234567890123" }
+```
+
+只在某一层转字符串、其他层还是数字，等于把问题推迟到导出文件或对账环节才爆——具体做法见 [json-serialization](/skills/skills-reference/low/json-serialization/)。
+
+### 示例 5：唯一性验证
+
+产出是一份可以贴进交付说明的验证记录，每一行都跑过：
+
+```text
+单线程 100 万次        无重复，最小值 > 0
+8 线程 × 1 万次        样本 8 万个，无重复（样本总量，非并发数）
+workerId 11 vs 12      同一时间源下交叉 20 万个，无碰撞
+系统时间回调 5s        继续无重复，日志出现回拨告警
+漂移上限设为 0         序列耗尽后等待真实下一毫秒，未提前发号
+重启进程               基准时间、位宽、机器号三项均未变化
+数据库往返             BIGINT 列与 ORM 映射无截断
+前端往返               JSON 为 string，19 位完整
+```
+
+故障演练也值得单独跑一次，它能证明分配机制真的有必要：
+
+```text
+演练：两个实例误配同一个机器号
+预期：出现重复 ID，唯一键报冲突
+实际：3 分钟内 7 次 Duplicate entry 'xxx' for key 'PRIMARY'
+结论：机器号必须来自可审计的分配机制，人工复制配置不可接受
+```
+
+## 与其他 Skill 的关系
+
+**先做**：[tech-decision](/skills/skills-reference/high/tech-decision/) 确认雪花方案胜出并写清回退路径，[database-design](/skills/skills-reference/high/database-design/) 确定主键类型。
+
+**后做**：[json-serialization](/skills/skills-reference/low/json-serialization/) 处理 `long` 对外的精度表示，[code-review](/skills/skills-reference/high/code-review/) 对生成器与配置做一次完整 Review。
+
+**配合**：[database-ops](/skills/skills-reference/high/database-ops/)（主键落库与迁移）、[error-handler](/skills/skills-reference/medium/error-handler/)（回拨与配置缺失的失败语义）、[utils-toolkit](/skills/skills-reference/medium/utils-toolkit/)（放进哪个共享工具包）。
+
+```text
+tech-decision（选定雪花，写清回退）
+  → database-design（主键类型与位宽影响）
+  → snowflake-id（配置 → 实现 → 集成 → 验证 → 容量口径）
+  → json-serialization（对外精度契约）
+  → code-review（一次完整 Review）
+```
+
+## 常见坑
+
+**机器号给了默认值。** 缺配置时静默回退成 `0`，两个实例就都是 `0`。这个 bug 会在流量上来之后才显形，而且第一现场是数据库唯一键冲突，很难联想到 ID 生成器。
+
+**每次调用 new 一个生成器。** 序列号在实例内递增，多个实例各自从头开始，同一毫秒内必然撞。全应用共享一个。
+
+**运行中改基准时间或位宽。** 改完之后新旧 ID 的解析规则不一致，历史数据的时间字段就再也解不回来了。
+
+**把 `synchronized` 当跨进程协调。** 它只在单个 JVM 内有效，多副本部署时什么都不保证。
+
+**用 ID 里的时间戳当业务时间。** 开启逻辑漂移后，解出来的时间可能领先物理时间。它只适合审计和排障，不能进权限判断、签名或对外的时间字段。
+
+**把压测数字当 SLA。** 本机短时突发能跑出很高的数字，目标环境的持续吞吐要在目标环境测。
+
+<Aside type="danger">
+已有仓库如果在用 UUID、数据库序列或另一套雪花布局，先记录冲突和兼容方案，不会静默替换历史 ID。改变位宽（比如启用数据中心位）会改变 ID 的解析方式，所有实例和所有解析方必须先统一配置再上线。
+</Aside>
+
+## 下一步
+
+- [tech-decision](/skills/skills-reference/high/tech-decision/) - ID 方案的选型与回退
+- [database-design](/skills/skills-reference/high/database-design/) - 主键类型与索引影响
+- [database-ops](/skills/skills-reference/high/database-ops/) - 主键落库与迁移
+- [json-serialization](/skills/skills-reference/low/json-serialization/) - 大整数对外的精度契约
+- [error-handler](/skills/skills-reference/medium/error-handler/) - 回拨与配置缺失的失败语义
+- [code-review](/skills/skills-reference/high/code-review/) - 生成器与配置的一次完整 Review
+
+
+
+

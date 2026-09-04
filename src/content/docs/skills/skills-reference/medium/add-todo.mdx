@@ -1,5 +1,5 @@
 ---
-title: add-todo
+title: 添加任务 - add-todo
 description: 追加 TODO 项 - 向当前开发者唯一 TODO 追加去重、可验收的功能
 order: 5
 ---
@@ -8,583 +8,268 @@ import { Aside } from '@astrojs/starlight/components'
 
 ## 概述
 
-`add-todo` 是 **Medium 优先级** Skill，负责向当前开发者已有的唯一 TODO 文件追加新功能。追加时进行去重检查、保持纵向完整性，并正确处理依赖关系。
+你名下已经有一份在跑的 TODO，现在想再往里塞一个功能。`add-todo` 只管这一段路：找到那份唯一的 TODO，确认新来的这条不是已有条目换了个名字，把它排到依赖允许它待的位置，写进去，然后告诉你接下来能开工的是哪一条。
 
-**核心职责**：
-- 向现有 TODO 追加去重功能
-- 保持纵向完整性（不按技术层拆分）
-- 计算依赖关系并正确排序
-- 检查并行写集冲突
-- 只追加已完成产品、方案、设计规划的功能
+它不写代码、不做 Review、不碰 Git，也不替你把某条从待办改成进行中。
+
+## 什么时候用
+
+| 你会这样说 | 场景 |
+| --- | --- |
+| "再加一个用户注册" | 单个新功能，前面的规划已经做完了 |
+| "把订单模块那三块加进去" | 一批相关功能，可能需要一层聚合 |
+| "补个任务" / "加个功能" | 口头追加，边界还得它帮你问清 |
+| "这个之前漏了" | 项目文档里承诺过、清单里却没有的功能 |
+| "先加着，等接口好了再做" | 有依赖的功能，需要排在正确位置 |
+
+## 什么时候不要用
+
+- **手上还没有 TODO** → [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)。追加的前提是有东西可追加；从零建一份、决定整份清单长什么样，是它的活。
+- **要改的是已有条目的范围、契约或验收** → [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/)。往末尾补一行和改动一条已经批准的功能不是一回事，后者要顺着受影响的接口、数据和页面一路更新。
+- **只是要改某条的完成状态** → [update-status](/skills/skills-reference/medium/update-status/)。
+- **这个"功能"其实还只是一句想法** → [product-manager](/skills/skills-reference/critical/product-manager/)，先说清给谁解决什么问题。
+- **一次要铺开整个项目或一整块新模块** → [project-manager](/skills/skills-reference/high/project-manager/)。一遍生成完整清单，比一条条追加省事得多。
+- **只想知道做到哪了** → [progress](/skills/skills-reference/medium/progress/)；**只想知道接下来做哪条** → [next](/skills/skills-reference/medium/next/)。
+
+## 前置条件
+
+**得先有一份属于你的 TODO。** 它按当前仓库的 Git 身份找你名下那一份，不翻别人的目录，也不会因为没找到就随手在仓库根上新建一个。找不到时它直接说找不到，让你先去建——这比默默造出第二份任务源要划算得多。
+
+**功能得已经想清楚了。** 追加动作本身不产出产品定义。它往里写的是"谁用、从哪进、做完之后用户能做到什么、怎么算验收"这几项；如果这几项还是空的，它会把你退回去先补。写一条自己都说不清验收的待办，等于提前给未来订了一次返工。
+
+**别指望标题能替你判断新旧。** 你说"加个邮箱登录"，而清单里已经有一条登录做的就是邮箱密码登录，它会告诉你这是同一件事，而不是安静地多写一行。
 
 <Aside type="note">
-本 Skill 只追加任务，不实现代码、不 Review、不操作 Git。
+它只追加和整理。想让某条真的被做出来，追加完之后走实现类 Skill；想让某条被勾掉，走 [update-status](/skills/skills-reference/medium/update-status/)。
 </Aside>
 
-## 触发条件
+## 使用示例
 
-### Triggers（触发词）
+### 场景 1：追加一个功能
 
-**中文**：
-- 加个功能
-- 追加任务
-- 添加TODO
-- 新增功能
-- 再加一个
-- 补充任务
-- 增加功能点
+**你的输入**：
 
-**English**：
-- add todo
-- add task
-- add feature
-- append task
-- new task
+```text
+再加一个用户注册。
+```
 
-### Gates（前置条件）
+**你会拿到的产出**：
 
-1. **已有批准需求或明确功能点**
-2. **需求已完成产品、方案、设计规划**
-3. **当前开发者已有唯一活动 TODO**
+```text
+## 查重
+现有 6 条，逐条比对入口与用户能做到的结果 → 没有覆盖，可以追加
 
-### Not For（不适用场景）
+## 写入
+docs/<developer-id>/tasks/todo/user-system.md    +1 条
 
-- 创建全新 TODO（使用 task-todo-workflow）
-- 产品定义和需求规划（使用 product-manager）
-- 架构设计（使用 architecture-design）
-- 代码实现（使用对应开发 Skill）
-- 更新现有任务状态（使用 update-status）
-
-## 使用场景
-
-### 场景 1：追加单个功能
-
-**当前 TODO**：
-```markdown
-# 用户管理系统 TODO
-
-Owner: alice-chen
-
-## Feature: USER-LOGIN 用户登录
-
-- [x] `USER-LOGIN` 用户登录；Owner: alice-chen
-  - 来源: PRD#用户登录
-  - 目标: 用户可以通过邮箱密码登录
-  - 验收: AC-001, AC-002
+- [ ] `USER-REG` 用户注册
+  - Owner: <developer-id>
+  - 来源: docs/prd.md#用户注册
+  - 入口: /register（公开路由）
+  - 谁用: 尚未注册的新访客
+  - 做完之后: 填邮箱能收到验证信，点开链接账号可用
+  - 验收: AC-001 表单校验 / AC-002 验证信送达 / AC-003 激活生效
   - 依赖: 无
-  - 交付面: api / backend / web
+  - 写集: src/api/auth/register/, src/pages/register.vue
+  - 交付面: data / api / backend / web
+
+## 接下来能开工的
+USER-REG（没有依赖，排序后就在队首）
 ```
 
-**用户输入**：
-```
-再加一个用户注册功能
-```
+「写集」那一行填的是仓库相对的目录前缀，用来判断两条功能能不能同时开工，不是让你把要改的文件名全列在这儿。
 
-**add-todo 行为**：
+### 场景 2：一次给一批相关功能
 
-1. **检查前置规划**：
-   ```markdown
-   是否已有产品定义？ → 否
-   → 先调用 product-manager 完成产品定义
-   → 再调用 architecture-design 确认架构
-   → 再调用 tech-decision 确认技术
-   → 然后追加到 TODO
-   ```
+**你的输入**：
 
-2. **去重检查**：
-   ```markdown
-   检查已有 Feature:
-   - USER-LOGIN: 用户登录 ✓
-   - USER-REG: 用户注册 ✗（不存在，可追加）
-   ```
-
-3. **追加 Feature**：
-   ```markdown
-   ## Feature: USER-REG 用户注册
-
-   - [ ] `USER-REG` 用户注册；Owner: alice-chen
-     - 来源: PRD#用户注册
-     - 来源锚点: `docs/prd.md#用户注册`；用户结果：用户可以通过邮箱注册；技术结论：Spring Boot + Vue 3
-     - 菜单/入口: /register (公开路由)
-     - 用户/调用方: 新用户
-     - 目标: 用户可以通过邮箱注册账号
-     - 验收: 
-       - AC-001: 用户可以填写注册表单
-       - AC-002: 系统发送验证邮件
-       - AC-003: 用户点击链接激活账号
-     - 依赖: 无
-     - 并行写集: `src/api/auth/register/`, `src/pages/register.vue`
-     - 交付面: data / api / backend / web
-     - 验证: Evidence-only
-     - 规划: Standard + Build
-   ```
-
-### 场景 2：追加 Epic 聚合多个子功能
-
-**用户输入**：
-```
-增加订单管理模块，包含订单查询、订单导出、订单统计三个功能
+```text
+加订单管理：查询、导出、统计。
 ```
 
-**add-todo 行为**：
+它会先替自己回答一个问题——这三块能不能各自独立验收、各自独立提交？能，就给它们一个聚合标题挂在一起，方便你和别人看清这是一整块；不能，就合成一条，别为了好看多摆一层缩进。
 
-1. **检查是否需要 Epic**：
-   ```markdown
-   是否可拆成多个独立可验收的纵向 Feature？
-   - 订单查询: 独立功能 ✓
-   - 订单导出: 独立功能 ✓
-   - 订单统计: 独立功能 ✓
-   
-   结论: 需要 Epic
-   ```
+**你会拿到的产出**：
 
-2. **追加 Epic + 子 Feature**：
-   ```markdown
-   ## Epic: ORDER-MANAGE 【订单管理】
+```text
+## 判断
+查询 / 导出 / 统计 各有独立入口、独立验收，能分开提交 → 值得聚合
 
-   Owner: alice-chen
-   目标: 订单查询、导出和统计全部可用
-   菜单/入口: order.*
+## 写入
+- [ ] 【订单管理】ORDER-MANAGE    入口: order.*
+  - [ ] `ORDER-QUERY`  订单查询   依赖: 无            写集: src/api/order/query/,  src/pages/order/list.vue
+  - [ ] `ORDER-EXPORT` 订单导出   依赖: ORDER-QUERY   写集: src/api/order/export/, src/pages/order/export.vue
+  - [ ] `ORDER-STATS`  订单统计   依赖: ORDER-QUERY   写集: src/api/order/stats/,  src/pages/order/stats.vue
 
-   ### 子功能 1: 订单查询
-
-   - [ ] `ORDER-QUERY` 【订单查询】；Owner: alice-chen
-     - 来源: PRD#订单查询
-     - 来源锚点: `docs/prd.md#订单查询`
-     - 菜单/入口: order.list
-     - 用户/调用方: 运营人员
-     - 目标: 按条件查询订单
-     - 验收: AC-001, AC-002
-     - 依赖: 无
-     - 并行写集: `src/api/order/query/`, `src/pages/order/list.vue`
-     - 交付面: api / backend / web
-     - 验证: Evidence-only
-     - 规划: Standard + Build
-
-   ### 子功能 2: 订单导出
-
-   - [ ] `ORDER-EXPORT` 【订单导出】；Owner: alice-chen
-     - 来源: PRD#订单导出
-     - 来源锚点: `docs/prd.md#订单导出`
-     - 菜单/入口: order.export
-     - 用户/调用方: 运营人员
-     - 目标: 导出订单为 Excel
-     - 验收: AC-001, AC-002
-     - 依赖: `ORDER-QUERY`
-     - 并行写集: `src/api/order/export/`, `src/pages/order/export.vue`
-     - 交付面: api / backend / web / integration
-     - 验证: Evidence-only
-     - 规划: Standard + Build
-
-   ### 子功能 3: 订单统计
-
-   - [ ] `ORDER-STATS` 【订单统计】；Owner: alice-chen
-     - 来源: PRD#订单统计
-     - 来源锚点: `docs/prd.md#订单统计`
-     - 菜单/入口: order.stats
-     - 用户/调用方: 管理员
-     - 目标: 查看订单统计报表
-     - 验收: AC-001, AC-002
-     - 依赖: `ORDER-QUERY`
-     - 并行写集: `src/api/order/stats/`, `src/pages/order/stats.vue`
-     - 交付面: api / backend / web
-     - 验证: Evidence-only
-     - 规划: Standard + Build
-   ```
-
-### 场景 3：去重检查避免重复功能
-
-**当前 TODO**：
-```markdown
-- [x] `USER-LOGIN` 用户登录；Owner: alice-chen
-  - 目标: 用户可以通过邮箱密码登录
+## 说明
+聚合那一行是个壳，自己不记执行状态、也不需要单独的完成证据，三条子项全勾之后它自然算完。
+导出和统计都要复用查询那套筛选条件，所以依赖指向查询，而不是三条平铺。
 ```
 
-**用户输入**：
-```
-再加一个邮箱登录功能
-```
+### 场景 3：撞上已有功能
 
-**add-todo 行为**：
+**你的输入**：
 
-```markdown
-## 去重检查
-
-已有 Feature: USER-LOGIN
-- 菜单/入口: /login
-- 用户结果: 用户可以通过邮箱密码登录
-- 验收: AC-001: 邮箱登录成功
-
-新需求: 邮箱登录功能
-- 菜单/入口: /login
-- 用户结果: 用户可以通过邮箱登录
-
-## 去重结论
-
-USER-LOGIN 已覆盖邮箱登录功能，无需追加。
-
-是否需要扩展 USER-LOGIN？
-- 如果是增加第三方登录（微信、QQ），则追加新 Feature
-- 如果只是邮箱登录，已有功能已覆盖
+```text
+再加一个邮箱登录。
 ```
 
-<Aside type="caution">
-去重时比较 featureId、菜单/入口、用户结果、验收和范围，避免语义重复。
-</Aside>
+**你会拿到的产出**：
 
-### 场景 4：依赖计算与排序
-
-**当前 TODO**：
-```markdown
-- [ ] `USER-INFO-API` 用户信息 API；Owner: alice-chen
-  - 依赖: 无
-```
-
-**用户输入**：
-```
-增加用户信息页面
-```
-
-**add-todo 行为**：
-
-```markdown
-## 依赖分析
-
-新 Feature: USER-INFO-PAGE (用户信息页面)
-- 依赖: USER-INFO-API (必须先有 API)
-
-## 追加位置
-
-正确顺序:
-1. USER-INFO-API (无依赖)
-2. USER-INFO-PAGE (依赖 USER-INFO-API) ← 追加到此
-
-追加后的 TODO:
-
-- [ ] `USER-INFO-API` 用户信息 API；Owner: alice-chen
-  - 依赖: 无
-
-- [ ] `USER-INFO-PAGE` 用户信息页面；Owner: alice-chen
-  - 依赖: `USER-INFO-API`
-  - 并行写集: `src/pages/user/info.vue`
-```
-
-### 场景 5：并行写集冲突检查
-
-**当前 TODO**：
-```markdown
-- [~] `ORDER-QUERY` 订单查询；Owner: alice-chen
-  - 并行写集: `src/api/order/`, `src/pages/order/list.vue`
-```
-
-**用户输入**：
-```
-增加订单详情页面
-```
-
-**add-todo 行为**：
-
-```markdown
-## 并行写集冲突检查
-
-当前进行中: ORDER-QUERY
-- 并行写集: `src/api/order/`, `src/pages/order/list.vue`
-
-新 Feature: ORDER-DETAIL
-- 并行写集: `src/api/order/`, `src/pages/order/detail.vue`
-
-## 冲突检测
-
-共享路径: `src/api/order/`
-- ORDER-QUERY 正在写入 `src/api/order/query.ts`
-- ORDER-DETAIL 需要写入 `src/api/order/detail.ts`
+```text
+## 撞车
+你要的            邮箱登录     入口 /login    用户能做到: 用邮箱登进来
+已有 USER-LOGIN   用户登录     入口 /login    用户能做到: 用邮箱 + 密码登进来
+                                             AC-001 写的就是「邮箱登录成功」
 
 ## 结论
+同一件事，不追加。
 
-存在并行写集冲突（共享 `src/api/order/` 目录）
-
-建议:
-1. 等待 ORDER-QUERY 完成后再领取 ORDER-DETAIL
-2. 或调整 ORDER-DETAIL 的并行写集为 `src/api/order-detail/`
+## 你可能真正想要的
+- 要加微信 / QQ 这类第三方入口 → 新入口新验收，说一声就给你开一条
+- 要让邮箱登录多支持验证码     → 那是改 USER-LOGIN 的验收范围，走 change-impact-analysis
 ```
 
-<Aside type="caution">
-唯一 TODO 可以有多个 `[~]`，但必须是不同执行实例独占的不同 Feature，且并行写集两两互斥。
-</Aside>
+查重看的不是标题像不像，而是入口、用户拿到的结果、验收这三样是否指向同一件事。标题不同但这三样重合，它一样会挡下来——清单里躺着两条实质相同的功能，代价是真的会有人把它做两遍。
 
-## 工作原理
+### 场景 4：新功能要等别的东西先做完
 
-### 追加流程（8 步）
+**你的输入**：
 
-1. **定位唯一 TODO**: 按 `<developer-id>` 定位 `docs/<developer-id>/tasks/todo/` 中的一份活动 TODO
-
-2. **去重检查**: 比较 featureId、菜单/入口、用户结果、验收和范围
-
-3. **前置规划检查**: 新功能必须已完成产品、方案、设计、架构和技术规划
-
-4. **追加 Feature**: 按"功能点 + 菜单/入口"追加可执行 Feature checkbox
-
-5. **Epic 判断**: 大型目标拆成多个独立纵向 Feature 时才增加 Epic
-
-6. **纵向完整性**: 数据、API、后端、Web/App/Desktop、权限、联调、Review 和 Git 属于同一 Feature
-
-7. **Owner 检查**: 新项 `Owner` 必须等于当前 `<developer-id>`
-
-8. **状态机更新**: 追加完成后由状态机重新计算 Ready
-
-### 去重规则
-
-比较维度：
-- ✅ featureId
-- ✅ 菜单/入口
-- ✅ 用户结果
-- ✅ 验收条件
-- ✅ 范围边界
-
-**示例**：
-
-```markdown
-<!-- 已有 Feature -->
-USER-LOGIN:
-  - 菜单/入口: /login
-  - 用户结果: 用户可以通过邮箱密码登录
-  - 验收: AC-001: 邮箱登录成功
-
-<!-- 新需求 1: 重复 -->
-邮箱登录功能
-  → 与 USER-LOGIN 重复，不追加
-
-<!-- 新需求 2: 不重复 -->
-微信登录功能
-  → 新入口，不重复，追加为 USER-LOGIN-WECHAT
-```
-
-### 依赖计算
-
-**依赖类型**：
-- 技术依赖: 页面依赖 API，API 依赖数据库表
-- 业务依赖: 订单导出依赖订单查询
-- 数据依赖: 用户信息依赖用户账号
-
-**计算规则**：
 ```text
-if Feature B 需要 Feature A 的产出:
-  B.依赖 = A.featureId
-
-if Feature B 依赖 Epic A:
-  B 必须等待 Epic A 的全部子 Feature 完成
+增加用户信息页面。
 ```
 
-### 并行写集冲突检查
+**你会拿到的产出**：
 
-**写集格式**：
-- 目录前缀: `src/api/order/`
-- 独占资源: `resource:db-migration-sequence`
+```text
+## 排序
+USER-INFO-PAGE 要拿用户信息接口的数据，而 USER-INFO-API 还没做完
+→ 依赖: USER-INFO-API，落在它后面
 
-**冲突判断**：
-```javascript
-function hasConflict(writeSetA, writeSetB) {
-  for (const pathA of writeSetA) {
-    for (const pathB of writeSetB) {
-      // 路径前缀重叠
-      if (pathA.startsWith(pathB) || pathB.startsWith(pathA)) {
-        return true;
-      }
-      // 独占资源相同
-      if (pathA === pathB && pathA.startsWith('resource:')) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
+## 写入后的顺序
+- [ ] `USER-INFO-API`   用户信息接口    依赖: 无
+- [ ] `USER-INFO-PAGE`  用户信息页面    依赖: USER-INFO-API
+                                        写集: src/pages/user/info.vue
+
+## 接下来能开工的
+USER-INFO-API。页面这条依赖没清，暂时不进可开工队列。
 ```
 
-### Epic vs Feature 判断
+依赖填的是具体那条的 ID。写成"依赖后端接口"这种话没法参与排序，最后你会看到页面排在接口前面，而且没人觉得奇怪。
 
-**需要 Epic 的场景**：
-- ✅ 可拆成 2+ 个独立可验收的纵向 Feature
-- ✅ 各子 Feature 有独立用户结果
-- ✅ 各子 Feature 有稳定 AC
-- ✅ 各子 Feature 有互斥写集
-- ✅ 各子 Feature 可独立 commit&push
+### 场景 5：两条功能想写同一个目录
 
-**不需要 Epic 的场景**：
-- ❌ 只有 1 个 Feature
-- ❌ 按技术层拆分（数据库、API、前端）
-- ❌ 无法独立验收
+**你的输入**（此时 `ORDER-QUERY` 正在进行中，写集含 `src/api/order/`）：
 
-<Aside type="note">
-数据、API、后端、Web/App/Desktop、权限、联调、Review 和 Git 是同一 Feature 的内部完成面，不拆成独立 checkbox。
+```text
+增加订单详情页面。
+```
+
+**你会拿到的产出**：
+
+```text
+## 写集比对
+进行中 ORDER-QUERY    src/api/order/            src/pages/order/list.vue
+要追加 ORDER-DETAIL   src/api/order/  ← 重叠     src/pages/order/detail.vue
+
+## 结论
+目录前缀重叠，两条不能同时开工。
+
+## 两条路
+1) 排队：ORDER-DETAIL 依赖 ORDER-QUERY，等它完成再领
+2) 分家：把 ORDER-DETAIL 的写集收窄到 src/api/order-detail/，两条就互不干扰
+```
+
+同时挂着多条进行中是允许的，前提是它们各归各的执行实例，而且要动的目录互不重叠。重叠还硬并行，结果通常不是冲突报错，而是一方的改动被另一方悄悄覆盖掉。
+
+### 场景 6：什么都不用加
+
+```text
+你：把登录页的按钮文案改一下，要加个任务吗？
+
+它：不用。这不是一条新功能，它落在 USER-LOGIN 已有的验收范围里。
+    想让它别被忘掉，就在 USER-LOGIN 下面补一句说明，不另开条目。
+```
+
+## 一条追加进去的功能长什么样
+
+<Aside type="tip">
+一条就是一条，从数据到页面点得通算同一条。建表、接口、后端逻辑、页面、权限、联调、Review、提交，全是这一条内部要走完的事，不会被切成一排小勾放在清单里。
 </Aside>
+
+所以你不会在清单里看到这种形状：
+
+```text
+✗ 按技术层切开——每条都无法单独验收，进度看着在动，用户什么也用不上
+- [ ] USER-REG-DB     建表
+- [ ] USER-REG-API    接口
+- [ ] USER-REG-PAGE   页面
+
+✓ 一条纵向的功能——交付面写在条目里，验收针对用户能做到的事
+- [ ] `USER-REG` 用户注册
+    交付面: data / api / backend / web
+```
 
 ## 与其他 Skill 的关系
 
-### Conflicts（职责边界）
+**上游**：[product-manager](/skills/skills-reference/critical/product-manager/)（这个功能要解决什么问题）、[architecture-design](/skills/skills-reference/high/architecture-design/) 与 [tech-decision](/skills/skills-reference/high/tech-decision/)（怎么做、用什么做）
 
-| Skill | 边界说明 |
-|-------|---------|
-| `task-todo-workflow` | `task-todo-workflow` 负责创建和维护 TODO 完整生命周期；`add-todo` 只负责向现有 TODO 追加去重功能 |
-| `project-manager` | `project-manager` 负责完整规划并生成 TODO；`add-todo` 负责向现有 TODO 追加单个功能 |
-| `change-impact-analysis` | `change-impact-analysis` 负责需求变更影响分析；`add-todo` 负责追加全新独立功能 |
+**下游**：[update-status](/skills/skills-reference/medium/update-status/)（做完之后回来勾）
 
-### Related Skills
+**协作**：[task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/)（整份清单的形状与生命周期归它管）、[project-navigator](/skills/skills-reference/medium/project-navigator/)（写集要填得准，先看清现有目录）
 
-**前置依赖** (before):
-- `product-manager` - 需求定义完成后才能追加
-- `architecture-design` - 技术方案确定后才能追加
+```text
+product-manager      ┐
+architecture-design  ├→ add-todo  查重 → 排依赖 → 写进唯一 TODO → 报下一条
+tech-decision        ┘      ↑                                        │
+                     task-todo-workflow                              ▼
+                     （整份清单的形状）                     实现类 Skill → update-status
+```
 
-**后续推荐** (after):
-- `update-status` - 追加后更新执行状态
+## 常见坑
 
-**协作 Skill** (complement):
-- `task-todo-workflow` - 配合维护 TODO 完整性
-- `project-navigator` - 发现现有项目结构
+**把"加个功能"理解成"加个前端页面"。** 页面能点开不等于功能可用。只报前端那一半，后面补数据和接口时才发现验收根本过不了。
+
+**依赖写成一句话。** "依赖后端接口"参与不了排序。要么给具体 ID，要么就别指望顺序是对的。
+
+**写集留空。** 留空等于宣称这条谁都不冲突，于是它真的会和别人同时开工，然后你们在同一个目录里互相覆盖。
+
+**给单个功能套一层聚合。** 只有一条子项的聚合层不提供任何额外信息，只多一级缩进和一次误读机会。
+
+**需求还没定就先占位。** 先写一行"待补"进去，之后大概率不是有人回来补，而是被当成已确认范围直接开工。
+
+**在别人的目录里追加。** 任务归属跟着当前 Git 身份走。属于另一位开发者的功能应该转交给他，由他在自己那份清单里受理，写进你这份只会让两边都统计不准。
+
+**找不到 TODO 就换个地方写。** 仓库级 `docs/` 根、别人的目录都不是兜底位置。写错地方的后果不是报错，而是从此有两份互相不知道对方存在的任务源。
 
 ## 最佳实践
 
-### 1. 追加前必须完成规划
+**一次只说一件事。** "加订单管理"和"加订单导出的 Excel 模板配置"是两种粒度：前者会被拆开，后者会被并进已有条目。你想要哪种，说清楚就少一轮来回。
 
-```markdown
-<!-- 错误: 直接追加 -->
-用户: 增加用户导出功能
-→ 直接追加到 TODO
+**把入口说出来。** 菜单路径或路由是查重最有效的输入，也是之后判断前端是否真的能点到的唯一线索。
 
-<!-- 正确: 先规划 -->
-用户: 增加用户导出功能
-→ product-manager: 产品定义
-→ architecture-design: 架构设计
-→ tech-decision: 技术选型
-→ add-todo: 追加到 TODO
-```
+**验收写成能勾的句子。** "体验流畅"没法验收；"提交后 2 秒内出结果，失败有明确提示"可以。
 
-### 2. 去重时比较用户结果
+**想并行就先看写集。** 目录前缀不重叠才谈得上同时做；重叠就老实排队，或者把边界调开。
 
-```markdown
-<!-- 错误: 只比较名称 -->
-已有: USER-LOGIN
-新增: 用户登录页面
-结论: 名称不同，追加
-
-<!-- 正确: 比较用户结果 -->
-已有: USER-LOGIN
-  - 用户结果: 用户可以通过邮箱密码登录
-  - 交付面: api / backend / web
-
-新增: 用户登录页面
-  - 用户结果: 用户可以通过邮箱密码登录
-  - 交付面: web
-
-结论: USER-LOGIN 已覆盖（包含 web 交付面），不追加
-```
-
-### 3. Epic 只在必要时使用
-
-```markdown
-<!-- 错误: 单个功能用 Epic -->
-Epic: USER-REG
-  - Feature: USER-REG （唯一子功能）
-
-<!-- 正确: 单个功能不用 Epic -->
-Feature: USER-REG
-
----
-
-<!-- 错误: 按技术层拆 Epic -->
-Epic: USER-REG
-  - Feature: USER-REG-DB (数据库)
-  - Feature: USER-REG-API (后端)
-  - Feature: USER-REG-PAGE (前端)
-
-<!-- 正确: 纵向完整 Feature -->
-Feature: USER-REG
-  - 交付面: data / api / backend / web
-```
-
-### 4. 依赖必须精确
-
-```markdown
-<!-- 错误: 模糊依赖 -->
-依赖: 后端 API
-
-<!-- 正确: 精确 Feature ID -->
-依赖: `USER-INFO-API`
-```
-
-### 5. 并行写集必须明确
-
-```markdown
-<!-- 错误: 空写集 -->
-并行写集: (空)
-
-<!-- 正确: 明确目录前缀 -->
-并行写集: `src/api/user/`, `src/pages/user/info.vue`
-
-<!-- 正确: 独占资源 -->
-并行写集: `resource:db-migration-001`, `src/migrations/`
-```
+**追加完看一眼"接下来能开工的"。** 如果队首不是你以为的那条，通常是依赖填错了，趁这时候改最便宜。
 
 ## 故障排查
 
-### 问题 1: 找不到唯一 TODO
-
-**症状**: 提示"当前开发者无活动 TODO"
-
-**原因**: TODO 路径不符合规则
-
-**解决方案**:
-```bash
-# 检查路径
-ls docs/alice-chen/tasks/todo/*.md
-
-# 应该只有一个文件
-docs/alice-chen/tasks/todo/user-system.md
-```
-
-### 问题 2: 追加重复功能
-
-**症状**: TODO 中有语义重复的 Feature
-
-**原因**: 未进行去重检查
-
-**解决方案**:
-- 比较菜单/入口
-- 比较用户结果
-- 比较验收条件
-- 合并重复功能
-
-### 问题 3: 依赖顺序错误
-
-**症状**: 页面先于 API 完成
-
-**原因**: 未正确计算依赖
-
-**解决方案**:
-```markdown
-<!-- 错误顺序 -->
-- [ ] USER-INFO-PAGE
-- [ ] USER-INFO-API
-
-<!-- 正确顺序 -->
-- [ ] USER-INFO-API
-- [ ] USER-INFO-PAGE
-  - 依赖: `USER-INFO-API`
-```
-
-### 问题 4: 并行写集冲突
-
-**症状**: 两个 Feature 同时修改同一文件
-
-**原因**: 未检查并行写集冲突
-
-**解决方案**:
-- 调整并行写集范围
-- 或串行执行（增加依赖）
+| 症状 | 大概率原因 | 怎么办 |
+| --- | --- | --- |
+| 说你没有活动 TODO | 文件不在你名下的 todo 目录里，或者根本还没建 | 用 [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) 建一份；已有文件的话确认它在 `docs/<developer-id>/tasks/todo/` 下 |
+| 说发现多份，停住不动 | 同一个目录里躺着两个以上清单文件 | 先自己合并成一份，它不会替你猜哪份是当前在用的 |
+| 清单里出现两条实质相同的功能 | 追加时只对了标题，没对入口和验收 | 合并成一条，把两边的验收并进去 |
+| 页面排在接口前面 | 依赖写的是描述而不是 ID | 换成具体 featureId 再重排 |
+| 两个人改同一个文件 | 写集重叠却都在进行中 | 收窄其中一条的写集，或者补上依赖让它排队 |
 
 ## 下一步
 
-- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow) - TODO 工作流
-- [update-status](/skills/skills-reference/high/update-status) - 更新 TODO 状态
-- [project-manager](/skills/skills-reference/high/project-manager) - 生成功能 TODO
-- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis) - 变更影响分析
-- [product-manager](/skills/skills-reference/high/product-manager) - 产品定义
+- [task-todo-workflow](/skills/skills-reference/high/task-todo-workflow/) - 整份 TODO 的形状与生命周期
+- [update-status](/skills/skills-reference/medium/update-status/) - 做完之后怎么勾
+- [next](/skills/skills-reference/medium/next/) - 决定接下来做哪一条
+- [progress](/skills/skills-reference/medium/progress/) - 只读地看进度
+- [project-manager](/skills/skills-reference/high/project-manager/) - 一次铺开整个项目的清单
+- [change-impact-analysis](/skills/skills-reference/critical/change-impact-analysis/) - 已批准范围真的变了
