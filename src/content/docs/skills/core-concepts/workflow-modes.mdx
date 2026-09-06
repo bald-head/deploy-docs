@@ -1,7 +1,8 @@
 ---
 title: 工作流与档位
 description: 理解流程状态机、开发档位和自主模式
-order: 15
+sidebar:
+  order: 5
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -21,7 +22,7 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 
 ### 完整流程
 
-新功能开发会自动经过以下阶段：
+新功能的阶段顺序如下。Hook 检查阶段和状态，Agent 按已获授权推进；它不会代替需求判断、验证或 Git 操作。已批准的 TODO、明确 Bug 和不改变行为的维护不重复新功能规划。
 
 ```
 需求录入 → 需求分析 → 需求确认 ⚠️
@@ -50,7 +51,7 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 
 **目标**：采集用户需求
 
-**Skill**：task-todo-workflow
+**Skill**：product-manager
 
 **产物**：初始需求描述
 
@@ -70,7 +71,7 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 
 **目标**：用户或 PM 确认需求
 
-**人工检查点**：是
+**检查点**：用户确认或复用本轮已有的明确授权，不重复要求确认已批准需求。
 
 **产物**：批准的需求
 
@@ -90,7 +91,7 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 
 **目标**：架构师或 Tech Lead 确认方案
 
-**人工检查点**：是（High-risk 档位必需）
+**检查点**：技术取舍和风险边界由用户或已授权 Owner 确认；已有具名结论可直接复用。
 
 **产物**：批准的技术方案
 
@@ -120,14 +121,14 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 
 **目标**：实现业务逻辑
 
-**Skill**：universal-development, crud-development, api-development, ui-pc 等
+**Skill**：dev 统一纵向交付，crud-development、api-development、ui-pc 等专业 Skill 参与适用部分；universal-development 仅在没有专业 Skill 覆盖时兜底。
 
 **产物**：功能实现代码
 
 **门槛**：进入此阶段后才允许修改生产代码
 
 <Aside type="tip">
-**写集保护**：只能修改 TODO 中声明的写集文件，越界会被 PreToolUse Hook 拦截。
+**写集保护**：只能修改 TODO 中声明的写集。状态机核验并行写集和完成改动，Agent 在收口时对账实际 diff；PreToolUse 的阶段门禁不等于逐文件写集锁。
 </Aside>
 
 #### 9. 代码审查
@@ -142,21 +143,18 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 
 **原则**：
 - 每个功能只做一次完整 Review
-- 发现问题自动修复后重新 Review
+- 发现问题后修复，并复核对应 finding
 - Review 通过后不再重复审查同一 diff
 
 #### 10. 测试生成
 
 **目标**：编写测试代码（按需）
 
-**Skill**：test-development, test-strategy
+**Skill**：test-development；只有明确要求设计测试方案时才使用 test-strategy。
 
 **产物**：单元测试、集成测试
 
-**门槛**：
-- 用户本轮明确要求，或
-- 高风险功能，或
-- 项目测试覆盖率要求
+**门槛**：用户本轮明确要求新增或修改测试源码。高风险、覆盖率、CI 门禁和 Review finding 不会自动授予测试源码编辑权限。
 
 <Aside type="note">
 **测试策略**：默认只做真实主路径验证，不自动编写测试代码。
@@ -166,17 +164,17 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 
 **目标**：执行测试验证
 
-**Skill**：test-development
+**Skill**：dev 统一运行适用验证；运行已有测试不触发 test-development。
 
 **产物**：测试报告
 
-**门槛**：测试代码已生成
+**门槛**：实现已收敛，优先复用现有检查或一次真实主路径；不要求先生成测试代码。
 
 #### 12. 用户验收
 
 **目标**：验证验收条件
 
-**Skill**：update-status
+**Skill**：有页面入口时使用 real-browser-automation；纯后端功能提供真实调用方证据。
 
 **产物**：验收确认
 
@@ -193,15 +191,16 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 **门槛**：
 - Review 通过
 - 验收确认
-- 写集内所有文件已修改
+- 写集内存在真实改动，并完成全部适用交付面
+- 首次 commit 前已由状态机准备 TODO 的 `[x]` hunk，与业务改动同次提交
 
 #### 14. 完成
 
 **目标**：标记任务完成
 
-**Skill**：update-status
+**Skill**：task-todo-workflow；完成状态由 TODO 状态机原子写回。
 
-**产物**：TODO 状态更新为 `[x]`
+**产物**：TODO 的 `[x]` 与业务改动已同次提交推送，远端核验通过
 
 **门槛**：Git 已推送
 
@@ -225,7 +224,7 @@ Skills Framework 使用**流程状态机**控制开发阶段，通过**档位**�
 **流程调整**：
 - ✅ 保留：需求分析、技术方案、代码实现、Review
 - ⚠️ 简化：PRD 可以是简单描述
-- ✅ 跳过：详细的风险分析
+- ✅ 保留：真实风险、权限、数据完整性和回滚边界；简化重复过程材料
 
 **在 TODO 中标注**：
 ```markdown
@@ -378,7 +377,7 @@ Standard 是默认档位，不标注时使用此档位。
 
 **特点**：
 - 完整实施
-- 自动推进流程
+- 在已授权范围内连续推进流程
 - 遇到阻塞才停止
 
 **适用场景**：
@@ -390,7 +389,7 @@ Standard 是默认档位，不标注时使用此档位。
 **流程**：
 ```
 需求录入 → ... → Git 交付 → 完成
-[全自动推进]
+[Agent 执行，Hook 校验状态与门禁]
 ```
 
 **在 TODO 中标注**：
@@ -399,7 +398,7 @@ Standard 是默认档位，不标注时使用此档位。
 ```
 
 <Aside type="tip">
-Build 是默认自主模式，不标注时使用此模式。
+Build 表示授权范围内可以连续实施，不表示自动获得测试源码、提交、发布或其他额外操作的授权。
 </Aside>
 
 ## 组合推荐
@@ -422,9 +421,9 @@ Build 是默认自主模式，不标注时使用此模式。
 [ ] Ready（可领取）
   ↓ 原子领取
 [~] In Progress（进行中）
-  ↓ 完成并验证
-[x] Done（已完成）
-  ↓ 自动检查依赖
+  ↓ 自验与 Review 通过，由状态机准备完成 hunk
+[x] Done（本地待交付）
+  ↓ 与业务改动同次 commit & push，远端核验通过
 [ ] Ready（后续任务变为可领取）
 ```
 
@@ -433,9 +432,10 @@ Build 是默认自主模式，不标注时使用此模式。
 任务可以被领取的条件：
 
 1. ✅ 状态为 `[ ]` Ready
-2. ✅ 所有依赖任务已完成 `[x]`
+2. ✅ 所有依赖任务的 `[x]` 已进入核验过的远端功能提交
 3. ✅ 写集与其他进行中任务不冲突
-4. ✅ 当前开发者没有其他进行中任务（单任务模式）
+4. ✅ 当前 runtime instance 没有其他 `[~]`；同一 TODO 可由不同实例并行领取不同 Feature
+5. ✅ 不共享迁移、配置、契约、端口或账号等资源
 
 ### 完成条件
 
@@ -445,7 +445,7 @@ Build 是默认自主模式，不标注时使用此模式。
 2. ✅ 所有交付面完成
 3. ✅ Review 通过
 4. ✅ Git 已提交推送
-5. ✅ 写集内所有文件已修改
+5. ✅ 写集内存在真实改动，TODO 完成 hunk 与其同次交付
 
 ## 常见场景
 
@@ -462,9 +462,9 @@ Build 是默认自主模式，不标注时使用此模式。
 用户登录失败，报错 401
 ```
 
-系统自动：
+根据授权范围，Agent 可按以下职责继续：
 ```
-bug-detective（定位） → universal-development（修复） 
+bug-detective（定位） → dev 或对应专业 Skill（修复）
 → code-review → git-commit
 ```
 
@@ -534,15 +534,9 @@ Status: [~] In Progress
 git log --oneline docs/<你的名字>/tasks/todo/<project>.md
 ```
 
-### 强制跳过阶段（不推荐）
+### 阶段与当前授权不一致
 
-```
-跳过需求确认，直接开始实施
-```
-
-<Aside type="caution">
-强制跳过会绕过防护门槛，可能导致返工，不推荐使用。
-</Aside>
+先核对 TODO 中的原始阶段、当前授权和已确认产物。缺失字段只补当前项；如果已批准结论齐全，应由状态机推进对应阶段。不要通过手工改 checkbox 或关闭 Hook 绕过状态检查。
 
 ## 最佳实践
 
@@ -574,4 +568,4 @@ git log --oneline docs/<你的名字>/tasks/todo/<project>.md
 
 - 🛠️ [功能开发流程](/skills/usage/feature-development/) - 实践完整流程
 - 🛠️ [需求变更](/skills/usage/requirement-change/) - 如何应对变化
-- 🛠️ [团队协作](/skills/usage/team-collaboration/) - 多人并行开发
+- 🛠️ [TODO 与并行协作](/skills/usage/todo-management/) - 多人并行开发

@@ -1,7 +1,8 @@
 ---
 title: API 开发 - api-development
 description: API 开发 - 设计实现 API 契约、校验、错误语义和文档
-order: 8
+sidebar:
+  order: 13
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -125,5 +126,4 @@ architecture-design / tech-decision / database-design（边界、选型、数据
 <Aside type="note">
 它不创建或更新 TODO、不改功能状态、不操作 Git，只把路由顺序、修改或只读结论、验证结果和未覆盖边界交回 feature owner。当前功能的用户结果、菜单入口、验收或交付边界无法从 TODO、源码和直接来源确定时，它返回 `scope-change-detected`，而不是自己把范围撑大。
 </Aside>
-
 

@@ -1,7 +1,8 @@
 ---
 title: Git 操作指南
 description: git-commit 与 git-workflow 的分工、提交信息硬门禁与破坏性操作边界
-order: 26
+sidebar:
+  order: 26
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -32,6 +33,16 @@ Git 操作分给两个 Skill：
 | force push、删远端 ref、改已推送历史 | `git-workflow`（且需一次性精确授权） |
 
 "合并完顺手提交一下"这类请求会拆成两段：先由 `git-workflow` 收敛合并结果和冲突，再交给 `git-commit` 复核并提交。
+
+## 变更日志
+
+每个真实变更包都要同步更新仓库现有的 `CHANGELOG.md` 或等价日志路径，并与改动放在同一提交中。记录实际用户影响、兼容注意和必要恢复信息，不写未发生的发布、伪造 commit OID 或只有日志的空提交。完整格式见[变更日志指南](/skills/usage/changelog/)。
+
+合并时先判断 Git 是否真的产生了 merge commit：
+
+- fast-forward 只继承来源提交已有日志，不重复抄写历史，也不制造日志提交；
+- 产生 merge commit 时，只补充本次合并新增的冲突解决、兼容处理或用户可见影响；
+- 并行分支共享日志时，由主 Agent 在最终收口前合并并去重。
 
 ## 提交流程
 
@@ -317,4 +328,3 @@ Hook 会拒绝，`--force-with-lease` 也一样。两条路：你在终端里手
 - 📦 [git-commit Skill 参考](/skills/skills-reference/high/git-commit/) - 提交与推送完整能力
 - 🌿 [git-workflow Skill 参考](/skills/skills-reference/high/git-workflow/) - 分支、历史与冲突完整能力
 - 🛠️ [故障排查](/skills/troubleshooting/) - 命令被拦、门禁卡住时怎么办
-

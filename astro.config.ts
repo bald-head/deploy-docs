@@ -37,6 +37,77 @@ export default defineConfig({
                     // },
                     // 这种方式是直接解析目录下的所有文件形成目录
                     {
+                        label: 'Skills Framework',
+                        link: '/skills/',
+                        id: 'skills-framework',
+                        icon: 'rocket',
+                        badge: {text: '97 Skill', variant: 'tip'},
+                        items: [
+                            {label: '文档导览', link: '/skills/'},
+                            {
+                                label: '开始使用',
+                                items: [
+                                    {label: '安装与配置', link: '/skills/getting-started/'},
+                                    {label: '快速上手', link: '/skills/quickstart/'},
+                                    {label: '第一个功能开发', link: '/skills/first-feature/'},
+                                ]
+                            },
+                            {
+                                label: '使用指南',
+                                items: [{autogenerate: {directory: 'skills/usage'}}]
+                            },
+                            {label: '最佳实践', link: '/skills/best-practices/'},
+                            {
+                                label: 'Skill 目录',
+                                collapsed: true,
+                                items: [{autogenerate: {directory: 'skills/catalog'}}]
+                            },
+                            {
+                                label: 'Skill 参考手册',
+                                collapsed: true,
+                                items: [
+                                    {label: '如何查阅', link: '/skills/skills-reference/'},
+                                    {
+                                        label: '核心流程 - Critical',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/critical'}}]
+                                    },
+                                    {
+                                        label: '高优先级 - High',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/high'}}]
+                                    },
+                                    {
+                                        label: '中优先级 - Medium',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/medium'}}]
+                                    },
+                                    {
+                                        label: '低优先级 - Low',
+                                        collapsed: true,
+                                        items: [{autogenerate: {directory: 'skills/skills-reference/low'}}]
+                                    },
+                                ]
+                            },
+                            {label: '故障排查', link: '/skills/troubleshooting/'},
+                            {
+                                label: '核心概念',
+                                collapsed: true,
+                                items: [{autogenerate: {directory: 'skills/core-concepts'}}]
+                            },
+                            {
+                                label: 'Runtime Hooks',
+                                collapsed: true,
+                                items: [{autogenerate: {directory: 'skills/hooks'}}]
+                            },
+                            {
+                                label: '维护与进阶',
+                                collapsed: true,
+                                items: [{autogenerate: {directory: 'skills/advanced'}}]
+                            },
+                        ]
+                    },
+                    {
                         label: 'Docker 部署',
                         link: '/docker/',
                         icon: 'seti:docker',
@@ -72,66 +143,6 @@ export default defineConfig({
                                 label: '日志',
                                 items: [{autogenerate: {directory: 'java/logging'}}]
                             },
-                        ]
-                    },
-                    {
-                        label: 'Skills Framework',
-                        link: '/skills/',
-                        icon: 'rocket',
-                        badge: {text: '95 Skill', variant: 'tip'},
-                        items: [
-                            {label: '快速开始', link: '/skills/getting-started'},
-                            {label: '快速体验', link: '/skills/quickstart'},
-                            {label: '第一个功能开发', link: '/skills/first-feature'},
-                            {
-                                label: '核心概念',
-                                items: [{autogenerate: {directory: 'skills/core-concepts'}}]
-                            },
-                            {
-                                label: '使用指南',
-                                items: [{autogenerate: {directory: 'skills/usage'}}]
-                            },
-                            {
-                                label: '高级主题',
-                                items: [{autogenerate: {directory: 'skills/advanced'}}]
-                            },
-                            {
-                                label: 'Runtime Hooks',
-                                items: [{autogenerate: {directory: 'skills/hooks'}}]
-                            },
-                            {
-                                label: 'Skill 目录',
-                                items: [{autogenerate: {directory: 'skills/catalog'}}]
-                            },
-                            {
-                                label: 'Skill 参考手册',
-                                collapsed: true,
-                                items: [
-                                    {label: '如何查阅', link: '/skills/skills-reference/'},
-                                    {
-                                        label: '核心流程 - Critical',
-                                        collapsed: true,
-                                        items: [{autogenerate: {directory: 'skills/skills-reference/critical'}}]
-                                    },
-                                    {
-                                        label: '高优先级 - High',
-                                        collapsed: true,
-                                        items: [{autogenerate: {directory: 'skills/skills-reference/high'}}]
-                                    },
-                                    {
-                                        label: '中优先级 - Medium',
-                                        collapsed: true,
-                                        items: [{autogenerate: {directory: 'skills/skills-reference/medium'}}]
-                                    },
-                                    {
-                                        label: '低优先级 - Low',
-                                        collapsed: true,
-                                        items: [{autogenerate: {directory: 'skills/skills-reference/low'}}]
-                                    },
-                                ]
-                            },
-                            {label: '最佳实践', link: '/skills/best-practices'},
-                            {label: '故障排查', link: '/skills/troubleshooting'},
                         ]
                     },
                 ])

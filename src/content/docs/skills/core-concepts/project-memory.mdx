@@ -1,7 +1,8 @@
 ---
 title: 项目记忆
 description: 深入理解项目记忆的结构、按需加载和自动维护机制
-order: 14
+sidebar:
+  order: 4
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -26,21 +27,23 @@ import { Aside } from '@astrojs/starlight/components'
 
 项目记忆文件按以下优先级查找：
 
-1. `docs/PROJECT-MEMORY.md`
-2. `docs/project-memory.md`
-3. `PROJECT-MEMORY.md`（项目根目录）
+1. `PROJECT-MEMORY.md`（项目根目录）
+2. `docs/PROJECT-MEMORY.md`
+3. `docs/project-memory.md`
 
 **自动创建**：
 
 ```bash
 # Runtime Hook 在首次请求时自动检查
 项目根目录: /path/to/project
-检查: docs/PROJECT-MEMORY.md
+检查: PROJECT-MEMORY.md、docs/PROJECT-MEMORY.md、docs/project-memory.md
   不存在 → 创建空模板
   存在但为空 → 提示调用 init-docs 采集事实
 ```
 
 ## 文件结构
+
+以下内容仅展示结构，不是当前项目的默认技术栈、权限模型或真实事实。填充时逐项核对目标仓库源码与运行配置。
 
 ```markdown
 # Project Memory

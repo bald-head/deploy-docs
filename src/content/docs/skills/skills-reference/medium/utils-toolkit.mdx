@@ -1,246 +1,51 @@
 ---
-title: 工具能力选择（utils-toolkit）
-description: 从目标仓库的标准库、依赖和已有公共模块里找到真正可用的能力并正确调用，避免重复封装出第二层同语义工具
-order: 46
+title: 已有工具与 API 复用 - utils-toolkit
+description: 从目标仓库、标准库和已有依赖查找并复用工具类或 API；不负责通用软件推荐或新工具类开发。
+sidebar:
+  order: 28
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+## 用途
 
-## 概述
-
-"仓库里应该有个工具类干这个吧"——这句猜测每年生产大量重复封装。猜对了没人知道，猜错了就多出一层同语义的工具，两层各有一半调用方，之后谁都不敢删。
-
-`utils-toolkit` 把这句猜测换成一条取证链：从你的约束、仓库规则、构建与锁文件、定义与配置，一路核到真实的生产调用，确认这个能力的精确 import、签名、空值、异常、上下文和兼容语义，然后在最小的调用面上用它。
-
-它守的是一个判断：**工具名不是证据**。同一个类名可能来自标准库、某个第三方依赖，或者你们自己业务模块里三年前写的那一个，语义可以完全不同。
-
-它负责"找到已有能力并正确用上"。新增公共工具、跨模块重构、业务实现交给对应开发 Skill；要新增依赖先过 [tech-decision](/skills/skills-reference/high/tech-decision/)。
-
-## 什么时候用
-
-| 你会这样说 | 场景 |
-| --- | --- |
-| "有没有现成的工具类" | 怀疑已经有了，需要取证确认 |
-| "这个用什么工具" | 在标准库、依赖和仓库模块之间挑最小的那个 |
-| "怎么调用" | 需要精确 import、签名、返回值、异常和空值语义 |
-| "有没有公共方法" / "复用一下" | 想避免再写一层同语义封装 |
-| "帮我找个辅助函数" | 转换、集合、字符串、时间、分页、I/O 之类的查找 |
-| "这个日期格式化，仓库里别人怎么写的" | 想跟同模块的真实做法保持一致 |
-
-## 什么时候不要用
-
-- **要实现业务逻辑** → [universal-development](/skills/skills-reference/low/universal-development/)。
-- **要先摸清项目结构、模块划分和参考实现** → [project-navigator](/skills/skills-reference/medium/project-navigator/)。先知道模块在哪，再找具体 API。
-- **要开发一个新的公共工具** → 它不做这件事。只有当好几个真实调用方共享同一份稳定语义，而且名称、类型、错误和兼容边界都清楚时，新增才成立，落地也由对应开发 Skill 完成。
-- **要新增依赖** → [tech-decision](/skills/skills-reference/high/tech-decision/) 先比复用、扩展和新增三条路。
-- **要设计错误语义和异常体系** → [error-handler](/skills/skills-reference/medium/error-handler/)。
-- **要做架构设计或定产品** → [architecture-design](/skills/skills-reference/high/architecture-design/)、[product-manager](/skills/skills-reference/critical/product-manager/)。
-
-## 前置条件
-
-**得有具体的调用场景。** "顺便看看仓库里有什么工具"这种问法没法核对签名合不合用，很容易挑到一个名字像、契约不像的 API。说清你要在哪里、用它做什么，取证才有靶子。
-
-**它的默认答案是"用已有的"。** 新增是需要额外理由的例外，不是并列选项。
-
-**它会先看项目记忆。** 目标仓库 `PROJECT-MEMORY.md` 里的复用地图和边界是第一候选来源——已经确认过的东西不再重新扫一遍全仓，这既省上下文也避免每次得出不一样的结论。
-
-它不建 TODO、不改状态、不动 Git。交给你的是路由顺序、采用的能力、改动或只读结论、验证结果，以及没覆盖到的边界。
+`utils-toolkit` 从目标仓库、标准库和已有依赖中查找可复用的工具类或 API，并核对真实调用方式。它不负责通用软件推荐，也不默认开发新的公共工具。
 
 ## 使用示例
 
-### 场景 1：先取证，再下结论
-
-**你的输入**：
-
 ```text
-要把 List<UserEntity> 转成 List<UserVO>，仓库里有现成的转换工具吗？
+订单模块需要把 Entity 转成返回 DTO。
+请先查项目记忆、当前依赖和相邻调用，找到已有转换入口，
+核对 import、方法签名、空值、敏感字段与嵌套对象映射行为。
 ```
 
-**你会拿到的产出**：
-
 ```text
-## 取证链
-PROJECT-MEMORY.md  Reuse map 记录：对象转换统一走 MapStruct
-pom.xml            org.mapstruct:mapstruct 1.5.5.Final（已有，非本次新增）
-定义                src/main/java/com/acme/convert/UserConvert.java
-                   @Mapper(componentModel = "spring")
-                   List<UserVO> toVOList(List<UserEntity> list);
-真实生产调用        OrderServiceImpl.java:118 已在用同一个 Convert
-                   （注入方式：构造器注入，非 static 工具类）
-
-## 采用
-com.acme.convert.UserConvert#toVOList
-
-## 关键契约
-入参为 null 时返回 null（不是空集合）—— 调用处需要空集合的话自己兜
-password / salt 字段在 UserVO 中不存在，MapStruct 生成的实现不会带过去
-不做深拷贝：嵌套的 AddressVO 与 Entity 共享引用
-
-## 改动
-UserServiceImpl.java  +2 -9（删掉了原来手写的 9 行 setter 循环）
-
-## 验证
-mvn -q -pl user-service compile  → 通过（MapStruct 注解处理器已生成实现）
-
-## 剩余风险
-未确认 AddressVO 的共享引用在并发场景下是否安全，当前调用链为只读，暂无影响
+这个日期格式化应该复用哪个现有 API？
+请结合当前调用位置核对时区、locale、格式和异常语义。
 ```
 
-### 场景 2："工具名不是证据"长什么样
+请求要包含具体调用场景。“有什么工具”“怎么调用”只有指向仓库中的实际代码能力时才适用；泛泛询问常用软件不因此选择本 Skill。
 
-**你的输入**：
+## 查找与采用
 
-```text
-用 StringUtils.isEmpty 判空就行了吧？
-```
+1. 从 `PROJECT-MEMORY.md` 的复用地图、当前模块和直接调用链找已有 Owner。
+2. 核对构建与锁文件，确认依赖和版本真实存在。
+3. 读取定义、导入、签名和生产调用方，不凭工具名称推断契约。
+4. 比较输入输出、空值、异常、上下文、精度、时间、线程安全与兼容语义。
+5. 在当前允许范围采用已确认能力，运行适用的最小检查并交回结果。
 
-**你会拿到的产出**：
+默认只搜当前调用链和相邻实现，出现实际 import、调用或相同契约指向公共 Owner 时再扩大范围，不为每个功能扫描全仓。
 
-```text
-## 这个仓库里有三个 StringUtils
+## 常见核对点
 
-org.apache.commons.lang3.StringUtils   isEmpty("  ") → false（空格不算空）
-org.springframework.util.StringUtils   isEmpty 已废弃，行为与上面不同
-com.acme.common.StringUtils            isEmpty("  ") → true（内部先 trim）
-
-## 当前文件的实际 import
-import com.acme.common.StringUtils;   ← 你手上这个是自家的那一个
-
-## 影响
-你想表达的是「去掉空格后为空」→ 当前 import 恰好满足
-但同模块 OrderValidator.java:52 import 的是 commons-lang3 的那一个，
-同样写 isEmpty，行为不一致。这类不一致在校验逻辑里会变成偶发漏校验。
-
-## 建议
-本次沿用 com.acme.common.StringUtils（与所在包的其余调用一致）
-OrderValidator 的不一致单独记为待确认项，不在本次改动范围内
-```
-
-### 场景 3：已有封装把你需要的语义藏起来了
-
-**你的输入**：
-
-```text
-调用第三方发短信，仓库里有个 HttpUtils.post，直接用？
-```
-
-**你会拿到的产出**：
-
-```text
-## 核对结果：不建议直接用
-
-com.acme.common.HttpUtils#post(String url, Object body)
-定义位置  src/main/java/com/acme/common/HttpUtils.java:34
-它做了什么：
-  - 固定 5 秒超时，不可配置
-  - 非 2xx 一律返回 null，不区分 4xx / 5xx
-  - 无重试，无幂等键
-
-## 你这次需要的语义
-短信网关的超时约定是 10 秒；4xx 不该重试、5xx 该重试；
-需要幂等键防止重复下发。这三样它都表达不了，
-返回 null 会让「发送失败」和「网关返回空响应」看起来一样。
-
-## 采用
-直接用仓库已有的 RestClient（依赖里已有，OrderService 在用），
-在短信模块内加一个最小适配层承载超时、重试和幂等键。
-
-## 未做
-没有改 HttpUtils —— 它还有 14 个调用方，改超时是高影响修改，
-需要单独评估。
-```
-
-### 场景 4：确实没有合适的能力
-
-```text
-你：有没有把「1天2小时前」这种相对时间格式化的工具？
-
-它：仓库里没有。取证到的是：
-    - 标准库有 Duration，但没有中文相对时间的格式化
-    - 依赖里没有 humanize 类库
-    - 全仓搜到 2 处手写实现（消息中心、审批列表），格式不一致：
-      前者「1天前」，后者「1 天 2 小时前」
-
-    我不会先造一个公共工具。给你两个选择：
-    a) 本次只在你这个页面用，写一个 12 行的私有方法（推荐，最小改动）
-    b) 确实要统一，那是三个调用方共享语义的重构，
-       建议单独立项，并先定清舍入规则（59 分钟算 0 天还是 1 小时）
-
-    你选 a 的话我现在就写；选 b 我把缺口和舍入问题整理给你。
-```
-
-## 挑选顺序
-
-大体是从"最不需要维护的"往"最需要维护的"走：语言标准库 → 仓库已经在用的依赖 → 同模块的生产能力 → 已有的适配层 → 经授权新增的最小实现。
-
-顺序会因为安全、兼容和仓库规则调整，但每次调整都得有事实依据，不能凭偏好。
-
-几个具体取舍：
-
-| 情况 | 做法 |
+| 候选能力 | 要核对什么 |
 | --- | --- |
-| 字段语义一致的整体转换 | 先整体转，再单独覆盖需要重命名、换单位、计算或过滤的少数字段 |
-| 集合、字符串、时间、分页、I/O 标准库就能清楚表达 | 不为省一行调用再包一层 |
-| 已有封装把状态码、超时、事务、租户或资源归属藏起来了，而你正需要这些 | 换能显式表达契约的更低层 API，或加一个最小适配层 |
-| 好几个真实调用方共享稳定语义，边界也都清楚 | 才考虑新增公共工具，由对应开发 Skill 落地 |
+| 同名 `StringUtils` | 完整 import 与版本，以及空串、空白和 null 语义 |
+| 对象转换器 | 实际生成或手写映射，字段忽略、嵌套对象与空值处理 |
+| HTTP 封装 | 超时、状态码、错误、重试、幂等和认证上下文 |
+| 时间与数字工具 | 时区、locale、单位、精度和边界输入 |
+| 公共缓存或资源工具 | 生命周期、隔离、并发、清理和失败恢复 |
 
-## 按需读的参考
+同名不等于同义，不能仅凭库名称声称深拷贝、线程安全或特定默认值。结论应引用真实定义与调用证据。
 
-四份都是判断框架，**不声明任何固定类名、包名、版本或默认技术栈**，只读当前相关的章节：
+没有合适能力时，说明候选缺口与原因；新增工具或业务实现交给对口专业 Skill / [`dev`](/skills/skills-reference/high/dev/)，新增依赖由 [`tech-decision`](/skills/skills-reference/high/tech-decision/) 比较。不要为了“复用”再包一层同语义工具。
 
-| 参考 | 覆盖 |
-| --- | --- |
-| `references/selection-and-source-verification.md` | 来源优先级、查找方法、新增封装的门槛 |
-| `references/conversion-collections-time.md` | 对象转换、集合、ID、金额、时间与分页边界 |
-| `references/query-cache-security.md` | 查询、缓存、权限、租户与数据库上下文 |
-| `references/integration-io-catalog.md` | JSON 序列化、HTTP、请求上下文、文件、表格与校验 |
-
-## 与其他 Skill 的关系
-
-**上游**：[project-navigator](/skills/skills-reference/medium/project-navigator/) —— 先知道模块和参考实现在哪，再找具体 API。
-
-**下游**：[universal-development](/skills/skills-reference/low/universal-development/)、[error-handler](/skills/skills-reference/medium/error-handler/)
-
-**协作**：[code-patterns](/skills/skills-reference/low/code-patterns/)、[tech-decision](/skills/skills-reference/high/tech-decision/)
-
-```text
-project-navigator → utils-toolkit → universal-development → code-review
-                         ↕                    ↓
-                   code-patterns        error-handler（错误语义）
-                         ↕
-                   tech-decision（要新增依赖时）
-```
-
-## 常见坑
-
-**按类名推断行为。** 三个 `StringUtils` 的空值判定可以完全不同，两个 `DateUtils` 的时区默认值可以相反。核对 import、定义和真实调用是三点对齐，少一点就是猜。
-
-**顺手替换全仓同类调用。** 你只需要在一处用上正确的 API，把全仓库同名调用一起改掉会把一个小改动变成一次没人能审的大 diff，而且大部分调用点你并不了解它们的上下文。
-
-**用通用容器装固定结构。** 转换结果、查询条件、缓存值、统计结果的字段能提前确定时，用 `Map<String, Object>` 或通用 JSON 代替业务类型，等于把编译期检查换成运行期惊喜。
-
-**靠工具名猜精度和单位。** 雪花 ID、金额、比例、距离、时间和区间端点必须按真实契约来。Long 型 ID 传到前端丢精度、金额分与元混用，这两类问题通常在上线后才被发现。
-
-**为了绕过一层校验就全局关掉它。** 忽略租户、数据权限或安全上下文时，作用域必须最小，而且要有结构化的清理——泄漏到后续请求或线程之后，表现是别人的数据偶尔出现在你的接口里。
-
-**改全局初始化。** 序列化器、HTTP 客户端、线程池、缓存、时钟的全局替换影响所有调用方，属于高影响修改，得把环境、并发、兼容、迁移和回滚一起核对。
-
-## 最佳实践
-
-- **把调用场景说具体。** "在导出任务里把 10 万行写成 Excel"和"格式化一个单元格"会得到完全不同的答案。
-- **让它把取证链给你。** "import + 定义 + 生产调用"三点齐全的结论可以直接信；只给一个类名的结论要自己再核一遍。
-- **看它标的"未确认"。** 停在未确认比补一个看起来合理的调用有用得多——后者你会当成事实用下去。
-- **需要新增公共工具时单独立项。** 它给你缺口和最小方案，落地走对应开发 Skill，不在一次查找里顺手完成。
-
-<Aside type="note">
-怎么算真的完成了：每个采用的 API 都有三点对齐的证据，而不是靠类名推断；固定业务结构用了具名类型；没有为一个局部表达式新增公共封装；也没有把改动扩散到无关的同类调用上。
-</Aside>
-
-## 下一步
-
-- [project-navigator](/skills/skills-reference/medium/project-navigator/) - 先摸清模块和参考实现
-- [universal-development](/skills/skills-reference/low/universal-development/) - 拿到能力之后写业务
-- [error-handler](/skills/skills-reference/medium/error-handler/) - 错误语义与异常体系
-- [tech-decision](/skills/skills-reference/high/tech-decision/) - 确实要新增依赖
-- [code-patterns](/skills/skills-reference/low/code-patterns/) - 提取仓库里的既有写法
-
+最终说明采用的准确 API、关键契约、改动或只读结论、验证与未覆盖边界，不创建 TODO 或另行维护状态。

@@ -1,573 +1,150 @@
 ---
 title: Hook 安装指南
-description: 安装、验证、更新与卸载 Runtime Hooks 的完整操作流程
-order: 41
+description: 安装、检查、更新与移除 Runtime Hooks
+sidebar:
+  order: 1
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-## 概述
+## 安装前
 
-Runtime Hooks 需要注册到 Claude Code 或 Codex 的配置文件里才会生效。安装器会合并现有配置、去重并先备份，重复运行不会堆积重复条目，也不会删掉你自己写的第三方 Hook。
+首次安装整套 Skills，请先看 [安装与配置](/skills/getting-started/)。本页只说明 Hook 配置落点和安装器，不替代原生 Skill 发现目录的注册与目录验证。
 
-## 路径约定
-
-这套 Skill 与 Hook 同时服务 Claude Code 和 Codex，也同时跑在 macOS、Linux 和 Windows 上，所以文档里**不出现任何真实机器的绝对路径**。下面三个占位符贯穿全部文档，你在自己机器上看到的输出会是它们展开后的绝对路径：
-
-| 占位符 | 含义 | 各系统的实际值 | 覆盖方式 |
-|---|---|---|---|
-| `<HOME>` | 当前用户主目录 | macOS 与 Linux 上是 `$HOME`，Windows 上是 `%USERPROFILE%` | 安装器 `--home <dir>` |
-| `<skills-root>` | Skills 仓库所在目录 | 默认 `<HOME>/.agent-workflow/skills`，克隆到哪里就是哪里 | 克隆位置自行决定 |
-| `<node>` | Node 可执行文件 | `which node` / `where node` 的结果 | 由 PATH 决定 |
-
-两个客户端的配置目录各自独立，都可以用环境变量改掉：
-
-| 客户端 | 默认配置目录 | 环境变量 |
-|---|---|---|
-| Claude Code | `<HOME>/.claude` | `CLAUDE_CONFIG_DIR` |
-| Codex | `<HOME>/.codex` | `CODEX_HOME` |
-
-<Aside type="note">
-安装器的 `--home <dir>` 与这两个环境变量互斥：传了 `--home` 就忽略 `CLAUDE_CONFIG_DIR` 和 `CODEX_HOME`，直接在 `<dir>/.claude` 和 `<dir>/.codex` 下落点。用它可以把安装结果隔离到临时目录里试跑。
-</Aside>
-
-## 前置条件
-
-### 系统要求
-
-- **Node.js**：>= 18.0.0
-- **操作系统**：macOS、Linux 或 Windows
-- **客户端**：Claude Code 或 Codex（已安装并完成登录）
-
-### 检查 Node 版本
+确认 Node.js 与目标客户端已可运行、客户端已完成登录。以下 `<skills-root>` 代表当前 Skills 仓库根目录，执行前替换为你机器上的实际路径。
 
 ```bash
 node --version
-# 应该输出 v18.x.x 或更高版本
-```
-
-如果版本过低，先升级：
-
-```bash
-# macOS (Homebrew)
-brew install node@18
-
-# Linux (nvm)
-nvm install 18
-nvm use 18
-```
-
-### 检查客户端
-
-```bash
 claude --version
 # 或
 codex --version
 ```
 
-<Aside type="caution">
-首次使用需要先运行一次 `claude` 或 `codex` 完成登录，再安装 Hook。
-</Aside>
+上面的命令只检查运行环境和客户端。Runtime Hooks 有自己的版本，唯一来源是 Skills 仓库的 `runtime-hooks/VERSION`，与 Claude Code、Codex 和共享 Skills 包版本分别维护。
 
-## 安装步骤
-
-### 1. 定位 Skills 仓库
+## 查看 Hooks 版本
 
 ```bash
-# 如果尚未克隆
-git clone <skills-repo-url> ~/.agent-workflow/skills
+# 当前源码中的 Hooks 版本
+node "<skills-root>/runtime-hooks/scripts/hook-version-manager.cjs" source
 
-cd ~/.agent-workflow/skills
+# 各客户端的 Hooks 源版本与已安装版本
+node "<skills-root>/runtime-hooks/scripts/hook-version-manager.cjs" status --client codex
+node "<skills-root>/runtime-hooks/scripts/hook-version-manager.cjs" status --client claude
 ```
 
-<Aside type="note">
-安装路径可以自定义，后续命令都以 Skills 仓库根目录为工作目录。
-</Aside>
+Runtime Hooks 的独立版本从 `1.0.0` 开始。旧安装的 `0.0.0` 表示过去缺少版本源时写入的占位值，显示为未知，重新运行安装器后会迁移到真实版本。`status` 只读版本记录；完整安装状态仍以安装器检查为准。
 
-### 2. 运行安装器
+## 安装并检查
+
+安装器将 Hook 合并到现有配置，去重托管条目并在改写前备份。它保留第三方 Hook，内容没有变化时不会重复写入。
 
 ```bash
-node runtime-hooks/scripts/install.mjs
+node "<skills-root>/runtime-hooks/scripts/install.mjs"
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check --json
 ```
 
-**预期输出**（首次安装，三个配置落点一次写入）：
+检查结果以 `installed: true` 且 `needsInstall: false` 为通过，表示托管配置和版本记录均一致。`sourceVersion` 是 Hooks 源版本，`versions` 列出各客户端的已安装 Hooks 版本；`changed` 列出待更新配置或版本记录，`installCommand` 保留本次客户端和隔离目录选择。单独运行 `--check` 不写文件。
 
-```
-运行时 Hook 安装完成：
-- Claude Code settings.json：已更新
-- Codex hooks.json：已更新
-- Codex config.toml notify：已更新
-- 已备份：<HOME>/.claude/settings.json.backup-20260904-103045
-- Claude Code：用户级 Hook 已写入；重新启动会话后生效。
-- Codex：仅 Bash 使用轻量命令防护；Stop/SubagentStop 运行 TODO 续作检查。
-```
+| 配置落点 | 内容 |
+|---|---|
+| `~/.claude/settings.json` | Claude Code Hook 事件 |
+| `~/.codex/hooks.json` | Codex Hook 事件 |
+| `~/.codex/config.toml` | Codex 用户级 `notify` 通道 |
+| 两个客户端配置目录下的 `.runtime-hook-version` | Hooks 版本、安装时间和源码路径 |
 
-安装器不区分"当前客户端"，两端配置一起对齐；已经是目标内容的文件显示 `无需变更`，不会重复备份。只想处理一端时：
+Claude Code 配置目录可由 `CLAUDE_CONFIG_DIR` 指定，Codex 配置目录可由 `CODEX_HOME` 指定。Node 解释器会写入绝对路径；切换 Node 版本后重新运行安装器以刷新路径。
+
+### 只处理一个客户端
 
 ```bash
-node runtime-hooks/scripts/install.mjs --claude-only
-node runtime-hooks/scripts/install.mjs --codex-only
-
-# 先看会改什么再决定
-node runtime-hooks/scripts/install.mjs --dry-run
-
-# 不生成备份
-node runtime-hooks/scripts/install.mjs --no-backup
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --claude-only
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --codex-only
 ```
 
-### 3. 验证安装
+### 先查看差异
 
 ```bash
-node runtime-hooks/scripts/install.mjs --check --json
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --dry-run --json
 ```
 
-**预期输出**（已安装且无需更新时）：
-
-```json
-{
-  "backups": [],
-  "changed": [],
-  "check": true,
-  "confirmationRequired": false,
-  "dryRun": true,
-  "files": [
-    { "changed": false, "label": "Claude Code settings.json", "path": "<HOME>/.claude/settings.json" },
-    { "changed": false, "label": "Codex hooks.json", "path": "<HOME>/.codex/hooks.json" },
-    { "changed": false, "label": "Codex config.toml notify", "path": "<HOME>/.codex/config.toml" }
-  ],
-  "installCommand": "'<node>' '<skills-root>/runtime-hooks/scripts/install.mjs'",
-  "installed": true,
-  "needsInstall": false,
-  "unchanged": [
-    "Claude Code settings.json",
-    "Codex hooks.json",
-    "Codex config.toml notify"
-  ]
-}
-```
-
-判定标准是 `installed: true` 且 `needsInstall: false`。需要安装时 `changed` 会列出待更新的文件标签，`installCommand` 就是可以直接执行的安装命令。
-
-<Aside type="note">
-不带 `--json` 时，`--check` 在"已安装且无差异"的情况下**完全没有输出**（退出码 0）。没有输出不是失败，而是检查通过。
-</Aside>
-
-### 4. 让它生效
-
-两端各有一步"装完不等于生效"：
-
-| 客户端 | 还需要做什么 |
-|--------|--------------|
-| Claude Code | 完全退出并重新启动会话，用户级 Hook 才会加载 |
-| Codex | Hook 是非托管的，必须在会话里 `/hooks` 审查并信任一次 |
-
-## Codex 专属步骤
-
-### 1. 进入 Codex 查看 Hook 列表
+需要验证安装器输出结构时，可通过 `--home` 指定隔离目录。它忽略客户端配置目录环境变量，并在该目录下使用 `.claude` 和 `.codex`，不会改当前用户配置：
 
 ```bash
-codex
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --home "<isolated-home>" --dry-run --json
 ```
 
-```
+## 让客户端加载
+
+Claude Code 安装后完全退出并重新启动会话。Codex 中运行 `/hooks`，检查并信任新 Hook；Hook 定义的路径或参数变化后，需要重新检查信任状态。
+
+```text
 /hooks
-```
-
-**输出示例**：
-
-```
-Non-managed hooks (require trust):
-1. SessionStart
-2. PreToolUse
-3. UserPromptSubmit
-4. SubagentStart
-5. SubagentStop
-6. Stop
-
-Status: Not trusted
-```
-
-### 2. 信任前先审查
-
-Hook 脚本都在 `<skills-root>/runtime-hooks/scripts/` 下，信任之前建议自己打开看一遍——这是非托管 Hook 的意义所在，安装器不会替你绕过客户端的信任机制。
-
-### 3. 信任所有 Hook
-
-```
 /hooks trust all
 ```
 
-**确认提示**：
-
-```
-This will trust all non-managed hooks. Continue? (y/n)
-```
-
-输入 `y` 确认，输出：
-
-```
-✓ All hooks trusted
-```
-
-### 4. 验证信任状态
-
-再运行一次 `/hooks`，每一项前面应该都是 `✓ Trusted`。
-
-<Aside type="tip">
-只更新脚本内容、不改动 Hook 定义（路径与参数）时哈希不变，**不需要**重新信任。只有 Hook 定义变化时才要重新信任。
+<Aside type="note">
+安装检查通过表示本地配置与当前脚本一致，不等于客户端已重新加载，也不表示远端 Penpot MCP 已连通。SessionStart 只读取 Penpot 本地注册状态，不会注册或探测远端。
 </Aside>
 
-## Claude Code 验证
+## 检查实际生效
 
-Claude Code 使用托管 Hook，安装后重启会话即生效，无需手动信任。想确认配置确实写进去了：
+在已有 Git 仓库中启动会话，发出“查看项目记忆”这样的只读请求，核对当前仓库、开发者与 TODO 路径是否符合预期。Skill 名单以客户端原生发现结果为准。
+
+要查看托管事件名，可以只读取配置中的键：
 
 ```bash
-# Claude Code
 jq '.hooks | keys' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-
-# Codex
 jq '.hooks | keys' "${CODEX_HOME:-$HOME/.codex}/hooks.json"
-grep -A 3 '^notify' "${CODEX_HOME:-$HOME/.codex}/config.toml"
 ```
 
-Hook 都写在这两个文件的 `hooks` 段里（Codex 的通知另外写在 `config.toml` 的顶层 `notify`）。安装器写进去的结构大致是这样——每个事件是一个数组，数组里每项带一个 `hooks` 列表，命令是一整条字符串：
+上下文脚本的检查模式会创建或检查项目记忆，不应当被描述为对任意当前目录绝对只读。其检查命令和观测边界见 [评估与验证边界](/skills/advanced/performance-metrics/)。
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "…匹配的会话事件…",
-        "hooks": [
-          { "type": "command", "command": "…安装器生成的绝对路径命令…" }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "…匹配的工具名…",
-        "hooks": [
-          { "type": "command", "command": "…安装器生成的绝对路径命令…" }
-        ]
-      }
-    ]
-  }
-}
-```
+验证命令防护时，读取源码中的判定函数或使用其不执行目标命令的输入检查方式，见 [PreToolUse Hook](/skills/hooks/pre-tool-use/)。不要在实际工作区执行破坏性命令来确认 Hook 是否安装成功，也不要为安装验证额外创建活动 TODO。
 
-这份配置由安装器生成和维护，不需要手写。对着它确认事件都在、命令指向你的 Skills 仓库就够了。
+## 更新
 
-<Aside type="note">
-配置里 Node 解释器被写成绝对路径而不是 `node`，这是有意的：Hook 由客户端在自己的进程环境里拉起，那里不一定继承你 shell 的 `nvm` / `fnm` PATH。**换过 Node 版本后重新跑一次安装器**即可刷新这个路径。
-</Aside>
-
-## 检查上下文注入
-
-安装完可以直接确认注入链路是通的：
+先按仓库既有方式更新 Skills 源码，再运行同一个安装器。安装器负责托管配置与版本记录的差异合并、备份和失败回滚；重复运行不会重写未变化的安装时间。切换源码目录或回退源码版本后也需要重新同步。
 
 ```bash
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
+node "<skills-root>/runtime-hooks/scripts/install.mjs"
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check --json
 ```
 
-输出 `ok: true` 表示自检通过，同时会列出当前注入的实际占用与生效上限。这条命令同时是一道门禁，失败时会打印具体原因并以非 0 退出码结束——常见原因是仓库资产缺失或行为内核被改成了不合规格式。
+多个客户端建议共享一份 Skills 源仓库，并通过各自的原生发现目录注册 Skill。不要把整个仓库复制成客户端的 `skills` 目录，避免嵌套目录、重复发现和 Hook 指向过期副本。
 
-## 配置环境变量
+## 开关与配置
 
-### 开发者 ID
+| 配置 | 实际作用 |
+|---|---|
+| `AGENT_RUNTIME_HOOKS_DISABLED=1` | 停用 SessionStart、PreToolUse 和提示音；不关闭上下文注入与 TODO 状态逻辑 |
+| `AGENT_COMMAND_GUARD=0` | 停用 PreToolUse，连同该脚本的流程写入门禁一起跳过 |
+| `AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0` | SessionStart 仍检查差异，但不自动修改配置 |
+| `AGENT_COMPLETION_SOUND=0` | 关闭提示音 |
+| `AGENT_DEVELOPER_NAME` | 仅在 Git identity 与系统登录用户名都不可用时兜底 |
 
-通常从 Git 配置自动获取：
+这些环境变量必须由客户端启动时继承。给被执行命令添加行内前缀不会改变已经运行的 Hook 进程环境。
 
-```bash
-git config user.name
-# 输出: alice-chen
-```
+## 移除或恢复
 
-Git identity 不可用时才需要手动设置：
+先检查安装器生成的配置差异与备份，只删除指向当前 `runtime-hooks/scripts/` 的托管条目，保留第三方 Hook 和通知。不要直接删除整个 `hooks` 对象；Codex 的 `notify` 还可能包含安装器保留的原通知链。
 
-```bash
-export AGENT_DEVELOPER_NAME=alice-chen
+恢复 `.backup-*` 文件前，比较备份与当前配置，确认不会覆盖安装之后新增的配置。恢复后重启客户端并重新检查事件列表。
 
-# 永久生效
-echo 'export AGENT_DEVELOPER_NAME=alice-chen' >> ~/.zshrc
-source ~/.zshrc
-```
+## 常见问题
 
-<Aside type="note">
-`AGENT_DEVELOPER_NAME` 是**最后的兜底**，不是覆盖开关。只要 `git config user.name` 有值，设置它不会生效。
-</Aside>
-
-### 停用选项
-
-```bash
-# 停用命令防护、启动检查和提示音（关不掉上下文注入与 TODO 续作）
-export AGENT_RUNTIME_HOOKS_DISABLED=1
-
-# 只停用命令防护
-export AGENT_COMMAND_GUARD=0
-
-# 配置版本不一致时不自动重装，只打印手动安装命令
-export AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0
-
-# 关闭全部提示音
-export AGENT_COMPLETION_SOUND=0
-```
-
-<Aside type="caution">
-`AGENT_RUNTIME_HOOKS_DISABLED` 不是总开关。要彻底停掉某个 Hook，删掉客户端配置里对应的条目，或恢复安装器留下的 `.backup-*` 文件。
-</Aside>
-
-### 自定义提示音
-
-```bash
-export AGENT_CONFIRMATION_SOUND_FILE=/path/to/custom-confirmation.wav
-export AGENT_REPLY_COMPLETION_SOUND_FILE=/path/to/custom-reply.wav
-export AGENT_TASK_COMPLETION_SOUND_FILE=/path/to/custom-task.wav
-
-# 三类共用一个文件
-export AGENT_COMPLETION_SOUND_FILE=/path/to/one-sound.wav
-```
-
-## 测试安装
-
-### 1. 启动客户端
-
-```bash
-claude
-# 或
-codex
-```
-
-### 2. 检查会话启动
-
-会话启动时如果配置有差异，会看到版本检查与对齐提示；配置已是最新时通常没有任何输出。
-
-### 3. 测试上下文注入
-
-随便问一句，例如：
-
-```
-查看项目记忆
-```
-
-**预期行为**：
-
-- 自动确保目标仓库存在 `PROJECT-MEMORY.md`
-- 文件刚创建或主要章节还是模板占位内容时，提示先走 `init-docs` 采集事实
-- 回答里带上与这句问题相关的记忆摘要
-
-### 4. 测试命令防护
-
-```
-rm -rf .
-```
-
-**预期行为**：工具调用被直接拒绝，输出带 `危险操作已阻止：` 前缀的原因文本。
-
-### 5. 测试 TODO 续作
-
-```bash
-mkdir -p docs/$(git config user.name)/tasks/todo
-cat > docs/$(git config user.name)/tasks/todo/test.md << 'EOF'
-# Test TODO
-
-- [ ] `FEAT-001` 测试功能
-  - 依赖: 无
-  - 写集: test.txt
-  - AC-001: 文件创建 -> ?
-EOF
-```
-
-在客户端里说"开始实现 FEAT-001"。
-
-**预期行为**：
-
-- 自动领取 FEAT-001，状态变为 `[~]`
-- 实现并自验
-- 完成条件满足后状态更新为 `[x]`
-
-<Aside type="caution">
-TODO 状态只能由状态机原子写回。手工编辑 TODO 文件会被 PreToolUse 直接拒绝，这是设计行为。
-</Aside>
-
-## 更新 Hooks
-
-```bash
-cd ~/.agent-workflow/skills
-git pull origin main
-node runtime-hooks/scripts/install.mjs
-```
-
-安装器会检测差异、备份旧配置、合并更新，重复运行是幂等的。
-
-Hook 定义（路径或参数）变化时，Codex 需要重新信任：
-
-```bash
-codex
-/hooks trust all
-```
-
-<Aside type="note">
-只是脚本内容更新（定义未变）时不需要重新信任。
-</Aside>
-
-## 卸载 Hooks
-
-### 手动卸载
-
-编辑配置文件，删掉 `hooks` 段或其中特定条目：
-
-```bash
-# Claude Code
-vim ~/.claude/settings.json
-
-# Codex：Hook 在 hooks.json，通知在 config.toml
-vim ~/.codex/hooks.json
-vim ~/.codex/config.toml
-```
-
-Codex 的 `config.toml` 只需删掉 `notify` 一项。
-
-### 恢复备份
-
-备份文件名是原路径加上 `.backup-YYYYMMDD-HHMMSS`（同一秒内重复备份会再追加 `-1`、`-2`）：
-
-```bash
-# 先列出实际存在的备份
-ls -t ~/.claude/settings.json.backup-* ~/.codex/hooks.json.backup-* ~/.codex/config.toml.backup-* 2>/dev/null
-
-cp ~/.claude/settings.json.backup-20260904-103045 ~/.claude/settings.json
-cp ~/.codex/hooks.json.backup-20260904-103045 ~/.codex/hooks.json
-cp ~/.codex/config.toml.backup-20260904-103045 ~/.codex/config.toml
-```
-
-## 安装类故障排查
-
-### Hook 未生效
-
-**症状**：看不到上下文注入，危险命令也没被拦。
-
-```bash
-# 1. 检查安装状态
-node runtime-hooks/scripts/install.mjs --check --json
-
-# 2. 确认配置落点里有 hooks 段
-jq '.hooks | keys' ~/.claude/settings.json
-
-# 3. 确认 Node 可用
-which node
-```
-
-**处理**：
-
-```bash
-node runtime-hooks/scripts/install.mjs
-```
-
-然后 Claude Code 重启会话、Codex 重新 `/hooks trust all`。更多现象见 [故障排查](/skills/hooks/troubleshooting/)。
-
-### 安装器报"运行时资产不完整"
-
-说明 Skills 仓库里缺文件（脚本、行为内核或提示音音频）。这种情况安装器不会写配置。重新拉取仓库或检查工作区是否有误删：
-
-```bash
-cd ~/.agent-workflow/skills
-git status --short
-git pull origin main
-```
-
-### 每次会话都要重装
-
-配置版本检测认为落点与仓库不一致。先跑一次完整安装；仍然反复时可以临时关掉自动对齐：
-
-```bash
-node runtime-hooks/scripts/install.mjs
-export AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0
-```
-
-### 权限问题
-
-**症状**：`Error: EACCES: permission denied`
-
-```bash
-chmod -R u+rw ~/.agent-workflow/skills/
-sudo chown -R $USER ~/.agent-workflow/skills/
-```
-
-### Node 版本不兼容
-
-```bash
-brew install node@18  # macOS
-nvm install 18        # Linux
-```
-
-升级后重新运行一次安装器，刷新配置里固定的解释器路径。
-
-## 多客户端同时使用
-
-### 方案 1：共享一份仓库（推荐）
-
-两个客户端指向同一个 Skills 仓库，安装一次即可：
-
-```bash
-cd ~/.agent-workflow/skills
-node runtime-hooks/scripts/install.mjs
-
-codex
-/hooks trust all
-```
-
-### 方案 2：独立镜像
-
-分别维护副本，各自安装：
-
-```bash
-# Claude Code
-cp -r ~/.agent-workflow/skills ~/.claude/skills
-cd ~/.claude/skills && node runtime-hooks/scripts/install.mjs
-
-# Codex
-cp -r ~/.agent-workflow/skills ~/.agents/skills
-cd ~/.agents/skills && node runtime-hooks/scripts/install.mjs
-codex
-/hooks trust all
-```
-
-<Aside type="tip">
-推荐方案 1，避免维护两份代码。
-</Aside>
-
-## 持续集成
-
-```yaml
-# .github/workflows/test.yml
-name: Test with Runtime Hooks
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-
-      - name: Install Runtime Hooks
-        run: node runtime-hooks/scripts/install.mjs
-
-      - name: Verify Installation
-        run: node runtime-hooks/scripts/install.mjs --check --json
-
-      - name: Check Context Injection
-        run: node runtime-hooks/scripts/skill-catalog-context.cjs --check
-```
+| 现象 | 处理 |
+|---|---|
+| 安装器报运行时资产不完整 | 只读检查仓库是否缺脚本、行为内核或音频文件，先补齐源码资产 |
+| Node 路径失效 | 确认当前 Node 可用，再运行安装器刷新绝对路径 |
+| 每次启动都提示更新 | 检查实际配置目录、版本记录和安装器输出；必要时临时设置 `AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0` 排查 |
+| Hooks 版本为未知或旧记录为 `0.0.0` | 更新 Skills 源码，确认 `runtime-hooks/VERSION` 存在，再重新运行安装器；不要用客户端版本代填 |
+| 权限不足 | 查看报错对应文件与父目录的权限、属主；只修正已确认异常的具体路径 |
+| 检查通过但没有上下文 | 确认客户端已重新加载、Codex 已信任 Hook，且请求工作目录处于目标 Git 仓库 |
 
 ## 下一步
 
-- [PreToolUse Hook](/skills/hooks/pre-tool-use/) —— 命令防护与流程门禁
-- [UserPromptSubmit Hook](/skills/hooks/user-prompt-submit/) —— 注入内容详解
-- [Stop Hook](/skills/hooks/stop/) —— TODO 续作详解
-- [故障排查](/skills/hooks/troubleshooting/) —— 更多常见问题
+- [PreToolUse Hook](/skills/hooks/pre-tool-use/) - 命令防护与流程门禁
+- [UserPromptSubmit Hook](/skills/hooks/user-prompt-submit/) - 注入内容详解
+- [Stop Hook](/skills/hooks/stop/) - TODO 完成与续作
+- [故障排查](/skills/hooks/troubleshooting/) - 更多常见问题

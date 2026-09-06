@@ -1,119 +1,80 @@
 ---
-title: Low & Fallback 优先级 Skill
-description: 38 个扩展能力与兜底能力的速查目录
-order: 33
+title: 扩展能力：Low 与兜底
+description: 查阅 38 个扩展 Skill，按具体领域、格式和工具选择
+sidebar:
+  order: 3
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+本组收录 38 个 Low Skill。Low 是源文件的优先级声明，不代表能力不重要；使用时需要明确任务对象、格式或技术环境。`universal-development` 也属于 Low，兜底是它的职责，不是额外的一组 Skill。
 
-## 这一层是什么
+## 文档与文件
 
-Low 优先级的 38 个 Skill 是**扩展能力**：文件处理、设计工具、第三方集成、提示词工程、本机操作，以及没有专业 Skill 可用时的兜底。
+| Skill | 用途与边界 |
+| --- | --- |
+| [docx](/skills/skills-reference/low/docx/) | 处理 Word 文档并保留格式与修订。 |
+| [xlsx](/skills/skills-reference/low/xlsx/) | 安全处理 Excel 与表格文件。 |
+| [pptx](/skills/skills-reference/low/pptx/) | 创建与验证 PowerPoint 演示文稿。 |
+| [pdf](/skills/skills-reference/low/pdf/) | 读取、编辑、OCR 或创建 PDF。 |
+| [mermaid](/skills/skills-reference/low/mermaid/) | 绘制 Mermaid 技术图。 |
+| [daily-report-writer](/skills/skills-reference/low/daily-report-writer/) | 根据输入或仓库事实生成简洁中文日报。 |
+| [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/) | 根据源码和变更记录生成中文开发过程文档。 |
+| [internal-comms](/skills/skills-reference/low/internal-comms/) | 撰写会议纪要、状态更新、发布说明和内部沟通。 |
+| [humanizer-zh](/skills/skills-reference/low/humanizer-zh/) | 去除中文文本的 AI 写作痕迹：夸大象征、宣传性语言、破折号过度、三段式与 AI 词汇，让表达自然并保留原意。 |
 
-优先级低不代表质量低，只代表**不该被模糊的话术抢先触发**。这些 Skill 通常需要你说得更具体一点，例如"把这份 Excel 拆成三个 sheet""生成一个雪花 ID 工具类"。
+## 设计与动效
 
-<Aside type="tip">
-每个 Skill 的完整说明在 [Skill 参考手册](/skills/skills-reference/)；本页只做速查和选型。
-</Aside>
+| Skill | 用途与边界 |
+| --- | --- |
+| [algorithmic-art](/skills/skills-reference/low/algorithmic-art/) | 用 p5.js 创作生成艺术。 |
+| [canvas-design](/skills/skills-reference/low/canvas-design/) | 创作海报、艺术作品和其他静态视觉设计。 |
+| [brand-guidelines](/skills/skills-reference/low/brand-guidelines/) | 应用 Anthropic 品牌规范。 |
+| [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/) | 把运动描述转为 Web 动效术语。 |
+| [review-animations](/skills/skills-reference/low/review-animations/) | 只读审查现有动效系统和新增动效机会。 |
+| [penpot](/skills/skills-reference/low/penpot/) | 连接远程 Penpot MCP 并读写设计。 |
+| [penpot-prototype](/skills/skills-reference/low/penpot-prototype/) | 用远程 MCP 制作并验证 Penpot 原型。 |
 
-## 兜底与代码生成（2 个）
+## 后端与第三方集成
 
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [universal-development](/skills/skills-reference/low/universal-development/) | 扫完清单确实没有对口 Skill | 最低优先级兜底，不替代 API、数据库、前端或安全能力 |
-| [code-generator](/skills/skills-reference/low/code-generator/) | 要模板、脚手架、代码生成器 | 通用生成器与模板；完整业务 CRUD 用 crud-development |
+| Skill | 用途与边界 |
+| --- | --- |
+| [backend-annotations](/skills/skills-reference/low/backend-annotations/) | 选择后端限流、防重、脱敏、加密和数据权限注解。 |
+| [json-serialization](/skills/skills-reference/low/json-serialization/) | 设计精确兼容的 JSON 契约。 |
+| [sms-mail](/skills/skills-reference/low/sms-mail/) | 接入短信、邮件与多渠道通知。 |
+| [snowflake-id](/skills/skills-reference/low/snowflake-id/) | 实现和配置 Java 雪花 ID。 |
+| [workflow-engine](/skills/skills-reference/low/workflow-engine/) | 设计或排查审批流、流程实例、任务办理和版本。 |
+| [alova-client-usage](/skills/skills-reference/low/alova-client-usage/) | 在多框架客户端与 SSR 中使用 alova 请求、缓存和策略。 |
+| [alova-server-usage](/skills/skills-reference/low/alova-server-usage/) | 在服务端与 BFF 中使用 alova。 |
+| [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) | 用 Wormhole 生成 OpenAPI 客户端。 |
+| [worma-guidelines](/skills/skills-reference/low/worma-guidelines/) | 使用 worma 配置 OpenAPI 生成、插件与迁移。 |
 
-<Aside type="caution">
-`universal-development` 是**最后手段**。如果它被触发了，通常说明触发词太模糊，或者确实缺一个专业 Skill——后者值得用 skill-creator 补上。
-</Aside>
+## 工具、代码与本机操作
 
-## 文档与文件处理（9 个）
+| Skill | 用途与边界 |
+| --- | --- |
+| [code-patterns](/skills/skills-reference/low/code-patterns/) | 提取仓库后端代码模式。 |
+| [code-generator](/skills/skills-reference/low/code-generator/) | 开发或使用通用代码生成器、模板与脚手架；不负责完整业务 CRUD、业务规则或页面实现。 |
+| [github-code-interpreter](/skills/skills-reference/low/github-code-interpreter/) | 分析 GitHub 仓库源码。 |
+| [computer-use](/skills/skills-reference/low/computer-use/) | 通过 Orca CLI 读取本地桌面应用窗口、可访问性树与截图，并执行点击、输入、按键、滚动等安全 UI 操作。 |
+| [storage-analyzer](/skills/skills-reference/low/storage-analyzer/) | 只读扫描 macOS 磁盘占用并生成可折叠 HTML 报告：磁盘满了、空间不够、清理缓存时使用；清理命令只展示不代跑。 |
+| [mcp-builder](/skills/skills-reference/low/mcp-builder/) | 构建 MCP 服务、工具契约和连接器。 |
 
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [docx](/skills/skills-reference/low/docx/) | Word 文档 | 处理 Word 并保留格式与修订 |
-| [xlsx](/skills/skills-reference/low/xlsx/) | Excel、CSV | 安全处理表格文件 |
-| [pptx](/skills/skills-reference/low/pptx/) | PPT | 创建与验证演示文稿 |
-| [pdf](/skills/skills-reference/low/pdf/) | PDF | 读取、编辑、OCR 或创建 PDF |
-| [mermaid](/skills/skills-reference/low/mermaid/) | 要一段图表源码 | 绘制 Mermaid 技术图 |
-| [daily-report-writer](/skills/skills-reference/low/daily-report-writer/) | 写日报 | 按输入或仓库事实生成简洁中文日报 |
-| [development-process-doc-writer](/skills/skills-reference/low/development-process-doc-writer/) | 要开发过程文档 | 按源码和变更记录生成中文过程文档 |
-| [internal-comms](/skills/skills-reference/low/internal-comms/) | 纪要、周报、发布说明 | 内部沟通类文本 |
-| [humanizer-zh](/skills/skills-reference/low/humanizer-zh/) | 文本一眼像 AI 写的 | 去掉夸大、排比和 AI 词汇，保留原意 |
+## Agent、经验与产品
 
-## 设计与视觉（5 个）
+| Skill | 用途与边界 |
+| --- | --- |
+| [agent-optimizer](/skills/skills-reference/low/agent-optimizer/) | 设计或审查 Agent 架构与治理。 |
+| [prompt-optimizer](/skills/skills-reference/low/prompt-optimizer/) | 优化任务提示词的上下文、约束、示例和评测方式。 |
+| [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) | 用户纠正刚发生时识别是否属于 Skill 规则问题，并把重复根因路由给 skill-evolution；不直接实施普通单次修改。 |
+| [skill-evolution](/skills/skills-reference/low/skill-evolution/) | 把重复用户纠正或跨 Skill 根因沉淀为一致的长期公共规则；单个已确认 Skill 的直接修改使用 skill-optimizer。 |
+| [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/) | 沉淀已验证的团队经验。 |
+| [go-to-market](/skills/skills-reference/low/go-to-market/) | 制定 ICP、定位、渠道、发布和增长计划。 |
 
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [penpot](/skills/skills-reference/low/penpot/) | 读写 Penpot 设计稿 | 通过远程 MCP 连接并操作设计 |
-| [penpot-prototype](/skills/skills-reference/low/penpot-prototype/) | 做可点原型 | 制作并验证 Penpot 原型 |
-| [canvas-design](/skills/skills-reference/low/canvas-design/) | 海报、静态视觉 | 静态视觉设计创作 |
-| [algorithmic-art](/skills/skills-reference/low/algorithmic-art/) | 生成艺术 | 用 p5.js 创作 |
-| [brand-guidelines](/skills/skills-reference/low/brand-guidelines/) | 需要品牌视觉规范 | 应用既有品牌规范 |
+## 最低优先级兜底
 
-<Aside type="caution">
-`penpot` 和 `penpot-prototype` 依赖远程 Penpot MCP。MCP 连不上时是**连接故障**，不是能力缺失——先修连接再重试。
-</Aside>
+| Skill | 用途与边界 |
+| --- | --- |
+| [universal-development](/skills/skills-reference/low/universal-development/) | 仅在没有适用专业 Skill 时作为最低优先级兜底；不得替代 API、数据库、前端或安全能力。 |
 
-## 前端动效（2 个）
+优先检查是否有对口专业 Skill 或 `dev`。只有确实没有适用能力时才使用兜底，不能用它跳过 API、数据库、前端、安全等专业规则。
 
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [animation-vocabulary](/skills/skills-reference/low/animation-vocabulary/) | 说不出想要哪种动效 | 把模糊描述翻译成准确的 Web 动效术语 |
-| [review-animations](/skills/skills-reference/low/review-animations/) | 审查现有动效 | 只读审查动效系统与新增机会，不做实现 |
-
-## 后端与集成工具（9 个）
-
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [backend-annotations](/skills/skills-reference/low/backend-annotations/) | 限流、防重、脱敏、加密 | 选择合适的后端注解 |
-| [json-serialization](/skills/skills-reference/low/json-serialization/) | 字段兼容、序列化坑 | 设计精确兼容的 JSON 契约 |
-| [sms-mail](/skills/skills-reference/low/sms-mail/) | 发短信、发邮件 | 接入短信、邮件与多渠道通知 |
-| [snowflake-id](/skills/skills-reference/low/snowflake-id/) | 分布式 ID | Java 雪花 ID 实现与节点位宽配置 |
-| [workflow-engine](/skills/skills-reference/low/workflow-engine/) | 审批流、流程实例 | 流程定义、任务办理和版本 |
-| [alova-client-usage](/skills/skills-reference/low/alova-client-usage/) | 客户端请求层 | 多框架与 SSR 下的请求、缓存和策略 |
-| [alova-server-usage](/skills/skills-reference/low/alova-server-usage/) | 服务端 / BFF 请求层 | 在服务端使用 alova |
-| [alova-wormhole-usage](/skills/skills-reference/low/alova-wormhole-usage/) | 从 OpenAPI 生成客户端 | 用 Wormhole 生成并维护接口代码 |
-| [worma-guidelines](/skills/skills-reference/low/worma-guidelines/) | worma 配置与迁移 | OpenAPI 生成、插件与迁移规范 |
-
-## AI、Agent 与提示词（3 个）
-
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [prompt-optimizer](/skills/skills-reference/low/prompt-optimizer/) | 提示词效果不稳 | 优化上下文、约束、示例与评测方式 |
-| [agent-optimizer](/skills/skills-reference/low/agent-optimizer/) | 设计多 Agent 架构 | Agent 架构与治理的设计和审查 |
-| [mcp-builder](/skills/skills-reference/low/mcp-builder/) | 要写一个 MCP Server | 构建 MCP 服务、工具契约和连接器 |
-
-## 代码理解与经验沉淀（3 个）
-
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [code-patterns](/skills/skills-reference/low/code-patterns/) | 想统一写法 | 从仓库真实代码提取后端模式 |
-| [github-code-interpreter](/skills/skills-reference/low/github-code-interpreter/) | 看别人的仓库 | 分析 GitHub 仓库源码 |
-| [experience-sedimentation](/skills/skills-reference/low/experience-sedimentation/) | 踩过的坑要留下来 | 沉淀已验证的团队经验 |
-
-## 本机与系统（2 个）
-
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [computer-use](/skills/skills-reference/low/computer-use/) | 要操作本机桌面应用 | 读取窗口、可访问性树与截图，执行安全 UI 操作 |
-| [storage-analyzer](/skills/skills-reference/low/storage-analyzer/) | 磁盘满了 | 只读扫描 macOS 占用并出 HTML 报告，清理命令只展示 |
-
-## 产品与增长（1 个）
-
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [go-to-market](/skills/skills-reference/low/go-to-market/) | 要上市与增长计划 | ICP、定位、渠道、发布和增长 |
-
-## Skill 治理（2 个）
-
-| Skill | 什么时候用 | 说明 |
-|---|---|---|
-| [auto-optimizer](/skills/skills-reference/low/auto-optimizer/) | 你刚纠正了一次行为 | 判断是否属于规则问题，重复根因转交 skill-evolution |
-| [skill-evolution](/skills/skills-reference/low/skill-evolution/) | 同类问题反复出现 | 把重复纠正沉淀为跨 Skill 的长期规则 |
-
-## 下一步
-
-- [Critical & High 优先级](/skills/catalog/critical-high/) - 核心流程能力
-- [Medium 优先级](/skills/catalog/medium/) - 专业领域能力
-- [Runtime Hooks](/skills/hooks/) - 让这些 Skill 在每一轮里真正被用上
+返回 [Skill 目录总览](/skills/catalog/)，或在[参考手册](/skills/skills-reference/)中按名称查询。

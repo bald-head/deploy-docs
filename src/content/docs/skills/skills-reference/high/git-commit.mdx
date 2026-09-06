@@ -1,7 +1,8 @@
 ---
 title: Git 提交 - git-commit
 description: Git 提交 - 精确暂存、提交并推送代码
-order: 11
+sidebar:
+  order: 25
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -42,6 +43,10 @@ import { Aside } from '@astrojs/starlight/components';
 **没有未关闭的严重或重要 Review finding。** 带着已知严重缺陷推上远端，后面要么改历史要么再补一笔，代价比先修掉高得多。
 
 **目标文件范围明确。** 范围来自当前 diff 和任务事实。范围说不清的时候它不会用一条递归暂存兜过去——那正是夹带别人改动的主要来源。
+
+## 变更日志
+
+每个真实代码、Skill、配置或文档变更包都要更新仓库已有的 `CHANGELOG.md`（或等价日志路径），并与业务改动和必要的 TODO 收口放进同一提交。没有现成日志时，只在第一次真实变更中创建；不创建只有日志或状态的空提交。日志记录用户可见影响、兼容注意和恢复信息，不写 TODO 状态、执行实例、命令流水或伪造 commit OID。分支合并的 fast-forward 继承来源日志，产生 merge commit 时只记录本次合并新增影响，具体由 [git-workflow](/skills/skills-reference/high/git-workflow/) 负责。
 
 ## 怎么用
 

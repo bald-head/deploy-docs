@@ -1,14 +1,17 @@
 ---
 title: SessionStart Hook
 description: 会话启动时的配置自检与自动修复
-order: 44
+sidebar:
+  order: 2
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
 ## 这个 Hook 帮你做什么
 
-每次启动客户端时，SessionStart Hook 会确认你机器上的 Hook 配置还是有效的。配置正确时它完全静默；配置过时或缺失时它自动修复，并提示你重启客户端。
+每次启动客户端时，SessionStart Hook 会通过安装器检查托管配置和 Hooks 自身的版本记录。两者一致时不提示 Hook 更新；配置或版本记录过时、缺失时自动修复，并提示重启客户端。本地 Penpot 注册异常仍可能单独提示。
+
+Hooks 版本来自 `runtime-hooks/VERSION`，独立于 `codex --version` 和 `claude --version`。查看源码和各客户端安装版本的命令见 [Hooks 版本查询](/skills/hooks/installation/#查看-hooks-版本)。源版本缺失或无效时只报告检查失败，不修改配置，也不阻止会话继续。
 
 它解决的实际问题是：Skills 仓库换过位置、换过 Node 版本、或者升级后多了新的 Hook 事件——这些情况下旧配置会静默失效，而你不会立刻发现。
 
@@ -51,11 +54,14 @@ $ claude
 | Claude Code | `~/.claude/settings.json` | `CLAUDE_CONFIG_DIR` |
 | Codex | `~/.codex/hooks.json`（Hook）、`~/.codex/config.toml`（完成通知） | `CODEX_HOME` |
 
+两个客户端配置目录下各有一份 `.runtime-hook-version`，记录 Hooks 版本、安装时间和源码路径。版本记录与配置一起备份和回滚；它只能证明最近一次安装，不能证明当前会话已重载。
+
 会被判定为"需要修复"的情况：
 
 - 配置里缺了某个 Hook 事件
 - Hook 指向的路径已经失效（仓库搬过位置、换过 Node 版本）
 - 残留了旧版本的启动命令
+- Hooks 版本记录缺失、损坏、仍为旧占位值 `0.0.0`，或与当前源码版本、目录不同
 
 ## 修复时会不会弄坏我的配置
 
@@ -109,7 +115,7 @@ node project-manager/scripts/penpot-mcp-setup.mjs --check --json
 | 环境变量 | 设成什么 | 效果 |
 |---------|---------|------|
 | `AGENT_RUNTIME_HOOKS_AUTO_UPDATE` | `0` | 仍然检测差异并提示，但不自动改配置 |
-| `AGENT_RUNTIME_HOOKS_DISABLED` | `1` | 关闭全部 Hook，包括本页的启动自检 |
+| `AGENT_RUNTIME_HOOKS_DISABLED` | `1` | 跳过本页启动自检、PreToolUse 和提示音；上下文与 TODO 脚本仍可能运行 |
 | `CLAUDE_CONFIG_DIR` | 目录路径 | 换掉 Claude Code 配置目录 |
 | `CODEX_HOME` | 目录路径 | 换掉 Codex 配置目录 |
 
@@ -156,12 +162,12 @@ node runtime-hooks/scripts/install.mjs --check --json
 ```bash
 cd <skills-root>
 
-# 1. 仓库里的版本
-cat runtime-hooks/VERSION
+# 1. 仓库里的 Hooks 版本
+node runtime-hooks/scripts/hook-version-manager.cjs source
 
-# 2. 已安装的版本记录（跟着实际配置目录走）
-cat "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.runtime-hook-version"
-cat "${CODEX_HOME:-$HOME/.codex}/.runtime-hook-version"
+# 2. 各客户端的 Hooks 安装记录（跟着实际配置目录走）
+node runtime-hooks/scripts/hook-version-manager.cjs status --client claude
+node runtime-hooks/scripts/hook-version-manager.cjs status --client codex
 
 # 3. 安装器自己怎么判定
 node runtime-hooks/scripts/install.mjs --check --json
@@ -197,8 +203,8 @@ CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 # 看一眼
 ls -t "$CFG"/settings.json.backup-* 2>/dev/null
 
-# 只留最近 5 个
-ls -t "$CFG"/settings.json.backup-* 2>/dev/null | tail -n +6 | xargs rm
+# 只读查看较早的备份
+ls -t "$CFG"/settings.json.backup-* 2>/dev/null | tail -n +6
 
 # Codex 两个落点同理
 ls -t "${CODEX_HOME:-$HOME/.codex}"/hooks.json.backup-* 2>/dev/null
@@ -206,7 +212,7 @@ ls -t "${CODEX_HOME:-$HOME/.codex}"/config.toml.backup-* 2>/dev/null
 ```
 
 <Aside type="caution">
-删之前先确认当前配置能正常工作。
+确认当前配置能正常工作并保留可恢复备份后，再按精确文件处理；不要直接运行批量删除管道。
 </Aside>
 
 ### 权限报错
@@ -217,26 +223,18 @@ ls -t "${CODEX_HOME:-$HOME/.codex}"/config.toml.backup-* 2>/dev/null
 Error: EACCES: permission denied, open '~/.claude/settings.json'
 ```
 
-处理：
-
-```bash
-CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-
-chmod 600 "$CFG/settings.json"
-chmod 700 "$CFG"
-sudo chown -R $USER "$CFG"
-```
+先只读查看报错文件及父目录的属主与权限，确认实际配置目录是否正确。只修复已证明异常的具体路径，不递归改写整个客户端配置目录。
 
 ### Penpot MCP 检查失败
 
 先手动跑一次看具体状态：
 
 ```bash
-cd <skills-root>
+cd "<skills-root>"
 node project-manager/scripts/penpot-mcp-setup.mjs --check --json
 ```
 
-未注册就运行不带 `--check` 的同一命令注册；不用 Penpot 直接忽略警告。
+本地注册状态异常时，按 [安装与配置](/skills/getting-started/) 核对真实端点与注册流程。日常 SessionStart 不连接远端，也不能据一次本地警告宣称远端能力不可用；Skill 注册/同步流程仍需完成其规定的注册复检。
 
 ## 和手动安装的分工
 

@@ -1,7 +1,8 @@
 ---
 title: Git 工作流 - git-workflow
 description: Git 工作流 - 处理分支、合并、rebase 和冲突
-order: 12
+sidebar:
+  order: 24
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -146,5 +147,4 @@ git-workflow（状态 → 分支/Tag、分支合并、rebase、stash、cherry-pi
 每次操作它汇报五件事：执行了哪些 Git 操作；操作前后的分支和状态；冲突文件及各自的解决方式；验证结果；是否需要交给 `git-commit`。涉及远端覆盖或删除时，额外给出获授权的仓库根 / remote / ref / `oldOID` / `newOID`、执行前的 OID 复核结果、一次性授权的消费情况，以及远端最终 OID。
 
 判断真的完成了：工作树状态是真实的（还在 in-progress 就说 in-progress）；每个冲突文件都有解决说明，而不是一句"已解决"；验证是跑过的，不是"应该没问题"；需要提交的部分已经明确移交出去。
-
 

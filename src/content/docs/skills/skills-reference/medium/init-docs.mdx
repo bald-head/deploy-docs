@@ -1,7 +1,8 @@
 ---
 title: 文档初始化 - init-docs
 description: 项目文档初始化 - 按真实交付需要创建最少团队共享文档
-order: 21
+sidebar:
+  order: 2
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -47,7 +48,7 @@ import { Aside } from '@astrojs/starlight/components';
 **二、真实交付确实缺一份团队共享文档。** 判断标准不是"以后可能有用"，而是现在有人被卡住：接口契约、数据迁移与回滚、部署与配置、启动命令，或者一次确实需要文字说明的人工交接。
 
 <Aside type="caution">
-新项目、空仓库、步骤多、流程复杂——这些都不构成创建文档的理由。默认不生成 CHANGELOG、ARCHITECTURE、DEVELOPMENT、接口占位文件，也不生成 `reports/`、`decisions/`、`handoffs/`、`completed/` 这类目录或任何空目录。个人 TODO 更不在范围内。
+新项目、空仓库、步骤多、流程复杂——这些都不构成创建文档的理由。默认不生成空的 CHANGELOG、ARCHITECTURE、DEVELOPMENT、接口占位文件，也不生成 `reports/`、`decisions/`、`handoffs/`、`completed/` 这类目录或任何空目录。仓库已有变更日志时沿用其路径和格式；首次真实变更需要日志时，才在同一变更包中创建并记录实际影响。个人 TODO 更不在范围内。
 </Aside>
 
 Greenfield 项目还有一条顺序要求：先由 [architecture-design](/skills/skills-reference/high/architecture-design/)、[tech-decision](/skills/skills-reference/high/tech-decision/) 和 [dev](/skills/skills-reference/high/dev/) 把真实仓库、技术基线和能跑起来的入口建出来，再写文档。文档描述的必须是已经存在或已经选定的事实，不能反过来用一份模板把技术栈、仓库拓扑和模块提前锁死。
@@ -81,7 +82,7 @@ Greenfield 项目还有一条顺序要求：先由 [architecture-design](/skills
 2. 要覆盖现有文件时先展示差异；没有明确授权不覆盖。
 3. 命令、版本、模块、接口和配置都要能从仓库或已选定的技术结论取证。
 4. 配置文档覆盖全部实际环境，环境变量和配置中心各自注入，**本机值不能写成团队默认**——把你那台机器的 home 目录绝对路径写死进去，换个人就失效。
-5. 只写使用者继续执行所需要的内容，不记命令流水、阶段日志、完成收据或审计报告。
+5. 变更日志只记录真实影响、兼容注意和必要恢复信息，不写未发生的发布、伪造 commit OID、命令流水、阶段日志、完成收据或审计报告；日志与对应改动同一提交。其他文档只写使用者继续执行所需要的内容。
 
 <Aside type="danger">
 本 Skill 不读 Git 用户名、不创建开发者个人目录，也不记录机器名、本机路径、host、Token 或任何个人运行配置。文档和代码冲突时以代码和仓库规则为准，改文档——而不是在另一个地方复制第二份事实源。

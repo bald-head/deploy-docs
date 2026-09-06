@@ -1,652 +1,108 @@
 ---
 title: Frontmatter 规范
-description: Skill frontmatter 结构化元数据的完整规范和最佳实践
-order: 50
+description: 维护 Skill 的发现描述、职责边界和协作元数据
+sidebar:
+  order: 0
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+每个 Skill 的 `SKILL.md` 以 YAML frontmatter 开始。当前 Harness 使用 `name`、`description` 和可读路径发现 Skill，正文与引用资源在命中后按需读取。
 
-## 概述
+`triggers`、`gates`、`conflicts` 等字段是本仓库的语义约定，帮助维护者和 Agent 理解职责；它们不是所有客户端都会执行的路由协议。运行机制见 [Skill 发现与选择](/skills/core-concepts/routing/)。
 
-每个 Skill 的 `SKILL.md` 文件开头包含 YAML frontmatter，定义了路由所需的结构化元数据。这些元数据是三层路由机制的第一层，直接影响 Skill 的触发准确率。
-
-<Aside type="tip">
-**当前覆盖率**：95 个 Skill 全部完成结构化增强（100%），触发词总数 1064 个（中文 626 + 英文 438）。
-</Aside>
-
-## 完整结构
+## 最小发现字段
 
 ```yaml
 ---
-name: "skill-name"
-description: "一句话描述这个 Skill 的职责和适用场景"
-category: development | documentation | testing | deployment | ...
-tags: [api, backend, database]
-triggers:
-  zh:
-    - 中文触发词1
-    - 口语化表达
-    - 技术名词
-  en:
-    - English trigger 1
-    - technical term
-gates:
-  - "前置条件1：必须满足才能触发"
-  - "前置条件2：避免过早触发"
-  - "前置条件3：确保输入完整"
-conflicts:
-  other-skill-name: "职责边界说明：A负责X；B负责Y"
-  another-skill: "冲突解决规则"
-not_for:
-  - "明确不适用的场景1"
-  - "应该用其他 Skill 的场景2"
-related_skills:
-  before: [dependency-skill]
-  after: [next-skill]
-  complement: [collaborative-skill]
-priority: critical | high | medium | low | fallback
+name: resume-claude
+description: >
+  读取并接续 Claude Code 历史会话，支持会话 ID、日志路径、描述或当前目录最近会话。
+  只读总结不改代码，单纯继续当前 TODO 不触发。
 ---
 ```
 
-## 字段说明
+这是 `resume-claude` 发现信息的节选，完整内容以源仓库对应 `SKILL.md` 为准。
 
-### name（必需）
+| 字段 | 要求 |
+| --- | --- |
+| `name` | 与目录名一致，使用小写字母、数字和连字符组成的 kebab-case；同一源目录内不得重复 |
+| `description` | 非空，独立说明做什么、何时用和最关键的排除边界；当前目录 validator 限制为 1024 字符以内 |
 
-Skill 的唯一标识符，必须与目录名完全一致。
+客户端可能有其他格式限制，注册时同时核对实际客户端规则。不要把“必须 2 至 3 个单词”或固定中文字数当作本仓库的验证条件。
 
-**命名规则**：
-- 小写字母 + 连字符
-- 禁止下划线、空格、大写字母
-- 2-3 个单词，清晰表达职责
+## 本仓库的扩展字段
 
-```yaml
-✅ name: "change-impact-analysis"
-✅ name: "frontend-polish"
-✅ name: "api-development"
-
-❌ name: "Change_Impact_Analysis"  # 大写 + 下划线
-❌ name: "do stuff"                 # 空格
-❌ name: "a"                        # 太短
-```
-
-### description（必需）
-
-一句话描述（60-150 字），说明：
-1. 这个 Skill **做什么**
-2. 什么时候**应该**用它
-3. 什么时候**不应该**用它（可选）
-
-**质量标准**：
-- 以动词开头
-- 包含关键技术名词
-- 说明与相似 Skill 的区别
+下面的例子继续使用同一个 Skill，展示可按真实职责补充的字段：
 
 ```yaml
-✅ description: "分析已批准范围的真实变化，更新受影响的功能、API、数据和前端，不生成新需求"
-
-✅ description: "优化已有页面的性能、交互和视觉效果，不负责从零设计新页面"
-
-❌ description: "处理页面"  # 太模糊
-❌ description: ""          # 空描述
-```
-
-### category（必需）
-
-Skill 的分类，用于组织和过滤。
-
-**标准分类**：
-- `development` - 开发类
-- `documentation` - 文档类
-- `testing` - 测试类
-- `deployment` - 部署类
-- `design` - 设计类
-- `analysis` - 分析类
-- `optimization` - 优化类
-- `skill-management` - Skill 管理类
-
-### tags（必需）
-
-3-5 个关键词标签，用于快速识别 Skill 的适用领域。
-
-```yaml
-tags: [api, backend, contract]
-tags: [frontend, ui, performance]
-tags: [database, schema, migration]
-```
-
-### triggers（必需）
-
-**最重要的路由字段**，定义触发这个 Skill 的自然语言表达。
-
-#### 结构
-
-触发词支持两种合法的 YAML 格式：
-
-**嵌套格式**（推荐用于长列表）：
-```yaml
+category: special
+tags: [session, claude, handoff]
+priority: medium
 triggers:
   zh:
-    - 中文触发词1
-    - 口语化表达
-    - 技术名词
-  en:
-    - English trigger 1
-    - technical term
-```
-
-**数组格式**（适合短列表）：
-```yaml
-triggers:
-  zh: [中文触发词1, 口语化表达, 技术名词]
-  en: [English trigger 1, technical term]
-```
-
-<Aside type="note">
-**格式分布**：95 个 Skill 中，72 个使用嵌套格式，23 个使用数组格式。两种格式在路由系统中完全等价。
-</Aside>
-
-#### 数量指导
-
-| 优先级 | 中文触发词 | 英文触发词 | 总计 |
-|--------|----------|----------|------|
-| Critical/High | 6-8 个 | 4-6 个 | 10-14 个 |
-| Medium | 6-8 个 | 4-6 个 | 10-14 个 |
-| Low | 4-6 个 | 3-5 个 | 7-11 个 |
-| Fallback | 3-4 个 | 2-3 个 | 5-7 个 |
-
-<Aside type="caution">
-**Low 优先级的差异化**：Low 优先级 Skill 应该用**更少但更专有**的触发词，避免误触发。High/Medium 追求召回（覆盖更多用户表达），Low 追求精确（只在明确场景触发）。
-</Aside>
-
-#### 触发词设计原则
-
-1. **包含口语化表达**
-
-```yaml
-# ✅ 好的示例
-triggers:
-  zh:
-    - 需求改了      # 口语化
-    - 需求变了
-    - 范围变了
-    - 加一个字段
-```
-
-2. **包含技术名词**
-
-```yaml
-# ✅ 对于技术栈专用 Skill
-triggers:
-  zh:
-    - alova 客户端   # 明确技术栈
-    - alova hooks
-    - useRequest
-  en:
-    - alova client
-    - alova hooks
-```
-
-3. **覆盖同义表达**
-
-```yaml
-triggers:
-  zh:
-    - 提交代码
-    - 提交并推送
-    - commit
-    - git 提交
-  en:
-    - commit code
-    - commit and push
-    - git commit
-```
-
-4. **避免过于宽泛**
-
-```yaml
-# ❌ 太宽泛，会误触发
-triggers:
-  zh:
-    - 开发
-    - 实现
-    - 做
-
-# ✅ 更具体
-triggers:
-  zh:
-    - 开发 CRUD 功能
-    - 实现增删改查
-    - 标准业务开发
-```
-
-#### 特殊场景：Low 优先级 Skill
-
-Low 优先级 Skill 必须包含技术栈或格式名称：
-
-```yaml
-# docx Skill
-triggers:
-  zh:
-    - 生成 Word
-    - 导出 DOCX
-    - Word 文档
-  en:
-    - generate docx
-    - export word
-
-# alova-client-usage Skill
-triggers:
-  zh:
-    - alova 客户端
-    - alova hooks
-    - useRequest
-  en:
-    - alova client
-    - alova hooks
-
-# snowflake-id Skill
-triggers:
-  zh:
-    - 雪花 ID
-    - IdWorker
-    - 分布式 ID 生成
-  en:
-    - snowflake id
-    - distributed id
-```
-
-### gates（必需）
-
-前置条件检查，定义触发这个 Skill 的**必要条件**。
-
-#### 作用
-
-1. **避免过早触发**
-2. **确保输入完整**
-3. **防止职责越界**
-
-#### 数量
-
-每个 Skill 应该有 **2-3 个** gates。
-
-#### 编写原则
-
-gates 应该是**可验证**的条件，而不是模糊描述。
-
-```yaml
-# ✅ 可验证的条件
+    - 读取 Claude Code 会话
+    - 继续 Claude 会话
+  en: [resume my Claude session, read a Claude Code session]
 gates:
-  - "已有批准的范围、契约或交付面"
-  - "发生真实变化（用户结果、API、数据、权限或交付面）"
-  - "存在唯一 TODO 文件需要更新"
-
-# ❌ 模糊描述
-gates:
-  - "需要分析变化"
-  - "有需求"
-```
-
-#### 优先级差异
-
-**High/Medium 优先级**：流程阶段条件
-
-```yaml
-# tech-decision
-gates:
-  - "已有批准需求或功能"
-  - "尚未开始生产代码编辑"
-  - "需要选择具体技术方案"
-```
-
-**Low 优先级**：技术栈/格式可验证条件
-
-```yaml
-# alova-client-usage
-gates:
-  - "项目依赖已确认包含 alova"
-  - "本次改动在客户端或 SSR 侧"
-  - "需要实现数据请求逻辑"
-
-# worma-guidelines
-gates:
-  - "项目已确认使用 worma 作为 OpenAPI 生成器"
-  - "需要编写或审查 worma 标注"
-  - "目标是 Java 后端 Controller"
-```
-
-#### 典型 gates 模式
-
-**1. 避免过早触发**
-
-```yaml
-gates:
-  - "尚未开始生产代码编辑"
-  - "需要技术选型"
-```
-
-**2. 确保输入完整**
-
-```yaml
-gates:
-  - "已有相邻生产接口参考或架构方案"
-  - "已有功能需求或产品定义"
-```
-
-**3. 防止职责越界**
-
-```yaml
-gates:
-  - "已确认是故障而非需求变更"
-  - "有可观察的错误现象"
-```
-
-**4. 技术栈限定（Low 优先级）**
-
-```yaml
-gates:
-  - "项目依赖已确认包含 alova"
-  - "项目已确认使用 Penpot"
-  - "目标是本地 macOS 磁盘"
-```
-
-### conflicts（必需）
-
-定义与其他 Skill 的职责边界，解决路由歧义。
-
-#### 格式
-
-```yaml
+  - "本轮明确指定 Claude Code 为历史来源，或显式调用 resume-claude"
 conflicts:
-  other-skill-name: "职责边界说明：A负责X；B负责Y"
-```
-
-#### 数量指导
-
-| 优先级 | conflicts 数量 |
-|--------|--------------|
-| High | 1-3 个 |
-| Medium | 1-3 个 |
-| Low | 3-6 个（平均 3.95）|
-
-<Aside type="note">
-**Low 优先级必须压住 High/Medium**：Low 优先级 Skill 需要更多 conflicts 来避免误触发，明确指出哪些场景应该用更高优先级的 Skill。
-</Aside>
-
-#### 编写原则
-
-1. **说明职责边界，不只是列出名字**
-
-```yaml
-# ✅ 清晰的边界
-conflicts:
-  frontend-polish: "frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化"
-
-# ❌ 只列名字
-conflicts:
-  frontend-polish: "相关 Skill"
-```
-
-2. **包含决策依据**
-
-```yaml
-conflicts:
-  crud-development: "明确 CRUD 业务时优先使用 crud-development；复杂业务逻辑用 universal-development"
-```
-
-3. **Low 优先级指回 High/Medium**
-
-```yaml
-# universal-development (Low)
-conflicts:
-  dev: "dev 负责完整纵向功能；universal-development 是无专业 Skill 覆盖时的兜底"
-  crud-development: "标准 CRUD 优先用 crud-development"
-  api-development: "API 契约和实现优先用 api-development"
-```
-
-#### 典型冲突场景
-
-**1. 新建 vs 优化**
-
-```yaml
-# frontend-design
-conflicts:
-  frontend-polish: "frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化"
-
-# frontend-polish
-conflicts:
-  frontend-design: "frontend-polish 负责已有页面优化；新页面设计用 frontend-design"
-```
-
-**2. 范围变更 vs 新需求**
-
-```yaml
-# change-impact-analysis
-conflicts:
-  product-manager: "change-impact-analysis 负责已有范围的变更；新需求用 product-manager"
-```
-
-**3. 生成器 vs 手工实现**
-
-```yaml
-# crud (生成器)
-conflicts:
-  crud-development: "crud 负责代码生成；手工实现用 crud-development"
-```
-
-**4. 兜底 vs 专业**
-
-```yaml
-# universal-development (兜底)
-conflicts:
-  dev: "dev 负责完整纵向功能"
-  crud-development: "CRUD 优先用 crud-development"
-  api-development: "API 优先用 api-development"
-  database-design: "数据库设计优先用 database-design"
-  ui-pc: "PC 界面优先用 ui-pc"
-  security-guard: "安全防护优先用 security-guard"
-```
-
-### not_for（推荐）
-
-明确列出不适用的场景，帮助快速排除错误匹配。
-
-```yaml
+  resume-codex: "按历史来源选择；当前使用的客户端不决定历史来源"
+  next: "只继续当前 TODO 时使用 next，不自动读取另一段历史"
 not_for:
-  - "新需求定义（使用 product-manager）"
-  - "全新项目启动（使用 task-todo-workflow）"
-  - "代码生成（使用对应生成器 Skill）"
-```
-
-<Aside type="tip">
-**Low 优先级必需**：Low 优先级 Skill 的 `not_for` 应该逐条指向对应的专业 Skill，形成清晰的替代路由。
-</Aside>
-
-### related_skills（必需）
-
-定义 Skill 之间的依赖和协作关系。
-
-#### 结构
-
-```yaml
+  - "恢复旧进程、登录会话或运行中命令"
 related_skills:
-  before: [dependency-skill]      # 通常在这些 Skill 之后执行
-  after: [next-skill]             # 完成后自动路由到这些 Skill
-  complement: [collaborative-skill]  # 可以在执行过程中调用
+  after: [next, dev]
+  complement: [project-details]
+  alternative: [resume-codex]
 ```
 
-#### before - 前置依赖
+| 字段 | 用途 | 维护要点 |
+| --- | --- | --- |
+| `category`、`tags` | 组织能力与检索主题 | 沿用已有类别，按实际职责填写 |
+| `priority` | 本仓库的优先级声明与文档分组 | 当前目录使用 `critical`、`high`、`medium`、`low`；不等于客户端固定评分或抢占保证 |
+| `triggers` | 常见请求表达 | 带上任务对象和动作，不靠堆同义词补救模糊职责 |
+| `gates` | 适用前提 | 使用能从请求、仓库或现有产物核对的条件 |
+| `conflicts` | 相邻 Skill 的职责边界 | 写明选择依据，不能只列“相关 Skill” |
+| `not_for` | 排除场景与替代入口 | 指向实际存在且职责适用的能力 |
+| `related_skills` | 前置、后续、协作与替代关系 | 引用存在的 Skill；关系声明本身不自动执行后续任务 |
 
-列出通常在当前 Skill 之前执行的 Skill。
+YAML 的多行列表与行内数组都可以表示 `triggers.zh`、`triggers.en` 等列表。它们只是序列的两种写法，没有固定条目数或不同的路由增益。
 
-```yaml
-# product-manager
-related_skills:
-  before: [task-todo-workflow]  # 先初始化 TODO
-```
+`related_skills.before` 表示通常的前置协作，`after` 表示可能的后续工作，`complement` 表示配合能力，`alternative` 表示替代入口。实际执行仍取决于当前任务、已批准范围和授权。
 
-#### after - 后续路由
+## 描述与边界怎么写
 
-列出当前 Skill 完成后应该进入的 Skill，支持自动路由。
+关键限制要出现在 `description` 中，不能只藏在很后面的正文里。
 
-```yaml
-# product-manager
-related_skills:
-  after: [architecture-design, tech-decision, project-manager]
-```
+| 容易引起歧义的描述 | 更准确的写法 |
+| --- | --- |
+| 优化性能，让开发更快 | 按运行指标排查接口、SQL、页面加载、CPU 和内存性能；催促开发进度不触发 |
+| 测试覆盖与测试用例 | 仅在本轮明确要求写、补或修改测试源码时实施测试；运行已有检查不触发 |
+| 继续上次任务 | 读取并接续明确来源的历史会话；当前 TODO 续作不读取其他会话 |
+| 提供常用工具 | 从目标仓库、标准库和已有依赖查找可复用 API；不负责通用软件推荐 |
 
-**自动路由示例**：
+`gates` 需要描述事实，例如“目标是客户端共享状态，并已定位现有 Store”，而不是“用户需要帮助”。`conflicts` 则回答在相邻能力之间如何选择，例如 `store-pc` 处理客户端状态，后端持久化交给 `database-ops`。
 
-```
-product-manager 执行完成
-  ↓
-检查 related_skills.after
-  ↓
-自动触发 architecture-design
-  ↓
-architecture-design 执行完成
-  ↓
-检查 related_skills.after
-  ↓
-自动触发 tech-decision
-```
+## 客户端专有字段与调用
 
-#### complement - 协作 Skill
+| 客户端 | 显式调用 | 专有控制 |
+| --- | --- | --- |
+| Claude Code | `/skill-name` | `disable-model-invocation: true` 可让显式工作流不进入模型常驻清单 |
+| Codex | `$skill-name`；`/skills` 用于浏览 | `agents/openai.yaml` 中的 `policy.allow_implicit_invocation: false` 控制隐式调用 |
 
-列出可以在执行过程中调用的 Skill（不会自动触发）。
+这些配置不能互相套用。Codex 的 `agents/openai.yaml` 不替代 `SKILL.md`，也不是 Claude Code 的配置文件。各自发现目录和注册方式见[安装与配置](/skills/getting-started/)。
 
-```yaml
-# product-manager
-related_skills:
-  complement: [brainstorm, grilling, product-discovery]
-```
+## 维护与验证
 
-### priority（必需）
+创建或更新 Skill 内容时，先按 [`skill-creator`](/skills/skills-reference/medium/skill-creator/) 或 [`skill-optimizer`](/skills/skills-reference/medium/skill-optimizer/) 处理。每个 Skill 是独立分发单元，安装后必读的脚本、规则和资源必须随本目录分发，不能依赖兄弟 Skill 的相对路径。
 
-Skill 的优先级，影响路由评分。
-
-**可选值**：
-- `critical` - 最高优先级（1 个）
-- `high` - 高优先级（19 个）
-- `medium` - 中优先级（30 个）
-- `low` - 低优先级（38 个）
-- `fallback` - 兜底优先级（7 个）
-
-**优先级评分**：
-- critical: 100 分
-- high: 90 分
-- medium: 70 分
-- low: 40 分
-- fallback: 10 分
-
-## 最佳实践
-
-### 1. 从用户视角设计触发词
-
-❌ 技术视角：
-```yaml
-triggers:
-  zh:
-    - 执行契约变更影响分析
-    - 范围变更传播
-```
-
-✅ 用户视角：
-```yaml
-triggers:
-  zh:
-    - 需求改了
-    - 需求变了
-    - 加一个字段
-```
-
-### 2. gates 要可验证
-
-❌ 模糊：
-```yaml
-gates:
-  - "需要设计"
-  - "有页面"
-```
-
-✅ 可验证：
-```yaml
-gates:
-  - "尚未有页面实现"
-  - "已有产品定义或设计意图"
-  - "需要输出可实施的 DesignContract"
-```
-
-### 3. conflicts 要说明决策依据
-
-❌ 只列名字：
-```yaml
-conflicts:
-  other-skill: "相关"
-```
-
-✅ 说明边界：
-```yaml
-conflicts:
-  other-skill: "current-skill 负责 X；other-skill 负责 Y"
-```
-
-### 4. Low 优先级要压住 High/Medium
-
-```yaml
-# universal-development (Low)
-triggers:
-  zh:
-    - 开发           # 通用词汇
-    - 实现
-    - 写代码
-gates:
-  - "已扫描完整 Skill 清单且没有任何专业 Skill 或 dev 覆盖当前场景"
-conflicts:
-  dev: "dev 负责完整纵向功能；universal-development 是兜底"
-  crud-development: "标准 CRUD 优先用 crud-development"
-  api-development: "API 开发优先用 api-development"
-  database-design: "数据库设计优先用 database-design"
-  ui-pc: "PC 界面优先用 ui-pc"
-  security-guard: "安全防护优先用 security-guard"
-not_for:
-  - "标准 CRUD（使用 crud-development）"
-  - "API 开发（使用 api-development）"
-  - "数据库设计（使用 database-design）"
-  - "PC 界面（使用 ui-pc）"
-  - "安全防护（使用 security-guard）"
-```
-
-## 验证清单
-
-创建或修改 Skill frontmatter 后，检查：
-
-- [ ] `name` 与目录名完全一致
-- [ ] `description` 是一句话（60-150 字）
-- [ ] `triggers.zh` 至少 4-8 个，包含口语化表达
-- [ ] `triggers.en` 至少 3-6 个
-- [ ] `gates` 有 2-3 个可验证条件
-- [ ] `conflicts` 至少 1-3 个，说明了职责边界
-- [ ] `not_for` 列出了不适用场景（Low 优先级必需）
-- [ ] `related_skills` 包含 before/after/complement
-- [ ] `priority` 符合 Skill 的实际重要性
-- [ ] YAML 语法正确，无缩进错误
-- [ ] 所有引用的 Skill 名称都存在
-
-## 验证工具
+1. 核对 YAML、目录名、描述和直接引用资源。
+2. 与真实重叠的相邻 Skill 做一次语义 Review，检查正向请求、排除场景和授权边界。
+3. frontmatter、description 或清单变化时，按 `add-skill` 流程在 Skill 源仓库执行一次索引同步：
 
 ```bash
-# 验证 frontmatter 结构和 SKILLS.md 同步
-node add-skill/scripts/validate-skill-catalog.mjs --check
-
-# 生成路由上下文并验证
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 更新 SKILLS.md（frontmatter 变化后）
 node add-skill/scripts/validate-skill-catalog.mjs --write
 ```
 
-## 下一步
+目录 validator 会先确保 Runtime Hook 和当前 CLI 的远端 Penpot MCP 接入，因此它不是纯只读校验。只修改文档站或普通 Skill 正文时，不因此运行注册流程。需要把 Skill 接入指定客户端时，使用[安装与配置](/skills/getting-started/)中的完整命令。
 
-- [路由机制](/skills/core-concepts/routing/) - 了解三层路由如何工作
-- [创建新 Skill](/skills/advanced/creating-skills/) - 如何创建符合规范的新 Skill
-- [路由调试](/skills/advanced/routing-debug/) - 如何调试路由问题
+高碰撞职责变化可以更新已有行为场景；目录和静态语义检查不能证明真实效果。评测输入、命令和结论边界见[评估与验证边界](/skills/advanced/performance-metrics/)。

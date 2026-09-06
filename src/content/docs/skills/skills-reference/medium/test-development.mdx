@@ -1,291 +1,46 @@
 ---
-title: 测试代码编写（test-development）
-description: 仅在用户本轮明确要求时，编写或修改最小范围的测试代码，并把运行结果按证据等级如实报告
-order: 44
+title: 测试源码编写 - test-development
+description: 仅在用户本轮明确要求写、补或修改测试源码时实施最小测试代码；运行测试、分析失败或查看覆盖率不触发。
+sidebar:
+  order: 23
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+## 用途
 
-## 概述
+`test-development` 只在用户本轮明确要求写、补或修改测试源码时实施最小测试改动，包括相关 fixture、快照和配套资产。运行已有检查、分析测试失败或查看覆盖率不触发它。
 
-大多数测试债不是"测得太少"欠出来的，是"没人要求却顺手补了一堆低价值断言"堆出来的。那些断言锁死实现细节，改一行生产代码挂五个测试，最后整套测试变成没人敢信也没人敢删的负担。
+## 如何表达请求
 
-`test-development` 用一个很窄的入口挡住这件事：**你这一轮开口要测试，它才动手**。开口之后，它替你决定的是——测哪一层、扩已有文件还是新建、跑出来的结果能支持什么说法。
-
-它不设计测试方案（那是 [test-strategy](/skills/skills-reference/medium/test-strategy/)），不找缺陷（那是 [code-review](/skills/skills-reference/high/code-review/)），也不会因为测试照出一个生产 Bug 就顺手把生产代码改了。
-
-## 什么时候用
-
-| 你会这样说 | 场景 |
+| 请求 | 是否进入测试源码实施 |
 | --- | --- |
-| "帮我写个单测" / "写测试" | 明确要新增测试代码 |
-| "给这个接口补个集成测试" | 点名了层级和目标 |
-| "再加两个用例，把空值和超长也覆盖上" | 往已有测试文件里加场景 |
-| "这个测试本身写错了，改一下" | 修测试自身，不动生产代码 |
-| "把这个 fixture 换成 xxx" | 明确要改测试资产 |
-| "写个 API 测试验证鉴权拦不拦得住" | 点名 Controller / API 层 |
+| 给订单状态转换补单元测试代码 | 是，按指定被测对象实施 |
+| 修改这个错误的测试断言 | 是，先核对实际契约 |
+| 给该接口追加鉴权集成测试 | 是，复用已有测试框架与目录 |
+| 运行已有测试，不新增文件 | 否，直接执行现有命令 |
+| 看一下为什么测试失败 | 否，先诊断原因 |
+| 设计一个测试方案 | 否，使用 [`test-strategy`](/skills/skills-reference/medium/test-strategy/) |
 
-<Aside type="danger">
-它不会自己找理由动手。覆盖率数字不好看、CI 挂了红灯、Review 的 finding 里写着"缺少测试"、TODO 上列着一条测试事项——这些都是**理由**，不是你这一轮的要求。
-
-差别在后果：自动补出来的测试没有人在意它证明了什么，通过与否都不影响任何判断，但它会一直占着运行时间、一直在重构时挡路。所以被误触发时它的正确反应是停手说明边界，而不是"顺手写了，你看看"。
-
-反过来也一样：你说"先别写测试""只跑一下现有的""看看覆盖率""这个测试为什么挂了"，都不进这个 Skill。
-</Aside>
-
-## 什么时候不要用
-
-- **要决定测哪些层、设计哪些场景** → [test-strategy](/skills/skills-reference/medium/test-strategy/)。那边出方案，这边写代码，两边的授权是分开的。
-- **要找缺陷** → [code-review](/skills/skills-reference/high/code-review/)。
-- **要在真实浏览器里走一遍业务流程** → [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/)。
-- **只想跑一下现有测试看结果** → 不用这个 Skill，直接跑命令。
-- **要写业务代码** → [universal-development](/skills/skills-reference/low/universal-development/) 或对应专业 Skill。
-- **要定产品需求** → [product-manager](/skills/skills-reference/critical/product-manager/)。
-
-## 前置条件
-
-除了"你这一轮开口"之外，还有两件事决定它能不能真的写出有用的测试：
-
-**得有被测对象。** 没有实现、也没有明确契约的时候写测试，产出的是模板不是验证——它长得像测试，但什么都没证明。
-
-**测试栈得能跑起来。** 找不到可执行的测试框架和目录约定时，它**不会**生成一份看起来能用的模板糊过去，而是直接告诉你缺什么。这一条比它听起来重要：一份跑不起来的测试文件留在仓库里，比没有更糟。
-
-如果这次测试属于某个正在做的功能，它只在那个功能已划定的改动范围内落文件——测试、fixture、快照都算在内，不会散到别处去。独立的一次性测试请求就按你给的范围来，不虚构任务。
+覆盖率不足、Review finding、CI 门禁或旧 TODO 的测试事项不替代本轮测试源码要求。“不要写测试”也不会因句子中出现“写测试”而被忽略。
 
 ## 使用示例
 
-### 场景 1：给一段纯逻辑写单测
-
-**你的输入**：
-
 ```text
-帮 PriceCalculator.applyDiscount 写个单测，重点是折扣叠加和边界。
+为当前订单取消规则补单元测试代码，覆盖允许取消、禁止取消与重复取消。
+复用仓库已有框架和测试文件，依据实际契约编写，并运行本次修改的测试。
 ```
 
-**你会拿到的产出**：
+## 实施过程
 
-```text
-新增：src/test/java/com/acme/pricing/PriceCalculatorTest.java
-     （复用仓库已有的 JUnit 5 + AssertJ，未引入新依赖）
-```
+1. 明确被测对象、已批准契约和本轮授权的测试范围。
+2. 读取现有测试目录、框架、fixture、隔离方式和运行命令。
+3. 选择有判别力的层级与断言，优先扩展已有测试，不机械镜像实现。
+4. 控制数据库、网络、时间、账号和资源副作用，沿用现有隔离与清理方式。
+5. 执行受影响测试，报告通过、失败与未执行内容，并按实际证据说明边界。
 
-```java
-class PriceCalculatorTest {
+找不到可运行测试栈时先说明缺口，不生成无法执行的模板。测试暴露生产问题时交给对应实现 Owner，不能把单独的测试请求扩成未授权业务改动。
 
-    private final PriceCalculator calculator = new PriceCalculator();
+## 结果怎么判断
 
-    @Test
-    void 单张满减券按面额直接扣减() {
-        Money result = calculator.applyDiscount(Money.ofYuan("100.00"),
-                List.of(Coupon.fixed("20.00")));
-        assertThat(result).isEqualTo(Money.ofYuan("80.00"));
-    }
+测试应能区分目标行为正确与错误，断言来自契约而非当前实现的偶然细节。单元测试不证明跨模块集成，mock 接口测试不证明真实网关、数据库或页面已联通。
 
-    @Test
-    void 满减与折扣叠加时先折扣后满减() {
-        Money result = calculator.applyDiscount(Money.ofYuan("100.00"),
-                List.of(Coupon.percent("0.9"), Coupon.fixed("20.00")));
-        assertThat(result).isEqualTo(Money.ofYuan("70.00"));
-    }
-
-    @ParameterizedTest
-    @CsvSource({ "0.00, 0.00", "0.01, 0.01", "19.99, 19.99" })
-    void 折后金额不足券面额时结果归零而不是负数(String origin, String ignored) {
-        Money result = calculator.applyDiscount(Money.ofYuan(origin),
-                List.of(Coupon.fixed("20.00")));
-        assertThat(result).isEqualTo(Money.ZERO);
-    }
-}
-```
-
-```text
-## 运行
-mvn -q -Dtest=PriceCalculatorTest test
-→ Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
-
-## 证据边界
-覆盖纯计算逻辑与金额边界。
-不证明：优惠券的查询与失效判断、并发下的库存扣减、下单接口的整体行为。
-```
-
-注意最后那段。测试通过的措辞和它实际证明的范围是对齐的——这一条贯穿本 Skill 所有产出。
-
-### 场景 2：给接口补一个鉴权测试
-
-**你的输入**：
-
-```text
-给 POST /api/v1/orders 补个 API 测试，验证没登录和越权两种情况都拦得住。
-```
-
-**你会拿到的产出**：
-
-```text
-扩展：src/test/java/com/acme/order/OrderControllerTest.java
-     （已有该文件，追加 2 个用例，未新建测试类）
-```
-
-```java
-@Test
-void 未携带令牌时返回401且不落库() throws Exception {
-    mockMvc.perform(post("/api/v1/orders")
-                    .contentType(APPLICATION_JSON)
-                    .content(validPayload()))
-            .andExpect(status().isUnauthorized());
-
-    assertThat(orderMapper.countAll()).isZero();
-}
-
-@Test
-void 携带其他租户令牌时返回403且不落库() throws Exception {
-    mockMvc.perform(post("/api/v1/orders")
-                    .header(AUTHORIZATION, tokenOf(TENANT_B, "user-9"))
-                    .contentType(APPLICATION_JSON)
-                    .content(payloadForTenant(TENANT_A))
-                    )
-            .andExpect(status().isForbidden());
-
-    assertThat(orderMapper.countByTenant(TENANT_A)).isZero();
-}
-```
-
-```text
-## 运行
-mvn -q -Dtest=OrderControllerTest test
-→ Tests run: 11, Failures: 0
-
-## 隔离方式
-每个用例在事务中执行并回滚；租户数据用独立前缀，跑完可核对已清理。
-
-## 证据边界
-这是 MockMvc 层的鉴权契约测试。
-不证明：网关层的真实令牌校验、跨服务调用链、生产环境的权限配置。
-```
-
-### 场景 3：测试自己写错了
-
-**你的输入**：
-
-```text
-UserServiceTest 里那个"停用用户不能登录"的用例现在挂了，
-但我确认生产逻辑是对的，是测试写错了。
-```
-
-**你会拿到的产出**：
-
-```text
-## 定位
-测试断言的是 login() 返回 null；
-生产实现在半年前改为抛 AccountDisabledException（有对应的需求变更记录）。
-挂的原因是测试没跟上契约变化，不是实现回退。
-
-## 修改（只动测试）
-src/test/java/.../UserServiceTest.java
-- assertThat(service.login(disabled)).isNull();
-+ assertThatThrownBy(() -> service.login(disabled))
-+         .isInstanceOf(AccountDisabledException.class)
-+         .hasMessageContaining("已停用");
-
-## 未做
-未修改 UserService 及任何生产代码；未放宽其他断言；未跳过用例。
-
-## 运行
-mvn -q -Dtest=UserServiceTest test → Tests run: 8, Failures: 0
-```
-
-<Aside type="caution">
-它不会靠削弱断言、扩大 mock 范围或加 `@Disabled` 把测试弄绿。测试和生产实现冲突时，先核对哪一边是对的：契约真变了就改测试，实现真错了就报告缺陷。把断言改松是这两条路之外的第三条路，走这条路的代价是以后这个测试再也照不出问题。
-</Aside>
-
-### 场景 4：测试照出了生产 Bug
-
-```text
-你：给导出功能写个测试，覆盖空结果集。
-
-它：测试已写好（ExportServiceTest，3 个用例），其中 1 个失败——
-    这是生产缺陷，不是测试问题：
-
-    空结果集时 buildWorkbook() 未写表头就 close()，
-    产生 0 字节文件；下游按「文件存在即成功」判断，不会报错。
-    位置 ExportService.java:88
-
-    我没有改生产代码。要修的话说一声，我按最小改动处理；
-    或者你也可以先把这个用例标成已知缺陷。
-```
-
-### 场景 5：它停手的样子
-
-```text
-你：CI 覆盖率掉到 62% 了，补一下测试。
-
-它：这一轮我不会写测试代码——覆盖率数字本身不构成写测试的要求。
-
-    如果你要的是"把覆盖率提上去"，我可以先给你看缺口在哪：
-    未覆盖集中在 3 个类，其中 2 个是 DTO 的 getter。
-    真正值得测的是 InventoryLock（并发扣减，0 覆盖）。
-
-    你说一句"给 InventoryLock 写测试"，我就开始。
-```
-
-## 按需读的参考
-
-Skill 目录里有三份，只读当次相关的：
-
-- `references/test-lifecycle-and-evidence.md` — 测试资产留多久、临时产物怎么清、结论能说到哪
-- `references/dummy-data-design.md` — 合成 CSV / JSON / SQL / 表格 fixture 的安全造数方式
-- `references/junit5-spring-guide.md` — **只有**项目确认在用 JUnit 5、Spring Boot Test、Mockito 或 MockMvc 时才读
-
-其他技术栈以你仓库里的配置和相邻测试为准。Java 那一套的路径、注解和命令不会被套到 Node、Go 或 Python 项目上。
-
-## 与其他 Skill 的关系
-
-**上游**：[test-strategy](/skills/skills-reference/medium/test-strategy/)（先有场景和证据等级设计，但那边本身不构成写代码的授权）
-
-**下游**：[code-review](/skills/skills-reference/high/code-review/)
-
-**协作**：[universal-development](/skills/skills-reference/low/universal-development/)、[real-browser-automation](/skills/skills-reference/medium/real-browser-automation/)
-
-```text
-你明确要求写测试
-      ↓
-test-strategy（可选，先定场景与证据等级）
-      ↓
-test-development → code-review
-      ↕
-universal-development（测试照出生产缺陷，需另外授权才修）
-real-browser-automation（需要真实浏览器层的证据时）
-```
-
-结果直接交回功能负责人。它不提交 Git、不发布、不做破坏性操作。
-
-## 常见坑
-
-**用测试数量证明质量。** 二十个断言锁死 getter，不如一个能真正照出并发问题的用例。它默认扩已有测试文件，也不按"一个接口一个测试类"机械分文件——就是为了避开这种膨胀。
-
-**措辞比证据大一号。** 只 mock 了上传通道，写成"对象存储全链路已验证"；只跑了单测，写成"功能已验收"。这类措辞会让后面每一个人都少做一次真实验证，出事时又完全查不到是哪一步没做。产出里的"证据边界"段落就是用来防这个的。
-
-**为了让 CI 变绿重录快照。** 快照只在输出结构确实稳定、且有需求或已批准设计能解释这次变化时才更新。盲目重录等于把断言删了但看起来还在。
-
-**在测试里用真数据。** 生产个人信息、真实 Token、能打到真人的手机号和邮箱一律不进测试数据。第三方支付、短信、对象存储默认走项目已有的 sandbox 或 fake，真调用要你明确授权且环境已确认。
-
-**声称"不污染数据"但拿不出隔离方式。** 事务回滚、独立 schema、带唯一前缀并且能核对清掉了——三者有其一才能这么说。
-
-## 最佳实践
-
-- **说清你要证明什么。** "覆盖并发扣减不会超卖"比"给这个类写测试"能得到有用得多的用例。
-- **想要临时测试就明说。** 默认是保留的。只有你说"临时用，跑完删掉"，它才按临时模式处理，并且只删本轮预先说好的那些路径。
-- **让它顺带跑一遍。** 没运行的测试它只会说"已编写，未验证"——这个措辞是准确的，但对你没用。
-- **发现它要改生产代码时拦住。** 除非你同时授权了修复，测试暴露的缺陷应该以报告形式给你，由你决定怎么处理。
-
-<Aside type="note">
-怎么算真的完成了：每个新增或改动的测试都能对上你这一轮的要求；断言指向真实契约而不是实现细节；结论的措辞和实际跑到的层级严格一致；工作区里没有本轮不该出现的生产代码改动。
-</Aside>
-
-## 下一步
-
-- [test-strategy](/skills/skills-reference/medium/test-strategy/) - 先想清测哪些层、哪些场景
-- [code-review](/skills/skills-reference/high/code-review/) - 写完之后的那一次审查
-- [real-browser-automation](/skills/skills-reference/medium/real-browser-automation/) - 需要真实浏览器层证据
-- [bug-detective](/skills/skills-reference/high/bug-detective/) - 测试挂了但不知道根因
-- [universal-development](/skills/skills-reference/low/universal-development/) - 修测试照出来的生产缺陷
-
+报告修改路径、运行命令、实际结果与覆盖边界；没有运行就明确未运行，不预填“通过”。真实浏览器业务流程使用 [`real-browser-automation`](/skills/skills-reference/medium/real-browser-automation/)，完整 diff 审查使用 [`code-review`](/skills/skills-reference/high/code-review/)。

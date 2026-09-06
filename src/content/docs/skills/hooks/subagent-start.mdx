@@ -1,7 +1,8 @@
 ---
 title: SubagentStart Hook
 description: 让 Subagent 拿到和主 Agent 一致的项目上下文
-order: 45
+sidebar:
+  order: 5
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -16,7 +17,7 @@ import { Aside } from '@astrojs/starlight/components'
 
 上下文是按当前任务挑选的，不是把整个文件塞进去。
 
-**你能观察到的效果**：Subagent 不会因为"不知道项目用什么"而引入别的框架或库，也不会去改写集外的文件。
+这些提示帮助 Subagent 核对技术栈与修改边界，但不能替代读取实际源码或检查 diff，也不是逐文件写入锁。
 
 <Aside type="note">
 主 Agent 的上下文由 [UserPromptSubmit Hook](/skills/hooks/user-prompt-submit/) 注入，两者读的是同一个项目记忆和同一份 TODO，所以内容一致。
@@ -30,7 +31,7 @@ import { Aside } from '@astrojs/starlight/components'
 - 并行启动多个 Subagent
 - Subagent 内部再启动更深一层的 Subagent
 
-层级再深也会注入，不会因为嵌套而丢上下文。
+具体是否触发取决于客户端是否为该次委派发出 SubagentStart 事件，主 Agent 仍应明确传递任务边界。
 
 ```mermaid
 graph LR
@@ -58,13 +59,13 @@ graph LR
 
 ### TODO 提醒
 
-当前 Feature 是哪个、写集包含哪些文件、AC 有哪些、下一项是什么。
+当前实例拥有的 Feature 标识与 TODO 路径，并提示回读相关写集、验收与阶段。没有已领取项时，不保证存在完整任务上下文。
 
 ## 为什么 Subagent 需要这个
 
 ### 委派子任务时
 
-主 Agent 把前端页面交给 Subagent 做。Subagent 拿到上下文后知道项目是 Vue 3 + Element Plus，只能改写集内的页面文件，不会顺手改别处。
+主 Agent 把前端页面交给 Subagent 时，应明确真实框架、可复用组件、页面/API 契约和互斥写集，并让子 Agent 回读对应源码。
 
 ### 并行执行时
 
@@ -72,10 +73,10 @@ graph LR
 
 ### 不继承对话的 Subagent
 
-`Agent` 工具的 `fork` 类型会继承主 Agent 的完整对话历史；不指定类型的普通 Subagent 不继承。
+对话是否继承由客户端和委派工具参数决定，不由本 Hook 保证。使用前按当前 Harness 的工具说明核对。
 
 <Aside type="caution">
-普通 Subagent 没有主 Agent 的对话历史，项目上下文完全依赖这个 Hook。Hook 没生效时它就是在裸跑。
+不继承对话的子 Agent 更需要完整的任务说明。主 Agent 应显式传递目标、已确认边界、写集、验收和必要来源，不能只依赖 Hook 摘要。
 </Aside>
 
 ## 委派时的写法建议
@@ -128,7 +129,7 @@ Subagent 停止时会通过 [SubagentStop Hook](/skills/hooks/subagent-stop/) �
 
 ```bash
 # 1. 确认 Hook 已安装
-node <skills-root>/runtime-hooks/scripts/install.mjs --check --json
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check --json
 
 # 2. 确认项目记忆存在且不为空
 ls PROJECT-MEMORY.md
@@ -138,7 +139,7 @@ ls PROJECT-MEMORY.md
 
 ```bash
 # Hook 没装就装一次
-node <skills-root>/runtime-hooks/scripts/install.mjs
+node "<skills-root>/runtime-hooks/scripts/install.mjs"
 ```
 
 Codex 需要额外信任一次 Hook：
@@ -174,7 +175,7 @@ find docs/ -path "*/tasks/todo/*.md"
 
 ```bash
 # 1. 确认 PreToolUse Hook 已安装
-node <skills-root>/runtime-hooks/scripts/install.mjs --check
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check
 ```
 
 主 Agent 收口时对账写集，拒绝写集外的改动。如果确实需要扩大范围，先更新 TODO 里的写集声明，而不是默认接受。
@@ -182,15 +183,14 @@ node <skills-root>/runtime-hooks/scripts/install.mjs --check
 ## 环境变量
 
 ```bash
-# 跳过部分 Hook
-export AGENT_RUNTIME_HOOKS_DISABLED=1
-
-# 自定义开发者 ID（仅在 Git identity 不可用时生效）
+# 自定义开发者 ID（仅在 Git 和系统登录用户名都不可用时兜底）
 export AGENT_DEVELOPER_NAME=alice-chen
 
 # 启用 Skill 发现兜底（旧客户端）
 export AGENT_SKILL_DISCOVERY_FALLBACK=1
 ```
+
+`AGENT_RUNTIME_HOOKS_DISABLED=1` 不会关闭本页的上下文脚本。
 
 ## 下一步
 

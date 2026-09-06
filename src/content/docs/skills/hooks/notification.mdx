@@ -1,14 +1,15 @@
 ---
 title: 中文语音通知
 description: 三类中文提示音的含义、开关方式和听不到声音时的排查
-order: 48
+sidebar:
+  order: 8
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
 ## 这个功能帮你做什么
 
-Agent 一轮回复结束时会播一段中文提示音，你不用盯着屏幕也知道当前是"该我出手了"还是"整件事做完了"。
+通知脚本根据客户端事件和回复标记选择中文提示音，区分需要人工接续、普通回复结束与任务完成。
 
 提示音由 Agent 自己按回复性质选择，你不需要做任何标注或手工触发。
 
@@ -21,7 +22,7 @@ Agent 一轮回复结束时会播一段中文提示音，你不用盯着屏幕�
 | 任务完成 | 一件事真正收尾：代码写完、验证通过、Review 通过、已提交并推送，且没有剩余必做事项 | 可以开始下一个任务 |
 
 <Aside type="note">
-听到"任务完成"就意味着代码已经推到远端了。如果只是代码写完还没验、或者验完还没推，响的会是"回复完成"。
+提示音只是通知分类，不是交付证明。任务完成标记只应在验证、Review 和必要的 Git 交付完成且没有剩余必做事项时使用，仍需以真实证据判断。
 </Aside>
 
 ### 举例
@@ -58,7 +59,7 @@ Agent 一轮回复结束时会播一段中文提示音，你不用盯着屏幕�
 
 | 客户端 | 提示音接入位置 |
 |--------|--------------|
-| Claude Code | 会话停止事件，配置在 `~/.claude/settings.json` |
+| Claude Code | `PermissionRequest` 确认事件，配置在 `~/.claude/settings.json`；当前 Stop 交给 TODO 脚本 |
 | Codex | 用户级 `notify` 配置，在 `~/.codex/config.toml` |
 
 两端都由安装器写入，正常安装后不需要手工改这两个文件。
@@ -115,10 +116,10 @@ espeak -v zh "需要您确认" -w confirmation.wav
 echo $AGENT_COMPLETION_SOUND
 
 # 2. 自带音频文件在不在
-ls <skills-root>/runtime-hooks/audio/
+ls "<skills-root>/runtime-hooks/audio/"
 
 # 3. 手动播一下，确认系统能出声
-afplay <skills-root>/runtime-hooks/audio/confirmation.wav
+afplay "<skills-root>/runtime-hooks/audio/confirmation.wav"
 
 # 4. 确认系统音量没静音
 ```
@@ -128,8 +129,8 @@ afplay <skills-root>/runtime-hooks/audio/confirmation.wav
 | 排查结果 | 处理 |
 |---------|------|
 | 第 1 步输出 `0` | `unset AGENT_COMPLETION_SOUND` |
-| 第 2 步目录为空 | 重新跑一次安装器 `node <skills-root>/runtime-hooks/scripts/install.mjs` |
-| 第 3 步能听到、Agent 回复时听不到 | 确认 Hook 已安装：`node <skills-root>/runtime-hooks/scripts/install.mjs --check`；Codex 下还要 `codex` 里执行 `/hooks trust all` |
+| 第 2 步目录为空 | 先核对并补齐仓库音频资产；安装器不会生成缺失音频 |
+| 第 3 步能听到、Agent 回复时听不到 | 核对客户端通知通道和 Hook 安装状态；Claude Code 默认只接确认音频，Codex 走 `notify` |
 | 第 3 步也听不到 | 系统音频问题，与本功能无关 |
 
 提示音在 macOS 上开箱即用。其他平台如果始终听不到，把它当可选功能关掉即可，不影响任何开发流程。
@@ -139,10 +140,10 @@ afplay <skills-root>/runtime-hooks/audio/confirmation.wav
 播放报错或完全无声时先确认文件本身：
 
 ```bash
-file <skills-root>/runtime-hooks/audio/confirmation.wav
+file "<skills-root>/runtime-hooks/audio/confirmation.wav"
 ```
 
-正常应该识别为 `RIFF (little-endian) data, WAVE audio`。不是的话重新跑安装器，或用上面的方式换成自定义音频。
+正常应识别为 `RIFF (little-endian) data, WAVE audio`。格式错误时核对仓库资产，或换成有效的自定义音频。
 
 ## 下一步
 

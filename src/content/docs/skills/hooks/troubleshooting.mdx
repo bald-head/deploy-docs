@@ -1,574 +1,200 @@
 ---
 title: Hook 故障排查
 description: Runtime Hooks 常见故障的确认、修复与验证
-order: 49
+sidebar:
+  order: 9
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-本页只处理 Runtime Hooks 自身的运行时故障：装没装上、注入了什么、为什么拦、为什么不响。Skill 发现、路由歧义、TODO 内容组织和 Git 交付流程类问题见站点级 [故障排查](/skills/troubleshooting/)。
-
-下文的脚本类命令以 Skills 仓库根目录为工作目录（默认 `~/.agent-workflow/skills`）；涉及 TODO、项目记忆和 `nul` 检查的命令要在**目标业务仓库**里执行，因为它们都从当前工作目录向上找 Git 根。每一节按"症状 → 怎么确认 → 怎么修 → 怎么验证"组织。
-
-## 三条通用诊断命令
-
-```bash
-# 1. Hook 装没装上（只读，不写任何文件）
-node runtime-hooks/scripts/install.mjs --check --json
-
-# 2. 实际注入内容与用量
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 3. 一次性健康检查：版本、配置、Skill 数量、项目记忆、TODO、MCP、环境变量
-bash runtime-hooks/scripts/health-check.sh
-```
+本页处理 Hook 自身的配置、上下文、命令判定和通知问题。Skill 发现、路由、TODO 内容与 Git 交付见 [站点级故障排查](/skills/troubleshooting/)。`<skills-root>` 是 Skills 仓库，项目记忆与 TODO 则属于当前目标 Git 仓库。
 
 | 症状 | 去哪一节 |
-|------|----------|
-| 没有上下文注入、危险命令没被拦 | [Hook 没生效](#1-hook-没生效) |
-| 每轮请求变慢、注入内容被截断 | [卡死或变慢](#2-hook-卡死或响应变慢) |
-| `git commit` 或危险命令被拒绝 | [提交或命令被拦住](#3-提交或命令被拦住) |
-| 反复要求初始化项目记忆 | [项目记忆没加载](#4-项目记忆没加载) |
-| TODO 提醒缺失、落点不对 | [TODO 提醒不对](#5-todo-提醒不对) |
-| 提示音不响或响错 | [通知音频不响或响错](#6-通知音频不响或响错) |
-| MCP 报 502 等连接错误 | [MCP 连不上](#7-mcp-连不上) |
-| 仓库里出现名为 `nul` 的文件 | [nul 文件从哪来的](#8-nul-文件从哪来的) |
+|---|---|
+| 没有上下文或 Hook 提示 | [Hook 没生效](#1-hook-没生效) |
+| 请求前停顿、注入被截断 | [卡死或变慢](#2-hook-卡死或响应变慢) |
+| 提交或写入被拒绝 | [提交或命令被拦住](#3-提交或命令被拦住) |
+| 反复要求初始化记忆 | [项目记忆没加载](#4-项目记忆没加载) |
+| TODO 提醒或落点不符 | [TODO 提醒不对](#5-todo-提醒不对) |
+| 没有声音或分类错误 | [通知音频](#6-通知音频不响或响错) |
+| MCP 连接错误 | [MCP 连不上](#7-mcp-连不上) |
+| 工作区多出 `nul` 文件 | [nul 文件](#8-nul-文件从哪来的) |
 
 ## 1. Hook 没生效
 
-**症状**：危险命令没有被拦；Stop 之后没有任何 TODO 续作提示；项目记忆反复要求初始化。
-
-### 怎么确认
-
-先看安装器的自检结果：
+先只读检查托管配置：
 
 ```bash
-node runtime-hooks/scripts/install.mjs --check --json
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check --json
 ```
 
-关注三个字段：`installed`（当前配置是否已与仓库一致）、`needsInstall`、`files[].changed`。全部 `changed: false` 说明三个落点都是最新的：
+通过条件是 `installed: true` 且 `needsInstall: false`；`files[].changed` 和 `changed` 指出差异。需要更新时运行安装器，再让客户端重新加载，详见 [安装指南](/skills/hooks/installation/)。
 
-```json
-{
-  "changed": [],
-  "files": [
-    { "changed": false, "label": "Claude Code settings.json", "path": "<HOME>/.claude/settings.json" },
-    { "changed": false, "label": "Codex hooks.json", "path": "<HOME>/.codex/hooks.json" },
-    { "changed": false, "label": "Codex config.toml notify", "path": "<HOME>/.codex/config.toml" }
-  ],
-  "installed": true,
-  "needsInstall": false
-}
-```
+`sourceVersion` 和 `versions[].installedVersion` 是 Runtime Hooks 自身的版本，来自 `runtime-hooks/VERSION` 与各客户端的 `.runtime-hook-version`，不是 Codex 或 Claude Code 的客户端版本。旧记录 `0.0.0`、损坏或缺失记录显示为未知，重新运行安装器会修复；源 `VERSION` 缺失或无效时先补齐 Skills 源码，不手填客户端版本，也不需要删除 `hooks.json`。
+
+| 客户端 | 配置文件 | 配置目录变量 |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | `CLAUDE_CONFIG_DIR` |
+| Codex | `~/.codex/hooks.json` 与 `~/.codex/config.toml` 的顶层 `notify` | `CODEX_HOME` |
+
+两端都注册 SessionStart、UserPromptSubmit、SubagentStart、PreToolUse、Stop 和 SubagentStop。PermissionRequest 只在 Claude Code 注册；Codex 通知走 `notify`。
+
+Claude Code 安装后重启会话；Codex 通过 `/hooks` 审查并信任新增或发生定义变化的 Hook。安装器使用固定 Node 路径，切换 Node 版本后需要刷新配置。
 
 <Aside type="note">
-不加 `--json` 时，"已安装且无差异"是**完全没有输出**的。没有输出不是命令失败，而是检查通过。只有需要更新时才会打印待更新条目和安装命令。
+`AGENT_RUNTIME_HOOKS_DISABLED=1` 停用 SessionStart、PreToolUse 与提示音，不会关闭上下文或 TODO 脚本。安装检查通过也不等于远端 MCP 连通。
 </Aside>
-
-再确认配置落点。两端不是同一个文件，也不是同一套事件：
-
-| 客户端 | 配置文件 | 覆盖变量 |
-|--------|----------|----------|
-| Claude Code | `~/.claude/settings.json` | `CLAUDE_CONFIG_DIR` |
-| Codex | `~/.codex/hooks.json`（Hook）+ `~/.codex/config.toml`（顶层 `notify`） | `CODEX_HOME` |
-
-安装器还会在配置目录写一份版本记录，用来和仓库版本比对：
-
-```bash
-cat runtime-hooks/VERSION
-cat ~/.claude/.runtime-hook-version
-jq -r '.hooks | to_entries[] | "\(.key): \(.value | length) 组"' ~/.claude/settings.json
-```
-
-两端实际注册的事件，差异只在通知通道：
-
-| 事件 | Claude Code | Codex |
-|------|-------------|-------|
-| SessionStart | 有 | 有 |
-| UserPromptSubmit | 有 | 有 |
-| SubagentStart | 有 | 有 |
-| PreToolUse | 有 | 有 |
-| Stop | 有 | 有 |
-| SubagentStop | 有 | 有 |
-| PermissionRequest | 有 | 无，改由 `config.toml` 的 `notify` 承担 |
-
-`PreToolUse` 只对固定的一批工具生效——Bash 类命令执行和文件写入类工具。这批之外的工具不经过命令防护与流程门禁，这是预期的。
-
-### 怎么修
-
-```bash
-# 全量安装/更新（幂等）
-node runtime-hooks/scripts/install.mjs
-
-# 只处理一端
-node runtime-hooks/scripts/install.mjs --claude-only
-node runtime-hooks/scripts/install.mjs --codex-only
-
-# 先看会改什么再决定
-node runtime-hooks/scripts/install.mjs --dry-run
-```
-
-安装器只移除自己托管的条目再追加新条目，你手写的第三方 Hook 会原样保留，重复运行不会堆积重复项。修改前会把原文件备份为 `<原文件名>.backup-YYYYMMDD-HHMMSS`（同一秒内重复备份追加 `-1`、`-2`），中途失败会回滚。加 `--no-backup` 可跳过备份。
-
-两端还各有一步"装完不等于生效"：
-
-- **Claude Code**：需要完全退出并重新启动会话，写入的用户级 Hook 才会加载。
-- **Codex**：Hook 是非托管的，安装或 Hook 定义变化后必须在会话里运行 `/hooks` 审查并信任。只改脚本内容、不改定义时哈希不变，不需要重新信任。安装器不会替你绕过客户端的信任机制。
-
-如果安装器直接报 `安装失败：运行时资产不完整：...`，说明 Skills 仓库里缺文件（脚本、行为内核或提示音音频）。缺任意一项都不会写配置，先确认工作区完整：
-
-```bash
-git status --short
-git pull origin main
-```
-
-<Aside type="caution">
-`AGENT_RUNTIME_HOOKS_DISABLED=1` **不能**关掉全部 Hook：上下文注入和 TODO 续作照常运行。要彻底停掉某个 Hook，只能删掉客户端配置里对应的条目，或恢复安装器留下的 `.backup-*` 文件。
-</Aside>
-
-### 怎么验证
-
-```bash
-# 自检恢复干净
-node runtime-hooks/scripts/install.mjs --check --json
-```
-
-重新启动会话后，确认危险命令会被拦、Stop 之后有续作提示、项目记忆不再反复要求初始化。
 
 ## 2. Hook 卡死或响应变慢
 
-**症状**：每轮请求前有明显停顿；上下文注入被截断。
+先确认耗时发生在哪个事件。上下文注入有字节预算，超限时折叠或截断并提示读取源文件；Stop 还可能等待远端 Git 核验。
 
-### 注入量超了会怎样
+常见边界：
 
-注入内容按字节封顶，超出时不是报错而是逐级折叠，最终提示你直接读取相关文件（TODO 和 `PROJECT-MEMORY.md`）。
+- 原生 Skill 发现正常时，无需开启 `AGENT_SKILL_DISCOVERY_FALLBACK=1`；兜底发现会增加目录读取。
+- `skill-catalog-context.cjs --check` 可能创建项目记忆，不是对任意当前目录都只读；测量方法见 [评估与验证边界](/skills/advanced/performance-metrics/)。
+- PreToolUse 会读取活动工作流状态；Git 查询较慢时，需要核对实际仓库与调用耗时。
+- Stop 的长超时用于状态和远端查询，不表示 Hook 正在自动 commit 或 push。
 
-看到被截断的迹象就说明注入超限了，**正确做法是按提示打开原文**，不要试图把内容塞回注入。
+`health-check.sh` 是旧版辅助汇总，部分固定路径和 MCP 判据可能过时，不能替代安装器与真实事件结果。
 
-<Aside type="caution">
-Codex 侧还有一道更紧的限制：安装器给 `UserPromptSubmit` 与 `SubagentStart` 写了 `additionalContextLimit`，它比 Hook 自身的预算更小。两端表现不一致时先查这一项。
-</Aside>
+### 行为内核校验失败
 
-### 怎么定位
+如果看到 `behavior-kernel.md 必须只包含 4–8 条简短原则`，先检查共享 Skills 仓库中的唯一内核：
 
 ```bash
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
+node "<skills-root>/runtime-hooks/scripts/skill-catalog-context.cjs" --check
 ```
 
-输出里 `budgetLimits` 是当前生效的上限，`budgetUsage` 是这次实际用掉的字节数，对照着看就知道是哪一项把总量顶上去了。
+`behavior-kernel.md` 只能包含 4–8 条非空、以 `- ` 开头的原则。原则过多时合并已有原则或移到对应 Skill 文档；不要在业务仓库新建副本，也不要删除校验来绕过。请求期间若文件缺失或损坏，Hook 会注入 `status="unavailable"` 的降级提示并成功退出，不会把每次输入拦住，也不会自动写入原则或修改源文件。修复 Skills 仓库中的唯一文件后重新运行 `--check` 和安装器，再重启客户端：
 
-`--check` 自身也是一道门禁，失败时输出 `{"ok": false, "error": "..."}` 并以退出码 2 结束。四种典型错误：
+```bash
+node "<skills-root>/runtime-hooks/scripts/skill-catalog-context.cjs" --check
+node "<skills-root>/runtime-hooks/scripts/install.mjs"
+```
 
-| 错误 | 含义 |
-|------|------|
-| `缺少 behavior-kernel.md` | 仓库资产缺失，安装器同样会拒绝安装 |
-| `behavior-kernel.md 必须只包含 4–8 条简短原则` | 行为内核被改成了不合规格式 |
-| `行为内核存在完整副本：<文件列表>` | 某个 `AGENTS.md` / `CLAUDE.md` / `SKILL.md` 把内核正文整段复制了一份，删掉副本即可 |
-| `未发现可验证的 Skill 路由清单` | 发现根下没有可解析 frontmatter 的 `SKILL.md` |
-
-### 常见根因
-
-- **项目记忆太大不是主因**。注入时每节只取与本轮问题最相关的一行，文件长度不直接决定注入量。
-- **本地 Skill 发现兜底被打开**。`AGENT_SKILL_DISCOVERY_FALLBACK=1`（或把 `AGENT_NATIVE_SKILL_DISCOVERY` 设成非真值）会让**每一轮请求**都去遍历所有发现根并逐个解析 `SKILL.md`，这是目录级 I/O。客户端已经提供原生 Skill 清单时应保持关闭。开启后如果一个 Skill 都没解析到，还会直接报 `已启用本地 Skill 发现兜底，但未发现可验证的 Skill 路由清单`。
-- **Stop 慢不等于卡死**。`Stop` 与 `SubagentStop` 的超时明显长于其它事件，这是有意留给"commit 已完成、push 与远端核验还没结束"的窗口。
-- **PreToolUse 会跑 git**。它需要读取流程门禁状态。仓库特别大或 git 本身慢时，每个工具调用都会被拖慢，而这个事件的超时很短。
-
-### 怎么修与验证
-
-精简被点出来的那一项之后重跑 `--check`，`ok: true` 且 `budgetUsage.total` 回到上限以内即可。
+`--check` 仍会严格报告格式错误；降级只用于保证请求可继续，不代表行为内核已经恢复。
 
 ## 3. 提交或命令被拦住
 
-**症状**：工具调用被拒绝，回复里出现 `危险操作已阻止：`、`提交信息违反安全约束：` 或 `研发流程门禁已阻止写入：`。
+保留完整前缀和原因，先区分三类：
 
-这三类都是**设计行为**，不是 bug。Hook 只返回一个拒绝决定和原因文本，不会改写命令，也不会替你在终端里执行。确需执行的高风险操作，应由使用者在自己的终端里手动确认执行。
+| 前缀 | 检查方向 |
+|---|---|
+| `危险操作已阻止：` | 命令目标和参数是否命中当前危险规则 |
+| `提交信息违反安全约束：` | 提交信息是否包含被禁止的 AI 署名元数据 |
+| `研发流程门禁已阻止写入：` | 活动流程阶段、状态、TODO 写入和 runtime instance |
 
-### 3.1 提交信息里的 AI 署名
+防护检查高置信度命令模式，不是完整 Shell 或 SQL 解析器。误报也应保留真实输入和对应规则证据，定向修正，不通过换邮箱、改变命令外形或关闭 Hook 掩盖问题。
 
-命令里出现 `git commit` 时，会检查提交信息中的署名元数据。命中即拒绝，完整文案是：
+### 流程门禁
 
-```text
-提交信息违反安全约束：提交信息包含禁止的 <名称>。根据 git-commit Skill 硬门禁，
-提交信息不得包含 AI 协作者、生成器或自动署名元数据（Co-Authored-By、
-Generated by Claude/AI、Anthropic 等）。请移除这些元数据后重试。
-```
+| 原因 | 处理 |
+|---|---|
+| 仍处于业务开发之前 | 核对已确认产物，通过状态机推进阶段 |
+| `awaiting-user` 或 `blocked` | 按真实缺口完成确认或恢复 |
+| 已到 `git-delivery` | 只核验状态和执行已授权 Git 交付，不继续生产编辑 |
+| 当前实例未领取 Feature | 先确认 Owner、依赖与写集，再原子领取 |
+| 直接写入唯一 TODO | 通过既有状态机更新，不手改 checkbox |
 
-会被拦下的四类内容：
+当前 PreToolUse 不逐文件比对并行写集。写集冲突在 TODO 状态机的解析、领取与完成检查中处理，实际 diff 仍由 Agent 收口核对。
 
-| 命中内容 | 报错名称 |
-|----------|----------|
-| `Co-Authored-By: Claude` | Co-Authored-By: Claude |
-| `Co-Authored-By:` 后带 AI 厂商或 `AI` 字样 | AI 协作者署名 |
-| `Generated by Claude` / `Generated by Codex` / `Generated by AI` | AI 生成器署名 |
-| Anthropic 的 noreply 邮箱 | Anthropic 邮箱署名 |
+验证防护无需执行被检查的命令。脚本导出的判定函数可只检查字符串，见 [PreToolUse Hook](/skills/hooks/pre-tool-use/#不执行目标命令的检查)。
 
-**正确做法**：把这些元数据从提交信息里删掉再提交。这是硬门禁，提交信息应该只描述改动本身。
+### 凭据与测试
 
-<Aside type="caution">
-这道检查只是最后一道形式检查，真正的门禁在 `git-commit` Skill 侧。不要把它的边界当成绕过办法——真实的 AI 署名必须删除。
-</Aside>
-
-**一个已知误报**：`AI 协作者署名` 的匹配对大小写不敏感，所以真人协作者的邮箱域名里带 `ai` 字母序列时（`gmail.com`、`hotmail.com` 这类）会被误命中。实测对照：
-
-| 提交信息片段 | 结果 |
-|------------------|------|
-| `Co-Authored-By: Bob <bob@gmail.com>` | 拦截，报 `AI 协作者署名` |
-| `Co-Authored-By: Bob <bob@qq.com>` | 放行 |
-
-真人协作者被误拦时，把协作者 trailer 放进消息文件（`git commit -F <文件>`）是符合门禁意图的处理方式；也可以换一个不含该字母序列的地址。
-
-### 3.2 破坏性命令
-
-下面是实测对照表，注意"拦"和"不拦"的边界：
-
-| 命令 | 结果 | 原因文案要点 |
-|------|------|--------------|
-| `rm -rf ./build` | 放行 | 目标不是整体目录 |
-| `rm -r *` | 放行 | 缺 `-f`，不满足"递归且强制" |
-| `rm -rf .` | 拦截 | 针对根目录、主目录或当前工作区整体的递归强制删除 |
-| `git push origin feature/x` | 放行 | |
-| `git push --force-with-lease origin main` | 拦截 | 破坏性 git push：强制推送 |
-| `git push origin --delete old-branch` | 拦截 | 破坏性 git push：删除远端 ref |
-| `git reset --hard origin/main` | 拦截 | 会丢弃工作区或提交状态 |
-| `git clean -fd` | 拦截 | 会批量删除未跟踪或被忽略文件 |
-| `git checkout .` | 拦截 | 会批量丢弃当前工作区修改 |
-| `redis-cli FLUSHALL` | 拦截 | 清空 Redis 数据 |
-| `psql -c "TRUNCATE TABLE users"` | 拦截 | 数据库客户端执行清库、清表或无条件删除 |
-| `sudo chown -R user /` | 拦截 | 递归修改根目录权限或所有者 |
-
-<Aside type="caution">
-`--force-with-lease` 和 `--force-if-includes` **同样被拦**。它们比 `--force` 安全，但不是"更安全所以能过"的替代写法；需要改写或删除远端 ref 时，由使用者在终端里精确执行。
-</Aside>
-
-递归删除要同时满足两点才拦：命令带递归标志**且**带强制标志，并且目标是整体性目标（`/`、`.`、`..`、`~`、`$HOME`、`$PWD`、`$(pwd)`、`/tmp`、`*`、盘符根，以及解析后等于文件系统根、主目录或当前工作目录的路径）。Windows 侧的 `Remove-Item -Recurse -Force` 和 `rd/rmdir/del /s /q` 按同样规则判断。
-
-其余会被拦的还有：磁盘格式化与分区类命令、`diskutil` 的擦除操作、写入磁盘设备的 `dd`、fork bomb、`dropdb`、以及删库的 `mongosh` 调用。
-
-### 3.3 为什么密钥没被拦
-
-默认配置下不会拦，也从来不阻断——凭据检测最多只是提示，而且默认配置里连提示都不会发出。
-
-<Aside type="caution">
-不要把 Hook 当成防泄露手段，也不要因为它没报警就以为文件里没有密钥。挡误提交请用 `.gitignore`、`git-secrets` 一类专门工具。
-</Aside>
-
-同一套提示开关也控制着 `npm publish`、`docker system prune`、`curl ... | sh` 这类风险提示——默认同样是关闭的，需要时用 `AGENT_RUNTIME_WARNINGS=1` 打开。打开后它们仍然只提示，工具调用照常执行。
-
-### 3.4 流程门禁拦住了文件写入
-
-报错前缀是 `研发流程门禁已阻止写入：`，只在当前 TODO 存在活动流程时生效。四种典型原因：
-
-| 原因文案要点 | 修法 |
-|--------------|------|
-| `流程仍处于 <阶段>，必须先完成阶段门禁并推进到 business-development` | 完成当前阶段产物后推进流程 |
-| `流程已处于 <阶段>，只允许状态核验和授权 Git 交付` | 到了交付阶段不再编辑生产文件 |
-| `流程 <阶段> 当前为 awaiting-user` / `blocked` | 前者停止写入并向用户确认；后者先解除阻塞 |
-| `流程虽已进入 <阶段>，但当前 runtime instance 尚未原子领取可执行 Feature` | 先领取 Feature |
-
-门禁放行的例外：状态机自身的命令、只读 Shell 命令、交付阶段的 Git 命令，以及 `docs/` 下或 `.md`、`.txt`、`.rst`、`.adoc`、`.mmd`、`.puml`、`.drawio` 扩展名的规划文档。
-
-直接编辑 TODO 文件永远会被拦，文案是 `唯一 TODO 只能通过既有状态机原子写回，禁止直接编辑状态文件`（用 Shell 改则是 `...禁止通过 Shell 直接编辑状态文件`）。改状态请走状态机，详见 [Stop Hook](/skills/hooks/stop/)。
-
-<Aside type="caution">
-在已安装 Hook 的会话里，Agent 执行的命令本身也会被扫描：命令行里只要出现 `git reset --hard` 这类字面模式，这次工具调用就会先被 PreToolUse 拦下，连"测试一下"都不例外。要做对照实验，请在没有 Hook 的终端里手动执行。
-</Aside>
+默认安装器跳过凭据提示；开启后也只是非阻断提醒，不改变当前配置授权。测试源码则必须由用户本轮明确要求新增或修改，高风险、覆盖率和 Review finding 不会自动授权。
 
 ## 4. 项目记忆没加载
 
-**症状**：每轮都提示要先做初始化；或者明明写了事实却没被注入。
+查找顺序为根目录 `PROJECT-MEMORY.md`、`docs/PROJECT-MEMORY.md`、`docs/project-memory.md`。先确认请求工作目录在目标 Git 仓库中，并检查 `Quick facts`、`Reuse map`、`Boundaries` 是否包含真实事实。
 
-### 怎么确认
+空模板需要先由 [init-docs](/skills/skills-reference/medium/init-docs/) 采集核对，再由 [project-details](/skills/skills-reference/high/project-details/) 原位归并。不能把占位行删除后就宣称初始化完成。
 
-打开仓库根目录下的 `PROJECT-MEMORY.md`，检查 `Quick facts`、`Reuse map`、`Boundaries` 三节里有没有真实事实——任意一节全是占位内容（`待…补齐`、`尚未登记`、`按需补齐`、`无；未决`）就会要求初始化。
-
-刚创建的模板天然全是占位，所以第一次一定需要初始化。
-
-修法是**补真实事实**，而不是把占位行删空——删空之后该节仍然没有事实，状态不变。按注入里给出的路由走：先用 [init-docs](/skills/skills-reference/medium/init-docs/) 采集并核对，再由 [project-details](/skills/skills-reference/high/project-details/) 原位归并。
-
-### 写了事实但没被注入
-
-解析规则很窄，踩中任意一条都会表现为"看起来没加载"：
-
-- 只识别 `##` 二级标题。写成 `#` 或 `###` 的章节解析不到。
-- 每节只注入**一行**：按本轮问题的关键词命中数取最高的一行，没有命中就取该节第一行。事实写在第二行、第三行时不会出现。
-- 固定注入 `Quick facts`、`Reuse map`、`Boundaries`；另外按问题关键词**只**追加一节，优先级为 `Contracts` → `Commands` → `Open decisions`。问 API、契约、字段一类会带 `Contracts`，问构建、启动、验证、部署一类会带 `Commands`。
-- 代码块行、HTML 注释行和空行都会被跳过。
-
-### 开发者归属判定失败
-
-开发者 ID 按以下顺序获取，顺序不可颠倒：
-
-| 来源 | 说明 |
-|------|------|
-| Git | 当前仓库的 `git config --get user.name` |
-| 系统 | `$USER` / `$USERNAME`，再退到操作系统登录名 |
-| 环境变量 | `AGENT_DEVELOPER_NAME` |
-
-三者都不可用时，TODO 状态机会直接阻塞。
-
-```bash
-git config user.name                    # 首选来源，设置它最直接
-git config user.name "Alice Chen"
-```
-
-<Aside type="note">
-`AGENT_DEVELOPER_NAME` 是**最后**的兜底，不是覆盖开关。只要 `git config user.name` 有值，设置它不会生效。
-</Aside>
-
-developer-id 是规范化之后的名字：转小写，字母数字和 `.` `_` `-` 之外的字符换成 `-`。所以 `Alice Chen` 对应的目录是 `docs/alice-chen/tasks/todo`。
+摘要解析以 `##` 二级标题分节，从每个目标章节中选取相关行，必要时再补一节 Contracts、Commands 或 Open decisions。没有出现在摘要中的事实仍需直接回读源章节；示例技术栈不能当作当前项目事实。
 
 ## 5. TODO 提醒不对
 
-**症状**：TODO 明明存在却被当成不存在；或者 Stop 之后没有任何续作动作。
-
-### TODO 上下文出现的两个必要条件
-
-1. 有稳定的 runtime instance id。客户端通常会提供；都拿不到时 TODO 上下文**整块不注入**，Stop 侧也会报 `当前 Hook 没有稳定 runtime instance id，不能判断哪个 [~] 属于当前进程，也不能安全领取新 Feature。`必要时用 `AGENT_RUNTIME_INSTANCE_ID` 补一个。
-2. 当前 TODO 里有一条 `[~]`，且它记录的 Instance 等于当前实例。
-
-由此推出一个容易误判的正常现象：**只有 `[ ]` 待办、还没领取时，不会有 TODO 上下文**。TODO 上下文只反映"本实例已领取的那一项"，不做预告。
-
-### 落点不对的四种表现
-
-TODO 文件必须在 `docs/<developer-id>/tasks/todo/` 下才能被识别。被扫描的旧目录只有这四个：`docs/<developer-id>/task/todo`、`tasks/<developer-id>/todo`、`docs/tasks/todo`、`tasks/todo`。命中时会提示迁入规范目录，旧目录不得继续作为活动状态源。
-
-`AGENT_TODO_DIR` 必须**精确解析到**规范目录，否则文件列表直接变成空，表现和"没有 TODO"一样。它只能用来显式指向规范目录，不能用来换落点。
-
-### 多个 TODO 时选错了文件
-
-规范目录下有多个 `.md` 时，按这个顺序选活动文件：`AGENT_ACTIVE_TODO` 指定的文件名 → 目录里的 `.active-todo` 文件 → 只有一个文件时就是它 → 本实例已领取事项的文件 → 有 `[~]` 的文件 → 有活动流程的文件 → 文件名排序第一个。
+TODO 规范路径是 `docs/<developer-id>/tasks/todo/<原文件名>.md`。身份优先级为 Git `user.name`、系统登录用户名、最后才是 `AGENT_DEVELOPER_NAME`；名称会规范化，优先核对注入的 `<developer_scope>`。
 
 ```bash
-# 写入 .active-todo，持久生效（在规范 TODO 目录下执行）
-echo "project.md" > .active-todo
-
-# 或本次会话临时指定
-export AGENT_ACTIVE_TODO=project.md
+git rev-parse --show-toplevel
+git config --get user.name
+whoami
 ```
 
-两种需要人工介入的冲突：
+当前实例没有领取 Feature 时，可能没有当前项上下文，这不代表 TODO 丢失。缺少稳定 runtime instance ID 时也不能安全判断归属；优先使用 Harness 提供的实例标识。
 
-- `检测到多个活动 TODO：...` —— 多个文件都有进行中事项，用上面两种方式指定一个。
-- `冲突：当前实例同时领取了多个 TODO 文件的事项：...` —— 先完成或释放其中一边；每个实例只能工作在一个 TODO 文件上。
+一个实例不能同时拥有多个 `[~]`；不同实例可在依赖已经远端核验、写集和共享资源互斥时并行处理不同 Feature。多个活动 TODO 应先核对 Owner 和实例，再通过 `task-todo-workflow` 处理，不手写选择文件掩盖冲突。
 
-### Stop 之后什么都没发生
+Stop 没续作时，还要核对：
 
-以下几种都是预期行为，不是故障：
+- 客户端是否实际发出 Stop 或 SubagentStop。
+- 最后回复是否包含确认标记，表示正在等待人工接续。
+- 是否处于 linked worktree，状态是否需要交回主 checkout 收口。
+- 是否为 `delivery-pending`，即本地 `[x]` 与业务改动尚未同次进入 HEAD、upstream 和 remote。
 
-- 事件不是 `Stop` 或 `SubagentStop`。
-- 最后一条回复里带着 `<!-- CONFIRMATION_REQUIRED -->` 标记。**这会直接跳过续作**：设计上此时正等你决定，不应该自动往下做。这也是标记用错时最典型的后果，见 [通知音频](#6-通知音频不响或响错)。
-- 没有仓库、或没有可继续的事项。
-
-另外两个会明确阻塞的状态：
-
-- `当前是 linked worktree；TODO 状态机只在主 checkout 运行...` —— 回到主 checkout 收口。
-- `Feature [...] 已在 commit 前标为 [x]，但该状态尚未同时进入 HEAD、upstream 与 remote。` —— `[x]` 要和业务改动在同一次 commit 与 push 里落地，补齐推送即可。
+本地完成 hunk 不能提前解锁下游，详见 [Stop Hook](/skills/hooks/stop/)。
 
 ## 6. 通知音频不响或响错
 
-**症状**：完全没有提示音；或者该响"需要您确认"时响了"回复完成"。
-
-### 一条命令定位
-
-通知脚本自带诊断模式，只输出判定结果、不播放：
+通知脚本提供诊断模式，只输出判定，不播放或转发：
 
 ```bash
-# 检查通知系统状态
-claude code --diagnose-notifications
+node "<skills-root>/runtime-hooks/scripts/notify-complete.cjs" --diagnose '{"type":"agent-turn-complete","message":"done"}'
 ```
 
-真实输出示例：
+| 字段 | 需要核对的内容 |
+|---|---|
+| `enabled` | 是否被提示音或部分 Hook 开关关闭 |
+| `eligible` | 事件是否属于通知类别 |
+| `audioExists` | 默认或自定义音频路径是否有效 |
+| `player` | 当前平台是否有可用播放器 |
+| `notificationKind` | confirmation、task、reply 或 none |
+| `wouldPlay` | 上述条件是否同时满足 |
 
-```json
-{
-  "audioExists": true,
-  "eligible": true,
-  "enabled": true,
-  "eventType": "agent-turn-complete",
-  "forwarded": false,
-  "notificationKind": "task",
-  "audioFile": "task-complete.wav",
-  "player": "afplay",
-  "source": "manual",
-  "wouldPlay": true
-}
-```
+macOS 使用 `afplay`，Windows 使用 PowerShell，Linux 按可用性尝试 paplay、aplay、ffplay、mpv。还要核对系统音量和输出设备。
 
-`wouldPlay` 为 false 时，必然是前四项之一出了问题：
+确认事件或确认标记归为 `confirmation`；任务完成事件或完成标记归为 `task`；普通回合完成归为 `reply`。标记只影响通知分类，不能替代实际交付证据。
 
-| 字段 | 为 false / null 的含义 |
-|------|------------------------|
-| `enabled` | 被 `AGENT_COMPLETION_SOUND` 或 `AGENT_RUNTIME_HOOKS_DISABLED` 关掉了 |
-| `eligible` | 事件类型没有归到任何一类（`notificationKind` 为 `none`），本来就不该响 |
-| `audioExists` | 目标音频文件不存在，通常是自定义覆盖路径写错了 |
-| `player` | 当前平台找不到播放器 |
-
-播放器按平台探测：macOS 用 `afplay`；Windows 用 `powershell.exe`；Linux 依次尝试 `paplay`、`aplay`、`ffplay`、`mpv`，取第一个可用的。Linux 上四个都没装就是 `player: null`。
-
-### 三类音频与分类逻辑
-
-| notificationKind | 文件 | 触发条件 |
-|------------------|------|----------|
-| `confirmation` | `audio/confirmation.wav` | 授权与确认类事件；或完成类事件的最后一条回复带 `<!-- CONFIRMATION_REQUIRED -->` |
-| `task` | `audio/task-complete.wav` | 任务完成类事件；或完成类事件带 `<!-- TASK_COMPLETE -->` 标记 |
-| `reply` | `audio/reply-complete.wav` | 完成类事件且两个标记都没有 |
-| `none` | 不播放 | 以上都不匹配 |
-
-事件名在比较前会做大小写与分隔符归一，所以 `PermissionRequest`、`agent_turn_complete` 都能正常归类。
-
-<Aside type="caution">
-两个不可见标记在 **Claude Code 上不驱动音频**：那一端只有 `PermissionRequest`（"需要确认"）这一类会响，`Stop` 归 TODO 续作。标记的完整分类逻辑生效在 Codex 的 `notify` 通道和手动调用上。这一点最容易被误判成"标记写了但没响"。
-</Aside>
-
-Codex 的落点是 `~/.codex/config.toml` 的顶层 `notify` 数组。如果你原本已有自己的 `notify` 命令，安装器会保留它并在收到事件后转发一份过去；诊断输出里的 `forwarded` 就是这次转发结果。转发不会指向自己，不会形成回路。
-
-### 自定义与手动触发
-
-覆盖优先级从高到低：`--audio <路径>` → `AGENT_COMPLETION_SOUND_FILE`（三类共用）→ `AGENT_CONFIRMATION_SOUND_FILE` / `AGENT_REPLY_COMPLETION_SOUND_FILE` / `AGENT_TASK_COMPLETION_SOUND_FILE` → 仓库内 `audio/*.wav`。
-
-系统层面还要排除三件事：输出设备选错、系统音量为 0、终端应用没有播放权限。macOS 上音频是后台播放的，前台没有任何回显。
-
-更多用法见 [中文语音通知](/skills/hooks/notification/)。
+当前安装器在 Claude Code 只为 PermissionRequest 注册音频，Stop 归 TODO 脚本；Codex 的完成通知由 `notify` 驱动。详见 [中文语音通知](/skills/hooks/notification/)。
 
 ## 7. MCP 连不上
 
-**症状**：会话启动时报某个 MCP 服务器连接失败，例如远端 Penpot MCP 返回 `502`。
-
-### 先把三件事分开
-
-502、超时、握手失败都属于**连接故障**。它不等于"没注册"，更不等于"这个能力不存在"。三者要分别确认：
+502、超时或握手失败是连接故障，不等于未注册。分别确认本地注册、实际连接和工具能力：
 
 | 结论 | 判据 |
-|------|------|
-| 已注册 | 客户端 `mcp get` 能列出该服务器 |
-| 能连上 | 客户端本次会话建立连接成功 |
+|---|---|
+| 已注册 | 客户端能读取本地服务器条目 |
+| 能连上 | 当前会话建立连接成功 |
 | 能力可用 | 连接成功且工具列表可读 |
 
-SessionStart Hook 在这里的作用很有限，理解这点能避免误修：它只读取**本地注册状态**，**从不注册、从不探测、从不连接**。所以 502 一定来自客户端自己的 MCP 连接，不是 Hook 产生的。仅当"未注册或状态不可读"时，SessionStart 才会输出：
-
-```text
-已检查 Penpot MCP 本地注册状态：未注册或状态不可读。启动阶段不会连接或自动注册 Penpot。
-```
-
-### 怎么确认
+SessionStart 只读取 Penpot 本地注册状态，不注册、不探测、不连接远端。可用下面的只读检查核对本地状态：
 
 ```bash
-# 只读检查，输出不含 URL 与 Token
-node project-manager/scripts/penpot-mcp-setup.mjs --check --json
-
-# 客户端侧的注册状态
-claude mcp get penpot
-codex mcp get penpot --json
+node "<skills-root>/project-manager/scripts/penpot-mcp-setup.mjs" --check --json
 ```
 
-看 `configured`、`needsRegistration`、`state`、`urlSource` 四个字段。`configured: true` 加上客户端报 502，就是纯连接问题。
+查看 `configured`、`needsRegistration`、`state` 和 `urlSource`。注册存在而连接失败时，核对真实端点、网关、隧道、证书或客户端重连；不要因为一次 502 就重写注册配置。
 
-<Aside type="caution">
-`health-check.sh` 的 MCP 一节只读 `~/.claude/settings.json` 的 `mcpServers`，而 Claude Code 的用户级 MCP 注册**不在这个文件里**（在 `~/.claude.json`）。因此它经常给出"Penpot MCP 未配置"这个假阴性结果。以 `mcp get` 或上面的 `--check --json` 为准。
-</Aside>
-
-### 怎么修与验证
-
-注册在、连不上时，正确动作是重试并确认端点可达（网关、隧道、反向代理、证书），以及 `PENPOT_MCP_URL` / `PENPOT_MCP_URL_FILE` 指向的端点是否还有效。不要因为一次 502 就重新注册或改配置——那会把连接故障变成配置漂移。也不要把一次 502 写成"能力缺失"结论带进 TODO 或文档。
-
-验证方式是重开一个会话：客户端不再报连接错误，且 `mcp get` 仍显示已注册。相关用法见 [penpot](/skills/skills-reference/low/penpot/)。
+`health-check.sh` 的旧 MCP 检查不一定读取真实用户级注册文件，以安装脚本的检查和客户端本次连接结果为准。相关操作见 [penpot](/skills/skills-reference/low/penpot/)。
 
 ## 8. nul 文件从哪来的
 
-**症状**：仓库里莫名多出一个名为 `nul` 的文件，还可能被 `git status` 认成未跟踪改动。
+Windows `cmd.exe` 的空设备重定向写法在 POSIX Shell 中可能创建名为 `nul` 的普通文件。Runtime Hook 拒绝源码识别出的这类重定向，不会扫描或自动删除既有文件。
 
-### 来源与拦截
-
-`> nul` 是 Windows `cmd.exe` 的空设备写法。同样的命令在 POSIX shell 里没有这个设备，重定向会**创建一个名叫 `nul` 的普通文件**。PreToolUse 因此直接拒绝这类重定向：
-
-```text
-危险操作已阻止：检测到“> nul”重定向；它可能在非预期 Shell 中创建名为 nul 的文件，
-请使用当前平台的空设备。请缩小目标范围；确需执行时由使用者在终端中手动确认。
-```
-
-正确写法按平台区分：POSIX shell 用 `>/dev/null 2>&1`；`cmd.exe` 里才用 `>NUL`。
-
-### 为什么默认只报告、不自动删
-
-Runtime Hooks **不会**自动扫描或删除 `nul` 文件，唯一的相关行为就是上面这条从源头预防的拦截。清理保持人工，有两个原因：删除是不可逆动作，而 `nul` 在 Windows 上还是保留设备名，用递归删除去清理它的风险远高于收益。
-
-只报告的命令是安全的，可以随时跑：
+只读确认实际文件：
 
 ```bash
-# 只列出，不删除
-find . -name nul -not -path './.git/*'
+rg --files --hidden -g nul -g '!**/.git/**'
 git status --short
 ```
 
-确认命中的确实是误建文件之后，由你自己删除单个文件——不要用递归强制删除，那会被 PreToolUse 拦下，而且本来也不需要。
+确认是误建文件后，按精确路径处理；不要递归清理整个目录。POSIX Shell 应使用 `/dev/null`，Windows 命令则按实际 Shell 语法处理。
 
-### 怎么验证
+## 仍未解决
 
-上面的 `find` 返回空，`git status --short` 里不再出现 `nul` 条目。
+保留客户端、Node 和 Hook 版本，安装检查结果，实际工作目录，完整拒绝原因与最小复现操作。配置诊断只展示需要的结构，避免输出其他设置和带凭据的 URL。
 
-## 仍然没解决怎么办
-
-按下面这份清单收集信息，一次贴全能省掉几轮往返：
-
-```bash
-# 1. 环境
-node --version
-git --version
-claude --version   # 或 codex --version
-
-# 2. Hook 安装与版本
-node runtime-hooks/scripts/install.mjs --check --json
-cat runtime-hooks/VERSION
-cat ~/.claude/.runtime-hook-version    # Codex 侧换成 ~/.codex/.runtime-hook-version
-
-# 3. 配置片段（只输出 Hook 结构，不含其它设置）
-jq '.hooks' ~/.claude/settings.json
-jq '.hooks' ~/.codex/hooks.json
-grep '^notify' ~/.codex/config.toml
-
-# 4. 注入与用量
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 5. 通知链路诊断
-claude code --diagnose-notifications
-
-# 6. 一次性汇总
-bash runtime-hooks/scripts/health-check.sh
-```
-
-除此之外还要附上：
-
-- **报错原文**，尤其是拒绝决定的完整原因文本。文案前缀（`危险操作已阻止：` / `提交信息违反安全约束：` / `研发流程门禁已阻止写入：`）直接决定排查方向，摘要或转述会丢掉这个信息。
-- **最小复现步骤**。描述触发问题的操作序列，比单纯的现象描述有效得多。
-
-<Aside type="caution">
-贴配置片段前先去掉 token、密钥和带凭据的 URL。上面用 `jq '.hooks'` 而不是整个文件，就是为了避免把其它设置和环境变量一起带出来。
-</Aside>
-
-版本相关的问题还可以用版本管理工具单独看：
-
-```bash
-node runtime-hooks/scripts/hook-version-manager.cjs status      # 紧凑状态行
-node runtime-hooks/scripts/hook-version-manager.cjs check        # 需要更新时退出码为 1
-node runtime-hooks/scripts/hook-version-manager.cjs source       # 仓库版本
-node runtime-hooks/scripts/hook-version-manager.cjs installed    # 已安装版本
-```
-
-<Aside type="note">
-这个工具只看 Claude Code 侧和默认安装路径。Codex 侧和自定义安装路径请用 `install.mjs --check --json` 判断。更新一律运行 `node runtime-hooks/scripts/install.mjs`。
-</Aside>
-
-需要更深的路由证据时，可以临时打开默认关闭的路由遥测：`AGENT_ROUTER_TELEMETRY=1` 会把命中场景、候选 Skill 和耗时写到 `~/.agent-workflow/logs/routing-YYYY-MM-DD.jsonl`（可用 `AGENT_ROUTER_LOG_DIR` 改目录，保留 30 天），用户输入本身不落盘。
-
-## 相关页面
-
-- [Runtime Hooks 总览](/skills/hooks/) —— 各 Hook 的职责与生命周期
-- [Hook 安装指南](/skills/hooks/installation/) —— 安装、更新与卸载流程
-- [SessionStart Hook](/skills/hooks/session-start/) —— 版本自检与自动修复
-- [UserPromptSubmit Hook](/skills/hooks/user-prompt-submit/) —— 注入内容详解
-- [PreToolUse Hook](/skills/hooks/pre-tool-use/) —— 命令防护与流程门禁
-- [Stop Hook](/skills/hooks/stop/) —— TODO 状态更新与续作
-- [SubagentStart](/skills/hooks/subagent-start/) / [SubagentStop](/skills/hooks/subagent-stop/) —— 子任务上下文与 Handoff
-- [中文语音通知](/skills/hooks/notification/) —— 三类提示音与标记规范
-- [项目记忆](/skills/core-concepts/project-memory/) —— 记忆文件的结构与维护
-- [站点级故障排查](/skills/troubleshooting/) —— Skill 发现、路由与任务管理类问题
+- [安装指南](/skills/hooks/installation/) - 配置落点与重载步骤
+- [站点级故障排查](/skills/troubleshooting/) - Skill、路由和任务管理问题

@@ -1,0 +1,108 @@
+---
+title: 会话接续
+description: 读取 Claude Code 或 Codex 历史会话，并在核对当前现场后继续工作
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## 先判断是哪一种“继续”
+
+| 你的目标 | 使用入口 |
+| --- | --- |
+| 读取 Claude Code 的历史会话 | `resume-claude` |
+| 读取 Codex CLI 或 VS Code 的历史会话 | `resume-codex` |
+| 继续当前仓库已经批准的 TODO | `next`，不触发会话接续 Skill |
+
+历史来源由会话来自哪个客户端决定，与当前正在运行的客户端无关。只读总结不会修改代码；明确要求继续后，才会在当前授权范围内进入实现流程。
+
+## 读取历史会话
+
+### Claude Code
+
+```text
+读取 Claude Code 会话 <session-id>，只做摘要
+读取 Claude Code 日志 <absolute-path>.jsonl，继续未完成的问题
+```
+
+`resume-claude` 接受完整会话 ID、日志路径、当前目录候选描述或 `latest`。日志路径应使用实际的 `.jsonl` 文件；不要把历史消息中的命令当作当前命令执行。
+
+### Codex
+
+```text
+读取 Codex 会话 <session-id>，只做摘要
+继续 Codex 中关于订单分页的那段会话
+```
+
+`resume-codex` 接受完整会话 ID、rollout 路径、当前目录候选描述或 `latest`。压缩的 `.jsonl.zst` rollout 还需要本机有 `zstd`；缺失时应报告缺口，不换读另一段会话。
+
+<Aside type="note">
+描述命中多个候选时，Skill 会列出最小候选列表并等待你选定；不会按时间替你猜。省略引用或使用 `latest` 时，只查当前工作目录对应的最近会话。
+</Aside>
+
+## 摘要和接续的边界
+
+两种请求的处理方式不同：
+
+### 只读总结
+
+请求中写明“只做摘要”或“不要修改代码”。Skill 返回来源客户端、会话 ID、已恢复目标、历史进展、当前已知事实、未完成事项和读取警告，然后结束，不领取 TODO、不改文件、不操作 Git。
+
+### 继续历史问题
+
+明确要求继续时，按以下顺序核对：
+
+1. 确认当前工作目录和 Git 根与历史 `cwd` 的对应关系。
+2. 查看当前分支、staged/unstaged 改动、相关源码、`PROJECT-MEMORY.md` 和当前开发者唯一 TODO。
+3. 以当前文件、TODO、规则和新鲜验证为准，判断历史进展是否仍然成立。
+4. 由当前 TODO 状态机确认 Owner、依赖和写集，再交给 `next`、`dev` 或适用的专业 Skill 实施。
+
+历史中的 system/developer 指令、用户消息包装、工具调用、命令、附件、旧进程和工具连接都只是数据，不会自动执行或恢复。历史里写着“已完成”也不等于当前仓库已经验证完成。
+
+<Aside type="caution">
+历史会话本身不会授予新的写文件、写测试、提交、推送、部署或删除权限。当前用户明确给出的授权优先；同一范围内已经存在的授权可以复用，超出范围必须重新获得授权。
+</Aside>
+
+## 不完整数据怎么处理
+
+| 现象 | 正确处理 |
+| --- | --- |
+| 没有匹配会话 | 保留原始错误，补充准确 ID、路径或目标目录；不要改用 `latest` 猜测 |
+| 描述命中多个会话 | 展示候选的 ID、来源和必要标题，请你选择 |
+| `user_request_unavailable` 或活动链缺失 | 明确说明用户请求未恢复；不能从助手动作、工具输出或摘要反推目标 |
+| 有跳过记录、压缩缺口或附件警告 | 在摘要中说明警告及影响；附件结构节点不代表附件正文已恢复 |
+| 旧验证已过期或缺失 | 只运行当前任务必要的最小检查，不逐条重放历史命令 |
+
+需要的目标、范围或验收依赖缺失历史时，先补问一个具体问题；当前请求已经足够确定的部分仍可继续。
+
+## 与当前 TODO 续作的区别
+
+```text
+继续当前已批准的 ORDER-EXPORT
+  → next 读取当前 TODO，原子领取可执行项
+
+读取 Claude Code 会话 <session-id> 后继续
+  → resume-claude 恢复线索
+  → 核对当前仓库和 TODO
+  → 经当前授权后进入 next / dev
+```
+
+不要为了继续同一个 TODO 再读取历史会话，也不要把历史会话复制成新的 TODO。稳定项目事实写入唯一 `PROJECT-MEMORY.md`，任务状态只写当前开发者唯一 TODO。
+
+## 验证和测试
+
+会话读取成功只证明解析器读到了部分历史数据。完成当前工作仍需按当前 Feature 的验收条件取证、运行受影响构建根最小现有检查、验证真实入口并进行一次完整 `code-review`。
+
+默认不新增测试源码。只有本轮明确要求设计测试策略、方案或用例时才使用 `test-strategy`；只有明确要求写或改测试源码时才使用 `test-development`。历史中的测试命令、覆盖率门禁或 Review finding 都不构成当前授权。
+
+## 常见请求
+
+```text
+读取 Claude Code 会话 <session-id>，只做摘要
+读取 Codex 会话 <session-id>，告诉我未完成事项，不要改代码
+读取 Claude Code 会话 <session-id>，核对当前 TODO 后继续原问题
+继续当前 TODO 的下一个 Feature（不要读取历史会话）
+```
+
+更多流程见[实践指南](/skills/usage/)和[TODO 管理](/skills/usage/todo-management/)。

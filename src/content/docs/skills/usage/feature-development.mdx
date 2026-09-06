@@ -1,7 +1,8 @@
 ---
 title: 功能开发流程
 description: 在已有项目中交付一个新功能的完整操作流程
-order: 22
+sidebar:
+  order: 2
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -278,7 +279,7 @@ findings 的分级、关闭顺序和取证要求见[代码审查流程](/skills/
   Review：通过
 ```
 
-- 摘要里出现 `unverified` 就**不能**改 `[x]`，这一项保持 `[~]` 并写清恢复条件
+- 摘要里出现 `unverified` 就**不能**改 `[x]`；仍可继续实现时保持 `[~]`，如果是账号、设备、审批或外部系统缺口导致无法继续，则写 `外部阻塞：<原因>；恢复条件：<条件>`，由状态机切为 `[!]`
 - 不同验证档位要多带的字段不同：`Test-first` 要 RED / GREEN，`Regression-required` 要修复前基线和修复后证据，`High-risk` 还要风险边界、回滚方式、方案复核和发布检查
 - 摘要只写已有事实和真实的未验证边界。为了让字段看起来齐全而编造测试、真机或发布证据，是把问题推到更贵的阶段
 
@@ -293,6 +294,7 @@ findings 的分级、关闭顺序和取证要求见[代码审查流程](/skills/
 [git-commit](/skills/skills-reference/high/git-commit/) 只在你明确授权后执行，并且要求没有未关闭的严重 / 重要 finding。它会精确暂存：这个 Feature 写集内的生产代码、必要的契约 / 迁移 / 回滚文档，以及这一次的 TODO hunk，一次提交推送，然后核验 local / upstream / remote OID。
 
 - push 之后不再补状态提交
+- `CHANGELOG.md` 与真实代码、文档、配置和 TODO 收口同次提交；没有现成日志时只在第一次真实变更中创建
 - 只有远端的 TODO 已经包含这个 `[x]`，依赖它的后续 Feature 才会解锁
 - 未授权或推送失败时，状态机返回 `delivery-pending` 并写恢复条件；这时不要提前开始下一项
 
@@ -381,8 +383,6 @@ findings 的分级、关闭顺序和取证要求见[代码审查流程](/skills/
 - [项目记忆](/skills/core-concepts/project-memory/) - 稳定事实与复用地图
 - [最佳实践](/skills/best-practices/) - 跨流程的经验总结
 - [问题排查](/skills/troubleshooting/) - 卡住时先看这里
-
-
 
 
 

@@ -1,7 +1,8 @@
 ---
 title: CRUD 开发 - crud-development
 description: CRUD 业务开发 - 手工实现完整的增删改查纵向业务切片
-order: 7
+sidebar:
+  order: 15
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -145,5 +146,4 @@ database-design / tech-decision / api-development（表、选型、契约先定�
 <Aside type="note">
 它不创建或更新 TODO、不改功能状态、不操作 Git，只把路由顺序、修改结论、验证结果和未覆盖边界交回 feature owner。当前功能的用户结果、菜单入口、验收或交付边界无法从 TODO、源码和直接来源确定时，它返回 `scope-change-detected`。
 </Aside>
-
 

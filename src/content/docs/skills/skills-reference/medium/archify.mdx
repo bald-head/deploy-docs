@@ -1,304 +1,62 @@
 ---
-title: 架构图生成（archify）
-description: 把架构、流程、时序、数据流和状态机变成经过验证的自包含交互式 HTML 图表，输入可以是自然语言需求或粘贴的 Mermaid
-order: 39
+title: 架构与技术图表 - archify
+description: 生成精美、经过验证的架构图、工作流图、时序图、数据流图和生命周期/状态图；输出可探索的独立 HTML，内含 SVG、明暗主题、可选轨迹动画，并支持导出 PNG/JPEG/WebP/SVG/WebM。接受自然语言需求或粘贴的 Mermaid flowchart、sequenceDiagram、stateDiagram；图表需要反映真实代码时检查仓库证据。适用于系统架构、基础设施、云/安全/网络拓扑、技术流程、API 调用时序、请求生命周期、数据管道、ETL/ELT、数据血缘、状态机以及 Mermaid 转换与美化。
+sidebar:
+  order: 25
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+## 用途
 
-大多数"画个架构图"的请求，最后都停在一张糊掉的截图，或者一段没人愿意再维护的 Mermaid 上。这个 Skill 走的是另一条路：你用大白话描述系统，或者直接把一段 Mermaid 贴进来，它先把内容收敛成一份带类型约束的 JSON，再渲染成**一个自包含的 HTML 文件**。双击就能开，里面有 SVG、明暗两套主题、平移缩放、搜索定位、关系高亮，以及真正能用的导出（PNG、JPEG、WebP、SVG、WebM）。
+`archify` 把系统架构、技术流程、API 时序、数据流和生命周期转换为可探索的独立 HTML，内含 SVG、明暗主题与导出能力。输入可以是自然语言、已有架构事实，或粘贴的 Mermaid。
 
-它替你决定的是这几件事：这个场景该用哪种图、主路径怎么排、标签放在哪、几何上有没有真的通过检查。它不做架构决策本身，不写实现代码，也不画业务数据图表——柱状图、折线图、指标看板那类不属于它。
+它负责图形表达，架构决策由 [`architecture-design`](/skills/skills-reference/high/architecture-design/) 完成。只需要 README 内的小型 Mermaid 图时使用 [`mermaid`](/skills/skills-reference/low/mermaid/)；统计图、海报和幻灯片使用对应专业能力。
 
-## 和 mermaid 的分工
+## 选择图表类型
 
-| 你要的东西 | 走哪个 |
-| --- | --- |
-| 一段贴进 README 或 PR 描述里的小图，三五个节点 | [mermaid](/skills/skills-reference/low/mermaid/)，几行文本搞定 |
-| 一张要给别人讲、要能点开探索、要导出成图片的系统图 | 本 Skill |
-| 手上已经有 Mermaid，但它渲出来太挤、看不清 | 本 Skill，把那段贴进来 |
-
-判断依据是产物形态：只需要文本里内嵌一张图就用 Mermaid，为一个三节点流程生成独立 HTML 是投入过头了。
-
-## 什么时候用
-
-| 你会这样说 | 你会拿到什么 |
-| --- | --- |
-| "画个架构图" | 一个可探索的 HTML，含组件、依赖和边界分组 |
-| "帮我出个系统图，要给评审看" | 同上，另加多分辨率截图作为证据 |
-| "这个流程画成图" | 带判断分支和终态的流程图 |
-| "画个时序图" | 参与者、消息、返回过程和异步轨迹 |
-| "数据是怎么流的" | 数据管道图，含来源、加工和消费方 |
-| "这个订单状态机画一下" | 状态与转换图，含重试和终态 |
-| "把这段 Mermaid 美化一下" | 语义迁移后的交互式 HTML |
-
-## 什么时候不要用
-
-- 只要一段简单图表贴进文档 → [mermaid](/skills/skills-reference/low/mermaid/)。
-- 要决定系统怎么分层、模块怎么划、部署成什么形态 → [architecture-design](/skills/skills-reference/high/architecture-design/)。这里只把已有结论画出来，不产生结论。
-- 要写代码 → [universal-development](/skills/skills-reference/low/universal-development/) 或对口专业 Skill。
-- 需求还没定 → [product-manager](/skills/skills-reference/critical/product-manager/)。
-- 要画销量趋势、指标看板、统计分布 → 不在它范围内。
-
-## 前置条件
-
-得有一个确实需要被看见的结构或流程，而且它属于系统图、流程、时序、数据流、状态机这几类之一；还得确实需要一个可交互的产物。
-
-图要反映真实代码的时候，节点得从仓库里核对出来——不能照着示例文件里的样子编几个服务名填上。第三条也值得先想一下：如果最终只是贴进 README 的一张静态小图，Mermaid 更划算。
-
-拿不准场景属于哪一类时，让它先跑一次导航：
-
-```bash
-node bin/archify.mjs guide "订单支付回调的失败重试链路" --json
-```
+| 类型 | 适用内容 | 请求示例 |
+| --- | --- | --- |
+| `architecture` | 组件、基础设施、云与安全边界 | 根据当前仓库画服务部署与依赖图 |
+| `workflow` | 技术步骤、审批门禁、CI/CD | 把发布流程画成可探索 HTML |
+| `sequence` | API 调用、异步轨迹和返回 | 展示订单请求从入口到回调的时序 |
+| `dataflow` | ETL/ELT、血缘、加工与消费者 | 画清数据来源、转换和落点 |
+| `lifecycle` | 状态、重试、等待和终态 | 把订单状态转换画成生命周期图 |
 
 ## 使用示例
 
-### 示例 1：从一句话到一个 HTML
-
-你说："画个订单系统的架构图，网关后面是订单服务和支付服务，订单读写 MySQL，支付回调走消息队列，Redis 做幂等。"
-
-先落一份候选 JSON。节点不多，主路径清楚：
-
-```json
-{
-  "meta": { "title": "订单系统架构", "quality_profile": "showcase" },
-  "groups": [
-    { "id": "edge",  "label": "接入层" },
-    { "id": "app",   "label": "应用层" },
-    { "id": "data",  "label": "数据与中间件" }
-  ],
-  "nodes": [
-    { "id": "web",     "label": "管理端",     "group": "edge", "kind": "client" },
-    { "id": "gateway", "label": "API 网关",   "group": "edge", "kind": "gateway" },
-    { "id": "order",   "label": "订单服务",   "group": "app",  "kind": "service" },
-    { "id": "pay",     "label": "支付服务",   "group": "app",  "kind": "service" },
-    { "id": "mysql",   "label": "MySQL",      "group": "data", "kind": "database" },
-    { "id": "redis",   "label": "Redis",      "group": "data", "kind": "cache" },
-    { "id": "mq",      "label": "回调队列",   "group": "data", "kind": "queue" }
-  ],
-  "edges": [
-    { "from": "web",     "to": "gateway", "label": "HTTPS" },
-    { "from": "gateway", "to": "order" },
-    { "from": "gateway", "to": "pay" },
-    { "from": "order",   "to": "mysql",  "label": "读写" },
-    { "from": "pay",     "to": "redis",  "label": "幂等键" },
-    { "from": "pay",     "to": "mq",     "label": "回调事件" },
-    { "from": "mq",      "to": "order",  "label": "消费更新状态" }
-  ]
-}
+```text
+根据当前仓库的订单调用链生成交互式时序图 HTML。
+保留接口名、异步调用、失败与重试语义，节点和关系需要源码依据。
 ```
 
-改完立刻验证，不要靠肉眼推坐标：
+```text
+把下面的 Mermaid stateDiagram 转成生命周期图 HTML，
+保留状态和转换含义，使用中文说明，不需要动画。
+```
+
+Mermaid 的 `flowchart` / `graph` 通常映射到 `workflow`，组件地图使用 `architecture`；`sequenceDiagram` 映射到 `sequence`，`stateDiagram` 映射到 `lifecycle`。迁移的是拓扑和含义，不机械复制旧样式。
+
+## 生成与验证
+
+Agent 从实际发现的 `archify` Skill 目录读取一种匹配 Schema、公共 Schema 和一个结构示例，写出新的候选 JSON。示例不作为真实系统事实来源。
+
+以下维护命令在 **archify Skill 根目录** 执行，文件名和类型替换成实际产物：
 
 ```bash
-node bin/archify.mjs validate architecture order-arch.json --quality showcase --json
+node bin/archify.mjs guide "订单支付回调的失败重试链路" --json
+node bin/archify.mjs validate sequence candidate.json --quality showcase --json
+node bin/archify.mjs deliver sequence candidate.json diagram.html --quality showcase --json
+node bin/archify.mjs visual-check diagram.html --json
 ```
 
-```text
-{ "ok": true,
-  "profile": "showcase",
-  "checks": 9,
-  "composition": { "errors": 0, "warnings": 0 },
-  "nodes": 7, "edges": 7 }
-```
+默认 `showcase` 要报告全部 9 项产物检查，composition error 和 warning 均为零。4 项基础检查不等于通过该档验收。最终 `deliver` 冻结规范字节、校验并原子写出 HTML，报告规范与产物各自的 SHA-256 和字节数；非零退出码不能宣称成功。
 
-九项检查全报告、错误和告警都为零，才算这一档通过。只回执四项的属于基础验证，不等于过了。
+`visual-check` 检查多个桌面尺寸并生成截图证据，但 `visualReview` 仍为 `pending`，需要实际查看截图。不能通过删除有意义的标签、裁剪内容或缩小文字掩盖布局问题。
 
-交付：
+## 阅读与导出
 
-```bash
-node bin/archify.mjs deliver architecture order-arch.json order-arch.html \
-  --quality showcase --json
-```
+HTML 支持平移缩放、搜索定位、聚焦、关系追踪和主题切换，可导出 PNG、JPEG、WebP、SVG、WebM。默认静态内容；只有明确要求演示或动画时启用轨迹动画。
 
-```text
-{ "output": "order-arch.html",
-  "spec":     { "sha256": "3f9a…c12", "bytes": 2184 },
-  "artifact": { "sha256": "b70d…4ae", "bytes": 268431 } }
-```
-
-`deliver` 会把这份 JSON 的字节冻结成同目录的私有快照，渲染并检查那份快照，再原子写出 HTML。此后候选文件就不该再改了。
-
-### 示例 2：粘一段 Mermaid 进来
-
-你说："把这个美化一下。"
-
-```mermaid
-sequenceDiagram
-    participant C as 客户端
-    participant G as 网关
-    participant O as 订单服务
-    C->>G: POST /order/create
-    G->>O: createOrder(req)
-    O-->>G: orderId
-    G-->>C: 200 { orderId }
-```
-
-它读的是拓扑和含义，不是样式——参与者变成语义参与者，箭头变成消息，返回过程保留：
-
-```json
-{
-  "meta": { "title": "下单调用链", "quality_profile": "showcase" },
-  "participants": [
-    { "id": "client",  "label": "管理端",   "kind": "client" },
-    { "id": "gateway", "label": "API 网关", "kind": "gateway" },
-    { "id": "order",   "label": "订单服务", "kind": "service" }
-  ],
-  "messages": [
-    { "from": "client",  "to": "gateway", "label": "POST /order/create" },
-    { "from": "gateway", "to": "order",   "label": "createOrder(req)" },
-    { "from": "order",   "to": "gateway", "label": "orderId", "kind": "return" },
-    { "from": "gateway", "to": "client",  "label": "200 { orderId }", "kind": "return" }
-  ]
-}
-```
-
-对应关系大致是：流程类的图变成流程型（本质是组件地图的话改成架构型），时序图变成时序型，状态图变成状态型。Mermaid 里的颜色和样式声明不会带过来，因为那套主题在新产物里由明暗两套配色统一决定。
-
-### 示例 3：验证没过的时候
-
-```text
-{ "ok": false,
-  "composition": { "errors": 1, "warnings": 2 },
-  "diagnostics": [
-    { "code": "EDGE_LABEL_OVERLAP",
-      "subject": "edges[6].label",
-      "evidence": "标签 '消费更新状态' 与 nodes[2] 边框重叠 6px",
-      "supportedFixes": ["labelAt", "via"] }
-  ] }
-```
-
-修的是诊断点名的那个字段，一轮只动一处，然后重跑：
-
-```diff
-- { "from": "mq", "to": "order", "label": "消费更新状态" }
-+ { "from": "mq", "to": "order", "label": "消费更新状态", "labelAt": 0.35 }
-```
-
-<Aside type="danger">
-命令退出码不是 0 就不能说成功。也不要靠删掉有意义的标签、缩小字号、加 `overflow: hidden`、拉伸 SVG 高度把检查糊过去——那样得到的是一张看着通过、实际信息缺失的图。连续两轮都没有改善，就停下来把没解决的诊断如实写出来。
-</Aside>
-
-### 示例 4：另外三种图的输入长什么样
-
-**数据流**——来源、加工、落点、消费方：
-
-```json
-{
-  "meta": { "title": "订单数仓链路", "quality_profile": "showcase" },
-  "stages": [
-    { "id": "binlog", "label": "MySQL Binlog",  "kind": "source" },
-    { "id": "kafka",  "label": "Kafka",          "kind": "transport" },
-    { "id": "flink",  "label": "Flink 清洗",     "kind": "transform" },
-    { "id": "dwd",    "label": "dwd_order_detail", "kind": "table" },
-    { "id": "bi",     "label": "报表看板",       "kind": "consumer" }
-  ],
-  "flows": [
-    { "from": "binlog", "to": "kafka", "label": "CDC" },
-    { "from": "kafka",  "to": "flink" },
-    { "from": "flink",  "to": "dwd",   "label": "去重 + 维表关联" },
-    { "from": "dwd",    "to": "bi",    "label": "T+1" }
-  ]
-}
-```
-
-**状态机**——含重试和终态：
-
-```json
-{
-  "meta": { "title": "订单状态", "quality_profile": "showcase" },
-  "states": [
-    { "id": "created", "label": "待支付", "kind": "initial" },
-    { "id": "paying",  "label": "支付中" },
-    { "id": "paid",    "label": "已支付" },
-    { "id": "failed",  "label": "支付失败" },
-    { "id": "closed",  "label": "已关闭", "kind": "terminal" }
-  ],
-  "transitions": [
-    { "from": "created", "to": "paying", "label": "提交支付" },
-    { "from": "paying",  "to": "paid",   "label": "回调成功" },
-    { "from": "paying",  "to": "failed", "label": "回调失败" },
-    { "from": "failed",  "to": "paying", "label": "重试（≤3 次）" },
-    { "from": "created", "to": "closed", "label": "超时 30min" }
-  ]
-}
-```
-
-**流程图**用来画审批门禁、运行手册、CI/CD 这类有判断分支的东西，结构和上面几种类似：一组步骤，加上带条件的连线。
-
-### 示例 5：留一份视觉证据
-
-```bash
-node bin/archify.mjs visual-check order-arch.html --json
-```
-
-```text
-{ "fit": { "1440x900": "ok", "1600x1000": "ok", "1920x1080": "ok", "2048x1320": "ok" },
-  "shots": ["order-arch.shots/1440-light.png", "order-arch.shots/2048-dark.png", …],
-  "contactSheet": "order-arch.shots/contact.png",
-  "visualReview": "pending" }
-```
-
-它在几档分辨率下量一遍有没有溢出，在最小和最大两档各截浅色和深色。注意最后那个字段一直是 `pending`——截图是证据，不是"视觉已经调好了"的结论。退出码 2 表示本机没有 Chrome，这一步会被跳过，那就如实写没做。
-
-### 示例 6：想在本地边改边看
-
-```bash
-node bin/archify.mjs preview architecture order-arch.json preview.html --quality showcase --open
-node bin/archify.mjs doctor      # 确认环境可用，包内不需要装依赖
-node bin/archify.mjs demo ./out  # 生成一组样例，看看能做出什么样的东西
-```
-
-### 示例 7：收尾时你会看到的回复
-
-```text
-产物   order-arch.html（架构型，showcase 档）
-验证   9 项检查全部报告，错误 0，告警 0
-回执   规范 sha256 3f9a…c12 / 2184B；产物 sha256 b70d…4ae / 268431B
-截图   四档分辨率均无溢出，浅色深色各两张，联系表 order-arch.shots/contact.png
-       视觉复核状态 pending（截图已生成，人工确认未做）
-命令   validate / deliver / visual-check 退出码均为 0
-
-未覆盖
-  图中的支付服务只画了对外依赖，内部分层未展开（本轮不需要）
-```
-
-## 与其他 Skill 的关系
-
-| 关系 | Skill | 说明 |
-| --- | --- | --- |
-| 前置 | [architecture-design](/skills/skills-reference/high/architecture-design/) | 先有边界、模块和部署形态的结论 |
-| 协作 | [mermaid](/skills/skills-reference/low/mermaid/) | 简单图，或作为输入来源 |
-| 协作 | [tech-decision](/skills/skills-reference/high/tech-decision/) | 图上的技术标注要和选型结论一致 |
-| 后续 | 无 | 产物本身就是终点 |
-
-```text
-architecture-design → archify → HTML + visual-check 证据
-                        ↑
-                   mermaid（已有源码时作为输入）
-```
-
-## 常见坑
-
-**拿它替代架构决策。**  边界还没划就先画图，画出来的是一张猜测的示意图，而且它看起来比一段"我觉得可以这样分"要可信得多——这正是危险的地方。
-
-**节点画到三十个。**  一张图能承载的信息有上限。超过十来个主节点就该拆，或者收成分组，否则读的人只会说"看不懂但很厉害"。
-
-**照着示例文件编节点名。**  示例是用来对齐字段结构的。ID、文案、布局都要按你自己的系统重新写，尤其是要反映真实代码的时候，节点得能在仓库里对上。
-
-**先手工调坐标，再写内容。**  正确的顺序是先把候选文件写出来、跑一次验证，让诊断告诉你哪里挤了。在文字里推演几何是最慢的一条路。
-
-**把截图当成视觉验收。**  截图只证明没溢出。图好不好看、讲不讲得通，仍然要人看一眼。
-
-## 下一步
-
-- [architecture-design](/skills/skills-reference/high/architecture-design/) — 先定边界与模块
-- [mermaid](/skills/skills-reference/low/mermaid/) — 简单图，或作为输入
-- [tech-decision](/skills/skills-reference/high/tech-decision/) — 图上的技术标注来源
-- [universal-development](/skills/skills-reference/low/universal-development/) — 要动代码时
-- [product-manager](/skills/skills-reference/critical/product-manager/) — 需求还没定时
-
+交付包含 HTML 路径、图表类型、验证摘要和实际视觉检查状态。需要本地立即打开时再要求预览，普通生成不默认启动持续预览服务。
 
 
 

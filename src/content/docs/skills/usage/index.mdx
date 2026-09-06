@@ -1,308 +1,109 @@
 ---
-title: 实践指南
-description: 场景化的使用指南，涵盖常见开发流程
-order: 20
+title: 使用指南
+description: 按真实开发场景选择入口，完成规划、实现、验证与交付
+sidebar:
+  order: 0
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-## 实践指南概述
+## 先选场景
 
-本节提供场景化的操作指南，帮助你在实际开发中使用 Skills Framework。每个指南都包含详细的步骤、预期输出和检查点。
+这组指南按一次真实任务的决策顺序排列。先判断任务类型，再进入对应流程；不要因为历史对话或旧摘要跳过当前仓库和 TODO 的核对。
 
-<Aside type="tip">
-**推荐学习路径**：  
-新手 → [5分钟快速体验](/skills/quickstart/) → [第一个功能开发实战](/skills/first-feature/) → 本节实践指南
+| 现在要做什么 | 入口 |
+| --- | --- |
+| 从零启动项目 | [新项目开始](/skills/usage/new-project/) |
+| 交付 TODO 中已批准的新功能 | [功能开发流程](/skills/usage/feature-development/) |
+| 已批准范围、契约或数据边界发生变化 | [需求变更处理](/skills/usage/requirement-change/) |
+| 排查并修复 Bug | [Bug 修复流程](/skills/usage/bug-fix/) |
+| 读取另一段 Claude/Codex 历史会话 | [会话接续](/skills/usage/session-resume/) |
+| 审查已收敛的改动 | [代码审查流程](/skills/usage/code-review/) |
+| 管理分支、合并或冲突 | [Git 操作指南](/skills/usage/git-workflow/) |
+| 记录每次变更和合并 | [变更日志](/skills/usage/changelog/) |
+| 查看、领取或完成 TODO | [TODO 管理](/skills/usage/todo-management/) |
+
+<Aside type="note">
+“继续当前已批准的 TODO”和“读取另一段历史会话”是两件事。前者由 `next` 根据当前 TODO 选择，后者才使用 `resume-claude` 或 `resume-codex`。
 </Aside>
 
-## 按场景选择指南
+## 推荐顺序
 
-### 🆕 新项目开发
+### 新项目
 
-**适合场景**：
-- 启动全新项目
-- 搭建项目基础架构
-- 建立开发规范
+1. [新项目开始](/skills/usage/new-project/) 建立项目事实、需求和唯一 TODO。
+2. [功能开发流程](/skills/usage/feature-development/) 领取一个已批准 Feature 并完成纵向交付。
+3. [代码审查流程](/skills/usage/code-review/) 审查完整 diff，关闭 findings。
+4. [Git 操作指南](/skills/usage/git-workflow/) 在授权范围内提交、推送并核验远端。
 
-**关键 Skill**：task-todo-workflow → product-manager → architecture-design
+### 已有项目
 
-👉 [新项目开发指南](/skills/usage/new-project/)
+1. 先读当前 `PROJECT-MEMORY.md`、唯一 TODO 和目标源码。
+2. 新功能走 `product-manager` / `project-manager`；已批准范围的真实变化走 `change-impact-analysis`。
+3. 已批准 Feature 直接进入 [功能开发流程](/skills/usage/feature-development/)。
+4. Bug 走 [Bug 修复流程](/skills/usage/bug-fix/)，不把 Bug 当成新需求重新规划。
 
----
+### 从历史会话接续
 
-### 🔧 功能开发
+1. 明确历史来源是 Claude Code 还是 Codex，再进入[会话接续](/skills/usage/session-resume/)。
+2. 读取结果只作为核对线索；当前仓库、分支、改动、项目记忆和 TODO 才是实施依据。
+3. 只读总结到此结束；只有用户明确要求继续，才在当前授权范围内进入实现流程。
 
-**适合场景**：
-- 在已有项目中开发新功能
-- 实现业务需求
-- 添加 API 或页面
+## 完成一项 Feature 的最短闭环
 
-**关键 Skill**：product-manager → frontend-design → tech-decision → project-manager
+```text
+当前 TODO 的 [~] Feature
+  ↓
+来源复核 + 项目记忆
+  ↓
+核对已批准的技术结论（缺失时才走技术选型）
+  ↓
+数据 / API / 后端 / 页面 / 权限 / 异常恢复
+  ↓
+一个最有判别力的现有检查 + 真实入口验证
+  ↓
+一次完整 code-review，关闭 findings
+  ↓
+回写 TODO；获得授权后由 git-commit 提交和推送
+```
 
-👉 [功能开发流程](/skills/usage/feature-development/)
+默认不新增测试源码。只有用户在本轮明确要求设计测试策略、方案或用例时，才进入 `test-strategy`；只有明确要求写或改测试源码时，才进入 `test-development`。已有测试、CI 门禁或 Review finding 本身都不构成授权。每条验收都要记录真实证据，证据不足就保持未完成并说明缺口。
 
----
+## 常用触发
 
-### 🔄 需求变更
+| 目标 | 示例请求 | 主要入口 |
+| --- | --- | --- |
+| 开始新项目 | `我要做一个订单系统` | `product-manager` / `project-manager` |
+| 实现已批准功能 | `开始实现 ORDER-EXPORT` | `next` → `dev` 或专业实现 Skill |
+| 需求发生变化 | `需求改了，订单需要支持手机号` | `change-impact-analysis` |
+| 修复故障 | `登录接口返回 401，请定位根因并修复` | `bug-detective` |
+| 读取 Claude 历史 | `读取 Claude Code 会话 <session-id>` | `resume-claude` |
+| 读取 Codex 历史 | `继续 Codex 中关于订单分页的会话` | `resume-codex` |
+| 只看当前进度 | `读取我的 TODO，报告完成、进行中和阻塞项` | `progress` |
+| 审查改动 | `审查 ORDER-EXPORT 这次完整 diff` | `code-review` |
 
-**适合场景**：
-- 已批准的需求发生变化
-- 添加/删除字段
-- 修改业务逻辑
-
-**关键 Skill**：change-impact-analysis → project-manager
-
-👉 [需求变更处理](/skills/usage/requirement-change/)
-
----
-
-### 🐛 Bug 修复
-
-**适合场景**：
-- 发现并修复 Bug
-- 故障排查
-- 紧急问题处理
-
-**关键 Skill**：bug-detective → universal-development → code-review
-
-👉 [Bug 修复流程](/skills/usage/bug-fix/)
-
----
-
-### 🔍 代码审查
-
-**适合场景**：
-- 功能完成后的 Review
-- Pull Request 审查
-- 代码质量检查
-
-**关键 Skill**：code-review
-
-👉 [代码审查流程](/skills/usage/code-review/)
-
----
-
-### 📝 Git 工作流
-
-**适合场景**：
-- 分支管理
-- 提交和推送代码
-- 解决合并冲突
-
-**关键 Skill**：git-commit, git-workflow
-
-👉 [Git 操作指南](/skills/usage/git-workflow/)
-
----
-
-### ✅ TODO 管理
-
-**适合场景**：
-- 多任务并行开发
-- 任务依赖管理
-- 进度追踪
-
-**关键 Skill**：task-todo-workflow, add-todo, update-status, progress
-
-👉 [TODO 管理](/skills/usage/todo-management/)
-
----
-
-### 👥 团队协作
-
-**适合场景**：
-- 多人并行开发
-- 任务交接
-- 冲突解决
-
-**关键 Skill**：task-todo-workflow, git-workflow
-
-👉 [团队协作指南](/skills/usage/team-collaboration/)
-
----
-
-## 快速决策树
-
-不确定该看哪个指南？回答几个问题：
-
-### 问题 1：是新项目还是已有项目？
-
-- **新项目** → [新项目开发](/skills/usage/new-project/)
-- **已有项目** → 继续问题 2
-
-### 问题 2：是新功能、变更还是 Bug？
-
-- **新功能** → [功能开发](/skills/usage/feature-development/)
-- **需求变更** → [需求变更](/skills/usage/requirement-change/)
-- **Bug 修复** → [Bug 修复](/skills/usage/bug-fix/)
-
-### 问题 3：需要协作吗？
-
-- **单人开发** → 按上述场景选择
-- **多人协作** → 先看 [团队协作](/skills/usage/team-collaboration/)
-
-## 常用自然语言触发
-
-不需要记住 Skill 名称，直接用自然语言描述你要做什么：
-
-| 你想做什么 | 说什么 | 触发的 Skill |
-|-----------|--------|-------------|
-| 开始新项目 | "我要做一个XX系统" | task-todo-workflow → product-manager |
-| 需求变更 | "需求改了，XX要改成YY" | change-impact-analysis |
-| 开发功能 | "开始实现用户注册" | crud-development / universal-development |
-| 设计页面 | "设计用户登录页面" | frontend-design |
-| 优化页面 | "优化这个页面的性能" | frontend-polish |
-| 审查代码 | "审查代码" | code-review |
-| 排查问题 | "报错了，登录失败" | bug-detective |
-| 提交代码 | "提交并推送代码" | git-commit |
-| 查看进度 | "查看当前进度" | progress |
-
-<Aside type="tip">
-系统会根据触发词、前置条件（gates）和冲突规则（conflicts）自动选择最合适的 Skill，准确率 96%+。
-</Aside>
-
-## 常用命令
+## 常用检查
 
 ```bash
-# 查看 Skill 列表
-/skills
+# 当前仓库根目录
+git rev-parse --show-toplevel
 
-# 查看当前 TODO
-cat docs/<your-name>/tasks/todo/<project>.md
+# 当前开发者的唯一 TODO
+cat docs/<developer-id>/tasks/todo/<文件名>.md
 
-# 查看项目记忆
+# 稳定项目事实
 cat PROJECT-MEMORY.md
 
-# 查看进度
-"查看进度"  # 触发 progress Skill
-
-# 提交代码
-"提交代码"  # 触发 git-commit Skill
-
-# 启用路由调试
-AGENT_DEBUG_ROUTING=1 claude
 ```
 
-## 开发模式选择
+Codex 可在客户端内输入 `/skills` 浏览可用 Skill，或输入 `$` 查看补全；Claude Code 使用当前会话提供的 Skill 列表，并以 `/skill-name` 显式调用。这些都不是终端命令。
 
-不同场景选择不同的档位和自主模式：
+不要把示例中的技术栈、路径或命令当成目标仓库事实。先检查项目已有的依赖、脚本、配置和相邻实现，再选择适用 Skill。
 
-| 场景 | 档位 | 自主模式 | 预计时间 |
-|------|------|---------|---------|
-| 快速原型验证 | Lite | Build | 30 分钟 - 1 小时 |
-| 日常功能开发 | Standard | Build | 1-4 小时 |
-| 复杂新功能 | Standard | Plan | 2-8 小时 |
-| 技术调研 | Lite | Goal | 30 分钟 - 1 小时 |
-| 数据库迁移 | High-risk | Plan | 2-4 小时 |
-| Bug 修复 | Lite | Build | 30 分钟 - 2 小时 |
-| 支付功能 | High-risk | Plan | 4-8 小时 |
+## 延伸阅读
 
-详细了解：[工作流与档位](/skills/core-concepts/workflow-modes/)
-
-## 学习路径
-
-### 🚀 入门级（0-1 小时）
-
-1. [5分钟快速体验](/skills/quickstart/) - 立即看到效果
-2. [第一个功能开发实战](/skills/first-feature/) - 端到端完整流程
-3. [核心概念](/skills/core-concepts/) - 理解基本原理
-
-### 📚 进阶级（1-3 小时）
-
-1. [功能开发流程](/skills/usage/feature-development/) - 掌握完整开发流程
-2. [需求变更处理](/skills/usage/requirement-change/) - 应对需求变化
-3. [团队协作指南](/skills/usage/team-collaboration/) - 多人并行开发
-
-### 🚀 高级（3+ 小时）
-
-1. [Frontmatter 规范](/skills/advanced/frontmatter-spec/) - 深入路由机制
-2. [创建新 Skill](/skills/advanced/creating-skills/) - 扩展框架
-3. [路由调试](/skills/advanced/routing-debug/) - 解决复杂问题
-
-## 常见问题
-
-### Q1: 如何切换正在进行的任务？
-
-不能直接切换。必须先完成或阻塞当前任务：
-
-```bash
-# 完成当前任务
-"完成 USER-LOGIN"
-
-# 或标记为阻塞
-"USER-LOGIN 卡住了,等设计稿"
-
-# 然后领取新任务
-"开始实现 USER-PROFILE"
-```
-
-### Q2: 如何查看所有可用的 Skill？
-
-```bash
-# 在客户端中
-/skills
-
-# 或查看文档
-浏览 /skills/catalog/
-```
-
-### Q3: 如何知道当前在哪个阶段？
-
-```bash
-# 查看 TODO 文件中的流程状态机
-cat docs/<your-name>/tasks/todo/<project>.md
-
-# 或询问
-"当前在哪个阶段？"
-```
-
-### Q4: 如何处理紧急 Bug？
-
-```bash
-# Bug 修复不需要经过完整流程状态机
-# 直接描述问题
-"用户登录失败，报错 401"
-
-# 系统自动触发
-bug-detective → 排查 → universal-development → 修复 
-→ code-review → git-commit
-```
-
-### Q5: 多人如何避免冲突？
-
-每个任务都有写集（要修改的文件列表），系统自动检查：
-- ✅ 写集不冲突的任务可以并行
-- ❌ 写集冲突的任务必须串行
-
-详见：[团队协作指南](/skills/usage/team-collaboration/)
-
-## 获取帮助
-
-### 文档资源
-
-- 📖 [Skill 目录](/skills/catalog/) - 查看所有可用 Skill
-- 📖 [故障排查](/skills/troubleshooting/) - 常见问题解决
-- 📖 [最佳实践](/skills/best-practices/) - 经验总结
-
-### 调试工具
-
-```bash
-# 启用路由调试
-AGENT_DEBUG_ROUTING=1 claude
-
-# 查看路由统计
-node runtime-hooks/scripts/routing-stats.cjs
-
-# 检查 Runtime Hook 状态
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
-```
-
-### 社区支持
-
-- GitHub Issues - 报告问题
-- Discussions - 讨论最佳实践
-- Pull Requests - 贡献代码
-
----
-
-**准备好开始了吗？** 选择一个最符合你当前需求的指南，开始实践吧！
+- [快速上手](/skills/quickstart/)：在当前项目验证客户端接入并选择任务。
+- [第一个功能开发](/skills/first-feature/)：完整走一遍功能闭环。
+- [核心概念](/skills/core-concepts/)：了解路由、Hook、项目记忆和工作流档位。
+- [最佳实践](/skills/best-practices/)：集中查看边界、验证和协作要点。
+- [Skill 参考手册](/skills/skills-reference/)：查具体 Skill 的触发面和职责边界。

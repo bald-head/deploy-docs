@@ -1,7 +1,8 @@
 ---
 title: Bug 修复流程
 description: 快速定位和修复生产问题
-order: 24
+sidebar:
+  order: 4
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -83,7 +84,7 @@ const token = jwt.sign(
 ### 第 4 步：验证修复
 
 ```bash
-# 自动执行测试
+# 如果仓库已有针对该路径的检查，复用它；本轮未明确要求时不新增测试源码
 npm test -- auth.test.ts
 
 # 手工验证
@@ -112,8 +113,8 @@ fix: 修复登录 token 过期时间设置错误
 根因：src/api/auth/login.ts 中 expiresIn 设置为 '1h'
 修复：改为 '7d'
 
-验证：✓ 单元测试通过
-      ✓ 手工登录验证通过
+验证：✓ 已有检查通过（若仓库提供）
+      ✓ 手工登录复现路径验证通过
 ```
 
 ## 常见 Bug 类型
@@ -312,7 +313,7 @@ user.update({ ... });  // ✓ 增加了空值检查
 ### 5. 验证修复
 
 ```bash
-# 执行相关测试
+# 仅在仓库已有对应检查，或用户本轮明确要求补测试时执行
 npm test -- login.test.ts
 
 # 手工验证复现步骤
@@ -359,9 +360,8 @@ tail -f logs/app.log
 # 回退到上一个稳定版本
 git revert <commit-hash>
 
-# 或
-git reset --hard <last-stable-commit>
-git push --force
+# Do not overwrite the worktree or rewrite remote history for a rollback.
+# Follow git-workflow's rollback flow and let git-commit deliver it after authorization.
 ```
 
 ## 常见陷阱

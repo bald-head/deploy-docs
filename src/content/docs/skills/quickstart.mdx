@@ -1,241 +1,86 @@
 ---
-title: 5分钟快速体验
-description: 无需深入理解原理，立即体验 Skills Framework 的核心能力
-order: 2
+title: 快速上手
+description: 安装后从一个真实项目开始，定位代码、选择任务并接续历史会话
+sidebar:
+  order: 2
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+完成[安装与配置](/skills/getting-started/)后，在要处理的业务仓库根目录启动 Claude Code 或 Codex。下面的提示词输入到客户端；终端命令只在标注的目录执行。
 
-## 前提条件
+## 1. 先认识当前项目
 
-✅ 已完成 [快速安装](/skills/getting-started/)  
-✅ Claude Code 或 Codex 已启动
+向 Agent 提出一个范围明确的请求：
 
-<Aside type="tip">
-本教程只需 **5 分钟**，让你快速了解 Skills Framework 如何工作。
-</Aside>
-
-## 第 1 步：验证安装（30秒）
-
-打开 Claude Code 或 Codex，输入：
-
-```
-/skills
+```text
+先定位当前项目的启动入口、用户模块和已有检查命令。
+引用真实文件路径，本次先不修改业务代码。
 ```
 
-**预期结果**：看到 95 个可用 Skill 的列表。
+Agent 会结合项目记忆和源码定位入口，适用时使用 `project-navigator`；未知仓库需要建立概览时使用 `start`。项目记忆缺失时可能初始化唯一 `PROJECT-MEMORY.md`，它保存稳定事实，不保存对话副本。
 
-✅ **检查点**：如果看到 Skill 列表，说明安装成功。
+核对返回的文件是否存在、命令是否来自项目配置。若 Agent 找错仓库，明确给出目标目录后再继续。
 
-## 第 2 步：体验智能路由（1分钟）
+## 2. 选择你当前要做的事
 
-### 测试 1：自然语言触发
+不必背诵完整 Skill 名称。描述目标、现象和约束即可；需要指定能力时，也可以显式调用。
 
-直接输入自然语言，看系统如何自动路由到正确的 Skill：
+| 当前任务 | 可直接使用的提示词 | 主要入口 |
+| --- | --- | --- |
+| 已有任务续作 | 读取我的唯一 TODO，继续当前已批准的功能 | `next` 与适用实现 Skill |
+| 新功能 | 添加订单管理，包含列表、详情和状态更新；先核对现有实现与需求 | 新需求规划，再进入专业实现 |
+| 故障修复 | 登录后立即返回 401，请沿请求链定位并修复 | `bug-detective` |
+| 页面整理 | 调整已有订单列表的布局和错误状态 | `frontend-polish` |
+| 性能问题 | 订单列表加载需要 8 秒，请先定位耗时 | `performance-doctor` |
+| 审查改动 | 审查当前 diff 的缺陷和验收证据 | `code-review` |
+| 执行检查 | 运行项目已有检查，不新增测试代码 | 复用已有命令 |
+| 编写测试 | 为订单状态转换补单元测试代码 | `test-development` |
 
-```
-需求改了，用户表要加手机号字段
-```
+例如，显式定位项目入口：
 
-**预期行为**：
-1. 系统自动识别触发词 "需求改了"
-2. 路由到 `change-impact-analysis` Skill
-3. 分析受影响的 API、数据库、前端
-
-<Aside type="note">
-**路由过程**（自动完成）：
-- 触发词匹配：✓ "需求改了"
-- Gates 检查：✓ 已有批准的范围
-- Conflicts 解决：✓ 这是变更而非新需求
-- 选择 Skill：→ change-impact-analysis
-</Aside>
-
-### 测试 2：查看路由准确性
-
-输入不同的表达，观察系统如何区分：
-
-```
-# 测试 A：优化已有页面
-优化这个页面的性能
+```text
+Claude Code：/project-navigator 找到订单列表的页面与 API 入口
+Codex：$project-navigator 找到订单列表的页面与 API 入口
 ```
 
-**预期**：路由到 `frontend-polish`
+自然语言选择由客户端提供的 Skill 清单、任务语义和仓库事实共同决定。上表是职责指引，不是固定调用序列；“加快开发进度”也不等于要诊断程序性能。
 
-```
-# 测试 B：设计新页面
-设计用户登录页面
-```
+## 3. 接续另一段会话
 
-**预期**：路由到 `frontend-design`
+新加入的两个 Skill 按**历史来源**选择，与当前使用哪个客户端无关。
 
-<Aside type="tip">
-虽然都包含"页面"，但系统通过 gates（是否已有实现）和 conflicts（职责边界）准确区分。
-</Aside>
-
-## 第 3 步：体验 Runtime Hook（1分钟）
-
-Runtime Hook 会在每次输入时自动注入上下文。
-
-### 查看自动注入的提示
-
-输入任意问题，观察系统响应开头：
-
-```
-我要做一个用户管理系统
+```text
+读取 Claude Code 的会话 <session-id>，继续其中未完成的问题。
+目标仓库是 <项目路径>。
 ```
 
-**自动注入内容**（在后台）：
-1. ✅ 行为内核（事实先行、简单优先、最小写集）
-2. ✅ 项目记忆摘要（如果存在 PROJECT-MEMORY.md）
-3. ✅ 当前 TODO 状态（如果有活动任务）
-4. ✅ 推荐适用 Skill
-
-<Aside type="note">
-你看不到注入过程，但系统响应会体现出这些上下文。例如，它会基于已有项目事实给出建议，而不是从零假设。
-</Aside>
-
-## 第 4 步：体验命令防护（1分钟）
-
-Runtime Hook 的 PreToolUse 会拦截高风险命令。
-
-### 测试防护机制
-
-**安全命令**（会正常执行）：
-```
-ls -la
-git status
-cat package.json
+```text
+读取 Codex 中关于订单分页的那段会话，先总结进度，不修改代码。
 ```
 
-**危险命令**（会被拦截）：
-```bash
-# 不要真的运行！只是演示
-rm -rf /
-git push --force
-```
+前者使用 `resume-claude`，后者使用 `resume-codex`。支持会话 ID、记录路径、描述或 `latest`；省略引用或使用 `latest` 时，只查当前目录的最近会话。描述匹配多项时会列出候选供选择。
 
-如果你尝试危险命令，系统会：
-1. 🛑 拦截命令
-2. ⚠️ 显示风险说明
-3. 🤔 询问是否确认
+读取历史不会恢复旧进程、工具连接或运行中命令。继续前仍会核对当前分支、改动与 TODO；只要求总结时，停在摘要。详见[历史会话接续](/skills/usage/session-resume/)。
 
-<Aside type="danger">
-**防护示例**：  
-命令：`git push --force`  
-拦截原因：强制推送会覆盖远程历史  
-建议：使用 `git push` 或先 `git pull --rebase`
-</Aside>
+## 4. 核对结果与下一步
 
-## 第 5 步：体验完整流程（2分钟）
+一个可核对的答复应说明：处理了什么、依据哪些文件、执行了哪些验证、还有什么未完成。只有构建通过时，不应声称真实业务流程已经验收。
 
-快速体验一个简单的功能开发流程。
+任务记录与稳定项目事实分开保存：
 
-### 场景：添加一个新字段
+| 内容 | 位置 |
+| --- | --- |
+| 当前开发者的功能、依赖和状态 | `docs/<developer-id>/tasks/todo/<原文件名>.md` |
+| 项目技术栈、复用入口和边界 | 唯一 `PROJECT-MEMORY.md`；已有 `docs/PROJECT-MEMORY.md` 时沿用 |
 
-```
-1. 输入需求
-"用户表需要加一个手机号字段"
+新功能先完成必要规划；已批准 TODO、明确 Bug 和普通维护按现有边界执行。只有本轮明确要求写测试时才新增或修改测试源码，运行已有检查不需要转成测试开发任务。
 
-2. 观察自动路由
-→ change-impact-analysis（分析影响）
-→ database-design（设计表结构）
-→ project-manager（更新 TODO）
+需要 Git 交付时明确说明提交范围、目标分支和是否推送。已有授权在原范围内继续有效；Runtime Hook 本身不执行 commit 或 push。持续开发的完整顺序见 [Git 工作流](/skills/usage/git-workflow/)。
 
-3. 查看生成的 TODO
-cat docs/<你的名字>/tasks/todo/*.md
+每次真实代码、Skill、配置或文档变更都要在同一提交更新仓库根 `CHANGELOG.md`；分支合并时按 fast-forward 或 merge commit 的实际结果记录，具体格式见[变更日志](/skills/usage/changelog/)。
 
-4. 查看影响分析
-- 受影响的 API：/api/user/register, /api/user/profile
-- 受影响的数据库：users 表
-- 受影响的前端：注册表单、个人资料页
-```
+## 继续阅读
 
-<Aside type="tip">
-**流程特点**：
-- ✅ 自动识别影响范围
-- ✅ 更新 TODO 包含完整写集
-- ✅ 保证并行任务写集互斥
-- ✅ 一次完整 Review
-</Aside>
-
-## 体验总结
-
-在这 5 分钟里，你体验了：
-
-✅ **智能路由**  
-自然语言触发，96%+ 准确率，自动选择正确 Skill
-
-✅ **自动上下文**  
-Runtime Hook 自动注入项目记忆、TODO 状态
-
-✅ **命令防护**  
-PreToolUse 拦截高风险命令，保护代码安全
-
-✅ **完整流程**  
-从需求变更到影响分析，全自动推进
-
-## 下一步
-
-### 继续学习
-
-- 📖 [第一个功能开发实战](/skills/first-feature/) - 完整的端到端教程
-- 📚 [核心概念](/skills/core-concepts/) - 深入理解路由、Hook、记忆系统
-- 🛠️ [实践指南](/skills/usage/) - 各种实际场景的操作指南
-
-### 常见问题
-
-**Q: 如何看到更详细的路由过程？**
-
-```bash
-# 启动调试模式
-AGENT_DEBUG_ROUTING=1 claude
-```
-
-**Q: 如何查看所有触发词？**
-
-查看文档：[路由机制](/skills/core-concepts/routing/) 或 [Frontmatter 规范](/skills/advanced/frontmatter-spec/)
-
-**Q: 如何关闭 Runtime Hook？**
-
-不推荐关闭。如果确实需要：
-```bash
-# 备份配置
-cp ~/.claude/hooks.json ~/.claude/hooks.backup.json
-
-# 移除特定 Hook
-# 编辑 ~/.claude/hooks.json，删除对应条目
-```
-
-**Q: 体验过程遇到问题？**
-
-查看 [故障排查](/skills/troubleshooting/) 或在项目仓库提 Issue。
-
-## 实战演练
-
-想立即开始实战？试试这些场景：
-
-1. **新项目启动**
-   ```
-   我要做一个博客系统，支持文章发布和评论
-   ```
-
-2. **Bug 修复**
-   ```
-   用户登录失败，控制台报错 401 Unauthorized
-   ```
-
-3. **性能优化**
-   ```
-   首页加载太慢，需要优化
-   ```
-
-4. **代码审查**
-   ```
-   审查 src/api/user.ts 的代码
-   ```
-
-每个场景都会触发不同的 Skill 组合，观察系统如何自动推进流程！
-
----
-
-🎉 **恭喜完成快速体验！** 现在你已经了解 Skills Framework 的核心能力，可以开始 [第一个功能开发实战](/skills/first-feature/) 了。
+- 开发一个完整功能：[第一个功能开发](/skills/first-feature/)。
+- 根据手头任务查步骤：[使用指南](/skills/usage/)。
+- 找一个专业能力：[Skill 目录](/skills/catalog/)与[参考手册](/skills/skills-reference/)。
+- 安装或执行遇到问题：[故障排查](/skills/troubleshooting/)。

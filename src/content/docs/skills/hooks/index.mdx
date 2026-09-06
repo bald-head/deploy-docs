@@ -1,191 +1,88 @@
 ---
 title: Runtime Hooks
-description: Runtime Hooks 能帮你做什么，怎么装、怎么关、出问题怎么办
-order: 40
+description: Runtime Hook 生命周期、状态检查与配置入口
+sidebar:
+  order: 0
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
 ## 概述
 
-Runtime Hooks 在 Claude Code 和 Codex 的关键生命周期节点自动接管一部分工作：把统一的行为原则和项目事实带进上下文、提醒当前 TODO、拦下明显危险的命令、在任务完成或需要你决定时发出提示音。装好之后不需要你在每轮对话里手动交代这些。
+Runtime Hooks 在客户端的关键事件中注入行为准则和项目事实、提醒当前 TODO、检查部分高风险命令，并在回复结束或需要人工接续时播放提示音。它们辅助 Agent 执行已授权的任务，不能替代 Skill 正文、真实验证或 Git 交付。
 
-**你会得到什么**：
+Hook 随 Skills 仓库分发，位于 `<skills-root>/runtime-hooks/`。首次安装见 [安装与配置](/skills/getting-started/)，Hook 配置细节见 [Hook 安装指南](/skills/hooks/installation/)。
 
-- **跨客户端一致**：Claude Code 和 Codex 用同一套原则和同一份项目记忆
-- **轻量注入**：只带入当前这轮请求真正相关的事实，不灌整份清单
-- **流程连续**：TODO 状态自动推进，一个功能收口后自动接下一个
-- **危险操作前置拦截**：递归强制删除、强制推送、清库一类命令会被直接拒绝
+## 事件分工
 
-## Hook 生命周期
+| 事件 | 触发时机 | 当前职责 | 详细文档 |
+|---|---|---|---|
+| SessionStart | 会话启动 | 自检托管配置、按设置修复；只读 Penpot 本地注册状态 | [查看](/skills/hooks/session-start/) |
+| UserPromptSubmit | 提交提示词 | 注入行为内核、记忆摘要、开发者范围和当前 TODO 提醒 | [查看](/skills/hooks/user-prompt-submit/) |
+| PreToolUse | matcher 覆盖的命令或写入工具前 | 拒绝命中规则的危险命令；检查活动流程写入阶段 | [查看](/skills/hooks/pre-tool-use/) |
+| SubagentStart | 子 Agent 启动 | 复用项目上下文注入 | [查看](/skills/hooks/subagent-start/) |
+| SubagentStop | 子 Agent 停止 | 已领取 Feature 时校验 Handoff，按当前 TODO 状态处理 | [查看](/skills/hooks/subagent-stop/) |
+| Stop | 主 Agent 回合停止 | 完成门禁、原子准备 TODO 状态、远端核验和续作提示 | [查看](/skills/hooks/stop/) |
+| PermissionRequest | Claude Code 请求授权 | 播放确认提示音 | [查看](/skills/hooks/notification/) |
 
-```mermaid
-graph TD
-    A[SessionStart] --> B[会话启动检查]
-    B --> C[UserPromptSubmit]
-    C --> D[注入行为内核+项目记忆+TODO]
-    D --> E[PreToolUse]
-    E --> F{工具类型}
-    F -->|Bash| G[命令防护检查]
-    F -->|Write/Edit| H[流程门禁检查]
-    G --> I[工具执行]
-    H --> I
-    I --> J[SubagentStart]
-    J --> K[Subagent执行]
-    K --> L[SubagentStop]
-    L --> M{任务状态}
-    M -->|完成| N[Stop Hook]
-    M -->|阻塞| N
-    M -->|Handoff| O[主Agent收口]
-    N --> P[TODO状态更新]
-    P --> Q{是否续作}
-    Q -->|有Ready Feature| C
-    Q -->|无| R[会话结束或等待]
-```
+两端事件集合不同。`PermissionRequest` 是 Claude Code 事件，Codex 通知使用用户级 `config.toml` 的 `notify` 通道，不能据此断言 Codex 已注册同名 Hook。配置对照见 [Hook 故障排查](/skills/hooks/troubleshooting/)。
 
-## 七个 Hook 分别做什么
+## 每轮上下文
 
-| Hook | 触发时机 | 你能观察到的效果 | 详细文档 |
-|------|----------|------------------|----------|
-| SessionStart | 会话启动 | 配置过时时自动对齐；报告 Penpot MCP 本地注册状态 | [查看](/skills/hooks/session-start/) |
-| UserPromptSubmit | 每次提交提示词 | 注入行为内核、项目记忆摘要、当前 TODO 提醒 | [查看](/skills/hooks/user-prompt-submit/) |
-| PreToolUse | 每个工具调用前 | 拒绝破坏性命令；规划阶段拒绝写生产文件 | [查看](/skills/hooks/pre-tool-use/) |
-| SubagentStart | Subagent 启动 | 子任务拿到与主会话一致的上下文 | [查看](/skills/hooks/subagent-start/) |
-| SubagentStop | Subagent 停止 | 校验 Handoff 信息是否齐全 | [查看](/skills/hooks/subagent-stop/) |
-| Stop | 主会话停止 | 更新 TODO 状态、核验推送、自动续作下一项 | [查看](/skills/hooks/stop/) |
-| PermissionRequest | 需要你授权时 | 播放"需要确认"提示音 | [查看](/skills/hooks/notification/) |
-
-<Aside type="caution">
-两端的事件集合不完全相同：`PermissionRequest` 只有 Claude Code 有，Codex 侧同样的通知走 `~/.codex/config.toml` 里的用户级 `notify` 通道。逐事件对照见 [排障页](/skills/hooks/troubleshooting/)。
-</Aside>
-
-## 每轮注入了什么
-
-上下文注入是这套机制里最常被感知到的部分。每轮请求会带入四样东西：跨客户端统一的行为原则、从仓库 `PROJECT-MEMORY.md` 里按当前问题挑出的事实摘要、当前 Git 身份对应的 TODO 归属范围，以及本实例已领取的那一项功能。
-
-注入的是**摘要而不是全文**，并且有总量上限：超出时会自动截断，并提示你直接读取源文件。看到注入块被截断，正确做法是打开对应的 TODO 或 `PROJECT-MEMORY.md`，而不是想办法把内容塞回注入。
+注入包含跨客户端行为内核、与当前问题相关的稳定项目事实、开发者归属范围和当前 TODO 的有界提醒。存在本地场景匹配时，还可带入候选 Skill 提示。
 
 <Aside type="note">
-Hook 不注入完整 Skill 清单或 Skill 正文，这些由客户端自身的 Skill 发现机制提供。
+完整 Skill 清单由 Harness 原生发现提供，命中后按需读取 `SKILL.md`。本地路由提示不代表实际调用，不执行 frontmatter 中的 `gates` 或后续 Skill 链。
 </Aside>
 
-## 核心能力
+项目记忆按根目录 `PROJECT-MEMORY.md`、`docs/PROJECT-MEMORY.md`、`docs/project-memory.md` 的顺序复用。都没有时才在根目录创建模板；空章节提示由 `init-docs` 采集事实，再通过 `project-details` 归并。上下文有预算上限，截断时直接读取相关源章节。
 
-### 1. 行为内核注入
+## TODO 与 Git
 
-每次用户请求和 Subagent 启动时，自动带入一组统一原则：事实先行、简单优先、最小写集、目标驱动、按需加载、有界推进。它是所有客户端共用的同一份内容，改一次两端同时生效。
+TODO 状态机负责领取、依赖与并行写集检查、完成门禁、原子状态切换及远端核验。一个实例同一时刻只能拥有一个 `[~]`，一个 Feature 也只能由一个实例领取。
 
-### 2. 项目记忆自动维护
+首次 commit 前，状态机把当前 Feature 准备为 `[x]`。主 Agent 再把真实功能改动、必要契约和 TODO hunk 同次 commit & push。Stop Hook 不执行 Git 提交或推送；远端核验前的本地完成会显示 `delivery-pending`，不能解锁依赖它的下一项。
 
-- 自动确保目标仓库根目录有一份 `PROJECT-MEMORY.md`
-- 首次创建、或主要章节还是模板占位内容时，提示先走 `init-docs` 采集事实
-- 只注入与当前问题相关的摘要，不注入全文
-- 确认后的稳定事实由 `project-details` 原位归并
+## 命令与写入检查
 
-### 3. TODO 状态机
+PreToolUse 可拒绝命中规则的广泛递归删除、强制推送或删除远端 ref、丢弃工作区状态、清空数据库和根目录权限改写。放行表示没有命中当前规则，不是安全或授权证明。
 
-任务状态由 Hook 原子写回，不需要（也不允许）手工编辑 TODO 文件：领取、依赖检查、写集冲突检测、完成门禁、远端核验、自动续作，整条链路自动完成。
+活动工作流进入 `business-development` 前，生产写入受阶段门禁限制。并行写集由 TODO 状态机核验，实际 diff 仍由 Agent 收口对账；当前 PreToolUse 不是逐文件写集锁。
 
-### 4. 命令防护
+验证安装时不应在真实工作区执行危险命令。只检查命令字符串的方法见 [PreToolUse Hook](/skills/hooks/pre-tool-use/#不执行目标命令的检查)。
 
-明确会被**拒绝**的是这几类：递归强制删除整体目录、强制推送或删除远端 ref、丢弃工作区状态、清空数据库、递归改根目录权限。完整对照表见 [排障页](/skills/hooks/troubleshooting/)。
-
-<Aside type="caution">
-敏感信息检查不是防泄露手段。按默认配置，它既不会拦住你，也不会提示你。不要指望 Hook 帮你挡住误提交的密钥，请用 `.gitignore`、`git-secrets` 一类专门工具。
-</Aside>
-
-### 5. 流程门禁
-
-新需求推进到 `business-development` 阶段之前，Write/Edit 生产文件会被拒绝，只允许只读调查和规划文档写入。目的是强制先完成需求确认、技术方案和任务拆分。
-
-### 6. 中文提示音
-
-三类状态各有一个提示音：需要你确认、回复完成、任务完成。分类由回复末尾的不可见标记决定，详见 [中文语音通知](/skills/hooks/notification/)。
-
-## 安装和配置
+## 安装检查
 
 ```bash
-# 安装（幂等，可重复运行）
-node runtime-hooks/scripts/install.mjs
-
-# 检查安装状态
-node runtime-hooks/scripts/install.mjs --check --json
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check --json
 ```
 
-Codex 使用非托管 Hook，安装后需要在会话里信任一次：
-
-```bash
-codex
-/hooks
-# 审查并信任所有 Hook
-```
-
-👉 [完整安装指南](/skills/hooks/installation/)
+本地检查通过以 `installed: true` 且 `needsInstall: false` 为准。Claude Code 安装后重启会话；Codex 通过 `/hooks` 检查并信任新的定义。
 
 ## 环境变量
 
-| 变量 | 设置后的效果 |
-|------|--------------|
-| `AGENT_RUNTIME_HOOKS_DISABLED=1` | 停用命令防护、启动检查和提示音 |
-| `AGENT_COMMAND_GUARD=0` | 只停用命令防护 |
-| `AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0` | 配置版本不一致时不自动重装，只打印手动安装命令 |
-| `AGENT_RUNTIME_WARNINGS=1` | 打开风险提示（默认关闭；提示不会阻断执行） |
-| `AGENT_COMPLETION_SOUND=0` | 关闭全部提示音 |
-| `AGENT_DEVELOPER_NAME` | 指定开发者 ID，仅在 Git identity 不可用时生效 |
-| `AGENT_TODO_DIR` | 显式指向自己的规范 TODO 目录 |
-| `AGENT_ACTIVE_TODO` | 本次会话指定活动 TODO 文件名 |
-| `AGENT_RUNTIME_INSTANCE_ID` | 提供运行实例 ID，仅在客户端未提供时需要 |
-| `CLAUDE_CONFIG_DIR` / `CODEX_HOME` | 改写两端配置目录位置 |
+| 变量 | 实际作用 |
+|---|---|
+| `AGENT_RUNTIME_HOOKS_DISABLED=1` | 停用 SessionStart、PreToolUse 和提示音；不关闭上下文注入或 TODO 脚本 |
+| `AGENT_COMMAND_GUARD=0` | 停用整个 PreToolUse，包含其流程写入门禁 |
+| `AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0` | 启动时仍检查差异，但不自动改配置 |
+| `AGENT_RUNTIME_WARNINGS=1` | 开启非阻断风险提醒 |
+| `AGENT_COMPLETION_SOUND=0` | 关闭提示音 |
+| `AGENT_DEVELOPER_NAME` | Git identity 与系统登录用户名都不可用时兜底 |
+| `AGENT_TODO_DIR` | 只允许指向当前开发者的规范 TODO 目录 |
+| `AGENT_RUNTIME_INSTANCE_ID` | Harness 未提供实例 ID 时兜底 |
+| `CLAUDE_CONFIG_DIR` / `CODEX_HOME` | 指定对应客户端配置目录 |
 
-<Aside type="caution">
-`AGENT_RUNTIME_HOOKS_DISABLED` 的名字听起来像总开关，但它关不掉全部 Hook——上下文注入和 TODO 续作照常运行。要彻底停掉某个 Hook，请删掉客户端配置里对应的条目，或恢复安装器留下的 `.backup-*` 文件。
-</Aside>
+环境变量需要由客户端启动时继承。要移除托管事件，按安装页核对具体条目和备份，保留第三方 Hook 与通知。
 
-## 你会看到的实际行为
+## 提示音
 
-危险命令被拒绝：
-
-```bash
-# ❌ 拒绝
-rm -rf .
-git push --force
-psql -c "TRUNCATE TABLE users"
-
-# ✅ 放行
-rm specific-file.txt
-rm -rf ./build
-git push origin feature/x
-```
-
-规划阶段写生产文件被拒绝：
-
-```bash
-# ❌ 拒绝：流程还没推进到 business-development
-Write src/api/user.ts
-
-# ✅ 放行：规划文档
-Write docs/design.md
-```
-
-## 故障排查
-
-| 症状 | 可能原因 | 怎么处理 |
-|------|----------|----------|
-| Hook 没生效 | 安装不完整，或没重启会话 | 运行 `install.mjs --check --json`，Claude Code 重启会话、Codex 重新信任 |
-| 找不到 TODO | Git `user.name` 未配置 | `git config user.name "alice-chen"` |
-| 命令被拦 | 命中命令防护 | 确认命令是否真的需要，需要时由你在终端手动执行 |
-| 续作没发生 | 依赖未满足、写集冲突，或正在等你确认 | 检查 TODO 依赖与当前状态 |
-
-👉 [完整故障排查指南](/skills/hooks/troubleshooting/)
+通知脚本区分确认、普通回复和任务完成。不可见标记只用于选择提示音，不能替代实际完成证据；详见 [中文语音通知](/skills/hooks/notification/)。
 
 ## 下一步
 
-- [安装指南](/skills/hooks/installation/) —— 详细安装、更新与卸载步骤
-- [PreToolUse Hook](/skills/hooks/pre-tool-use/) —— 命令防护与流程门禁
-- [UserPromptSubmit Hook](/skills/hooks/user-prompt-submit/) —— 注入内容详解
-- [Stop Hook](/skills/hooks/stop/) —— TODO 续作详解
-- [故障排查](/skills/hooks/troubleshooting/) —— 常见问题处理
-
-<Aside type="note">
-Hook 随 Skills 仓库一起分发，位于 `<skills-root>/runtime-hooks/`（`<skills-root>` 是你克隆 Skills 仓库的目录，默认 `~/.agent-workflow/skills`）。
-</Aside>
+- [安装指南](/skills/hooks/installation/) - 安装、检查、更新与移除
+- [PreToolUse Hook](/skills/hooks/pre-tool-use/) - 命令防护与流程门禁
+- [UserPromptSubmit Hook](/skills/hooks/user-prompt-submit/) - 上下文注入
+- [Stop Hook](/skills/hooks/stop/) - 完成与续作
+- [故障排查](/skills/hooks/troubleshooting/) - 常见问题处理

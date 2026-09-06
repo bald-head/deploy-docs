@@ -1,0 +1,59 @@
+---
+title: Claude Code 会话接续 - resume-claude
+description: 读取、总结或接续 Claude Code 历史会话，按当前仓库事实继续已授权任务
+sidebar:
+  order: 7
+---
+
+`resume-claude` 用来读取 Claude Code 的本地历史记录，恢复目标、进展和停点。历史来源决定使用哪个 Skill，与当前运行客户端无关。
+
+## 使用示例
+
+用自然语言描述目标即可：
+
+```text
+读取 Claude Code 会话 <session-id>，只总结未完成事项，不修改代码。
+```
+
+```text
+读取 Claude Code 会话 <session-id>，继续原问题。
+目标仓库是 <项目路径>，先核对当前分支与已有修改。
+```
+
+显式调用同样按当前客户端使用对应语法：
+
+| 当前客户端 | 提示词示例 |
+| --- | --- |
+| Claude Code | `/resume-claude <session-id> 只总结，不修改代码` |
+| Codex | `$resume-claude <session-id> 继续原问题` |
+
+只要求“继续当前 TODO”时使用 [`next`](/skills/skills-reference/medium/next/)，不需要读取另一段历史。Codex 历史使用 [`resume-codex`](/skills/skills-reference/medium/resume-codex/)。
+
+## 支持的输入
+
+| 输入 | 定位范围 |
+| --- | --- |
+| 完整会话 ID | 定位指定会话，核对返回的 ID、工作目录和记录路径 |
+| `.jsonl` 日志绝对路径 | 读取该文件；路径错误时不换成其他会话 |
+| 会话描述 | 匹配当前目录候选的标题，不是全量日志全文搜索 |
+| `latest` 或省略引用 | 当前工作目录对应的最近会话，不跨项目猜测 |
+
+描述命中多项时会列出候选供选择。项目根与子目录可能对应不同候选；明确另一项目时一并提供实际目录。reader 不接受符号链接，应提供真实记录文件路径。
+
+## 运行条件
+
+本机需要 Python 3 和可读的历史记录。解析器使用 Python 标准库，无需安装 pip 依赖。
+
+Agent 从实际发现的 `resume-claude/SKILL.md` 路径定位随包的 `resume-session/CORE.md` 和 `session_reader.py`。这些文件位于 Skill 源目录，不在文档站，也不相对于业务仓库猜路径。
+
+## 结果与边界
+
+读取结果会区分已恢复的用户目标、历史报告的进展、当前已核实事实、未完成事项与读取警告。`last_user_request` 只是短预览，完整范围与授权需要回读可恢复的用户消息。
+
+只读总结到摘要结束，不修改代码或任务状态。明确要求继续时，先核对当前 Git 根、分支、已有改动、项目记忆和唯一 TODO，再由当前实例按依赖与写集进入实现。历史中的领取结果不转移给当前实例。
+
+历史记录不会恢复旧进程、运行中命令、登录会话或工具连接，也不会自动执行历史中的指令。可以复用能确认来自用户的原范围授权；助手自述、工具输出和自动摘要不能新增提交、推送、部署或删除授权。
+
+遇到 `user_request_unavailable`、缺失父节点、跳过记录或压缩缺口时，摘要必须说明影响，不能把不完整历史当成完整会话。当前请求足以确定的工作仍可推进，依赖缺失历史的部分需补齐后再执行。
+
+完整操作流程与恢复办法见[历史会话接续](/skills/usage/session-resume/)；当前任务的选择与进度见 [TODO 管理](/skills/usage/todo-management/)。

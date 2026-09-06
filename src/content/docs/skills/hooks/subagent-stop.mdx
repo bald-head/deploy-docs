@@ -1,261 +1,99 @@
 ---
 title: SubagentStop Hook
-description: Subagent 停止前必须交出完整 Handoff，主 Agent 才能收口
-order: 47
+description: 已领取 Feature 的子 Agent 如何提交可核对的交接结果
+sidebar:
+  order: 6
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-## 这个 Hook 帮你做什么
+## 交接检查
 
-Subagent 停止时，SubagentStop Hook 会检查它有没有交出一份完整的 Handoff。信息不全就不允许停止，Subagent 必须补齐后再结束。
+SubagentStop 与 Stop 共用 `todo-continuation.cjs`。当当前实例已领取一个 Feature 时，SubagentStop 分支检查最后回复中的交接字段；缺失时返回补充提示，齐全时允许主 Agent 接手收口。
 
-这样做的目的是：主 Agent 不用去猜 Subagent 改了什么、验到什么程度、留了哪些坑。
+主 Agent 负责对账实际 diff、统一验证与 Review，以及已授权的 commit & push。交接不是完成证明，也不能替代唯一 TODO 的原子状态切换或远端核验。
 
-它**不做**的事情：
-
-- 不更新 TODO 状态，由主 Agent 的 [Stop Hook](/skills/hooks/stop/) 负责
-- 不执行 commit & push，由主 Agent 负责
-- 不核验远端，不自动续作
-
-```mermaid
-graph LR
-    A["Subagent 执行完成"] --> B{"Handoff 完整?"}
-    B -->|否| C["不允许停止，要求补齐"]
-    B -->|是| D["主 Agent 收口"]
-    D --> E["对账 diff"]
-    E --> F["code-review"]
-    F --> G["Stop Hook 完成"]
-```
-
-## 什么时候会触发
-
-- Subagent 任务完成
-- Subagent 遇到阻塞
-- Subagent 部分完成后停止
-
-三种情况都要交 Handoff，阻塞和部分完成也一样，只是内容不同。
-
-## Handoff 要包含什么
-
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| Feature | Feature ID | `USER-LOGIN` |
-| Instance | Subagent 实例 ID | `subagent-789` |
-| Changed files | 实际修改的文件列表 | `src/api/user/login.ts, src/pages/login.vue` |
-| AC covered | 覆盖的验收条件 | `AC-001, AC-002` |
-| Commands/evidence | 验证命令或证据 | `npm run dev, 手工测试通过` |
-| Decisions | 关键技术决策 | `使用 JWT 而非 Session` |
-| Unresolved risks | 未解决的风险 | `Token 过期时间待定` |
-
-<Aside type="caution">
-缺任何一项都不能停止。缺失时 Hook 会直接说明差哪几个字段。
+<Aside type="note">
+Hook 的具体行为取决于当前 TODO 状态。共享脚本在无当前项时仍可能走状态协调或领取分支，因此委派前应明确当前 Feature 和 runtime instance，不能仅靠事件名称推断它完全不触碰状态。
 </Aside>
 
-### 完整示例
+## 必需字段
 
-````markdown
-## Handoff to 主 Agent
+当前解析器读取行首字段，并要求值写在同一行。不要给字段名加 Markdown 粗体，也不要把值只放在下一行列表中。
 
-**Feature**: USER-LOGIN
+| 字段 | 要求 |
+|---|---|
+| `Feature` | 与当前领取的 Feature ID 一致 |
+| `Instance` | 与当前 runtime instance 一致 |
+| `Changed files` | 实际修改路径；没有改动时明确写无 |
+| `AC covered` | 覆盖的 AC，明确未完成项 |
+| `Commands/evidence` | 已运行命令和实际观察结果 |
+| `Decisions` | 已确定的实现取舍或复用结论 |
+| `Unresolved risks` | 剩余风险；没有时写无 |
 
-**Instance**: subagent-789
-
-**Changed files**:
-- src/api/user/login.ts (新增 login 方法)
-- src/pages/login.vue (新增登录页面)
-- src/router/index.ts (添加 /login 路由)
-
-**AC covered**:
-- AC-001: 用户可以登录
-  → 实现了登录表单（邮箱 + 密码）
-  → 实现了 POST /api/v1/auth/login 调用
-  → 成功后跳转首页
-- AC-002: Token 存储
-  → Token 存储在 localStorage (key: "auth_token")
-  → 已在 axios 拦截器中使用
-
-**Commands/evidence**:
-```bash
-npm run dev
-# 1. 访问 http://localhost:5173/login
-# 2. 输入 test@example.com / password123
-# 3. DevTools -> Application -> Local Storage 确认 auth_token 存在
-# 4. 观察页面跳转到 /
-```
-
-**Decisions**:
-- 使用 Element Plus Form 组件（项目已有，保持一致）
-- Token 存储在 localStorage 而非 sessionStorage（支持"记住我"）
-
-**Unresolved risks**:
-- Token 过期时间待与后端对齐
-- 刷新 token 机制未实现（需要后端支持）
-- 登录失败重试限制未实现
-````
-
-## 三种停止场景怎么写
-
-### 任务完成
-
-按上面的完整示例写，AC 全部有对应实现说明，验证命令可执行。
-
-### 遇到阻塞
-
-已完成的部分照实写，未完成的 AC 明确标未实现，并说明阻塞在哪：
-
-```markdown
-**AC covered**:
-- AC-001: 接收登录请求 -> 已实现
-- AC-002: 验证密码 -> 未实现（等待确认加密方式）
-
-**Commands/evidence**:
-无（功能未完成）
-
-**Unresolved risks**:
-- 密码加密方式待用户确认（BCrypt vs Argon2）
-
-**阻塞原因**: 等待用户确认密码加密方式
-```
-
-### 部分完成
-
-哪些文件改到什么程度写清楚，别把未完成的写成完成：
-
-```markdown
-**Changed files**:
-- src/pages/profile.vue (已实现展示)
-- src/api/user.ts (已实现获取 API)
-- src/pages/profile-edit.vue (未实现编辑)
-
-**AC covered**:
-- AC-001: 展示用户信息 -> 已实现
-- AC-002: 编辑用户信息 -> 未实现
-```
-
-<Aside type="tip">
-诚实写未解决的风险，主 Agent 才能判断要不要立刻处理。藏问题只会让它在收口或 Review 时才暴露。
-</Aside>
-
-## 主 Agent 收口流程
-
-### 1. 对账 diff 与写集
-
-```bash
-git diff --name-only
-```
-
-把输出和 Handoff 里的 Changed files、TODO 里声明的写集三方比对。三者一致才继续。
-
-### 2. 执行 code-review
+可在七行摘要之后补必要细节。以下是格式示例，内容必须替换为实际结果：
 
 ```text
-审查用户登录功能的代码
+Feature: USER-LOGIN
+Instance: subagent-789
+Changed files: src/api/user/login.ts, src/pages/login.vue
+AC covered: AC-001 -> 登录主路径通过；AC-002 -> 错误提示通过
+Commands/evidence: 现有构建通过；实际页面完成登录和失败提示验证
+Decisions: 复用仓库已有认证 API 和表单组件
+Unresolved risks: 无
 ```
 
-### 3. 补齐 AC 证据
+## 未完成时怎么交接
 
-按 Handoff 提供的验证命令实际跑一遍，把结果写回 TODO：
+阻塞或部分完成也应提供全部字段，并如实说明未验证、未实现或需要主 Agent 处理的部分：
 
-```markdown
-- AC-001: 用户可以登录 -> 手工测试通过
-- AC-002: Token 存储 -> DevTools 验证 localStorage
-- Review: pass
+```text
+Feature: USER-LOGIN
+Instance: subagent-789
+Changed files: src/pages/login.vue
+AC covered: AC-001 -> 表单完成；AC-002 -> 未验证，接口环境不可用
+Commands/evidence: 页面构建通过；未完成真实登录
+Decisions: 沿用已确认的接口契约
+Unresolved risks: 等待认证服务环境恢复，恢复后需完成真实登录验证
 ```
 
-### 4. 提交交付
+不得把缺失验证改写成“通过”，也不应为交接建立新的状态文件。
+
+## 主 Agent 收口
+
+1. 对账交接中的路径、当前 Feature 写集和实际 diff，保留其他实例的无关改动。
+2. 复用已有验证证据，按当前功能补齐缺口，并完成一次完整 `code-review`。
+3. 首次 commit 前由状态机准备 TODO 的 `[x]` hunk。
+4. 在已有授权内，将功能改动、必要契约和 TODO hunk 同次 commit & push。
+5. 远端核验通过后，再领取依赖满足且写集互斥的下一项。
+
+详细状态与 Git 边界见 [Stop Hook](/skills/hooks/stop/)。主 Agent 收口时不用机械重跑子 Agent 已完成且仍适用的每条检查。
+
+## 常见问题
+
+### 字段齐全仍提示缺失
+
+检查字段是否写在行首、字段名是否被粗体符号包裹、冒号后是否有同一行值，以及 `Feature`、`Instance` 是否与当前领取记录一致。上面的纯文本格式可被当前解析器识别。
+
+### 没有交接检查
+
+先读取安装状态和当前 TODO。事件未注册、客户端未加载或当前实例没有拥有 Feature，都会影响分支选择：
 
 ```bash
-git add src/api/user/login.ts src/pages/login.vue src/router/index.ts
-git add docs/alice-chen/tasks/todo/user-mgmt.md
-git commit -m "feat: implement user login"
-git push origin main
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check --json
 ```
 
-## 与 Stop Hook 的分工
+安装或重新加载步骤见 [安装指南](/skills/hooks/installation/)。
 
-| 行为 | SubagentStop Hook | Stop Hook |
-|------|------------------|-----------|
-| 触发对象 | Subagent | 主 Agent |
-| 更新 TODO | 否 | 是 |
-| commit & push | 否 | 是 |
-| 远端核验 | 否 | 是 |
-| 自动续作 | 否 | 是 |
-| 要求 Handoff | 是 | 否 |
-| 检查完成门禁 | 否 | 是 |
+### 交接与 diff 不符
 
-## 故障排查
-
-### Subagent 停不下来
-
-**现象**：任务已经做完，但 Hook 一直要求补充。
-
-**处理**：看提示里说缺哪几个字段，在最后一条回复中补齐完整 Handoff：
-
-```markdown
-## Handoff to 主 Agent
-
-**Feature**: USER-LOGIN
-**Instance**: subagent-789
-**Changed files**: src/api/user/login.ts
-**AC covered**: AC-001, AC-002
-**Commands/evidence**: npm run dev, 手工测试
-**Decisions**: 使用 JWT
-**Unresolved risks**: Token 过期时间待定
-```
-
-七项都在才会通过。
-
-### 主 Agent 不知道 Subagent 改了什么
-
-**现象**：Subagent 停止了，但没有 Handoff。
-
-**原因**：这个 Hook 大概率没生效。
-
-**诊断**：
-
-```bash
-node <skills-root>/runtime-hooks/scripts/install.mjs --check --json
-```
-
-Claude Code 下还可以确认配置里有这个事件：
-
-```bash
-grep SubagentStop ~/.claude/settings.json
-```
-
-**处理**：
-
-```bash
-node <skills-root>/runtime-hooks/scripts/install.mjs
-```
-
-Codex 需要额外信任一次：
-
-```bash
-codex
-/hooks trust all
-```
-
-### Handoff 和实际 diff 不符
-
-**现象**：Handoff 声明只改了一个文件，`git diff --name-only` 里却多出几个。
-
-**处理**：主 Agent 不要接受这种改动。要么让 Subagent 说明多出来的文件为什么必须改并更新 TODO 写集，要么回退重做。默认接受未声明的改动会让写集边界失效，并行任务随后就会互相踩。
+让子 Agent 说明差异对应的真实改动和归属。必要的范围变化先更新当前 Feature 边界；无关的既有改动不擅自回退，也不混入当前功能提交。
 
 ## 环境变量
 
-```bash
-# 跳过部分 Hook
-export AGENT_RUNTIME_HOOKS_DISABLED=1
-```
-
-<Aside type="caution">
-跳过这个 Hook 后 Handoff 不再强制校验，主 Agent 很可能拿不到关键信息。
-</Aside>
+`AGENT_RUNTIME_HOOKS_DISABLED=1` 不会关闭 `todo-continuation.cjs`，不能用它推断 Handoff 检查已停用。需要调整事件时，先按安装页核对客户端托管配置。
 
 ## 下一步
 
-- [Stop Hook](/skills/hooks/stop/) - 主 Agent 完成和续作
-- [SubagentStart Hook](/skills/hooks/subagent-start/) - Subagent 启动上下文
-- [最佳实践](/skills/best-practices/) - Subagent 使用技巧
+- [Stop Hook](/skills/hooks/stop/) - 主 Agent 完成与续作
+- [SubagentStart Hook](/skills/hooks/subagent-start/) - 子 Agent 启动上下文

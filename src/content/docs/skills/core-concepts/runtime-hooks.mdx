@@ -1,7 +1,8 @@
 ---
 title: Runtime Hook
 description: 深入理解 Runtime Hook 的生命周期、命令防护和 TODO 管理
-order: 13
+sidebar:
+  order: 3
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -43,9 +44,7 @@ claude mcp get penpot
 
 未注册时会提示你运行安装器。
 
-3. **初始化环境变量**
-
-确定这个会话的 developer-id（来自 Git `user.name` 或系统登录用户名）和运行实例 ID——TODO 的落点和"这一项归谁领取"都依赖它们。
+开发者身份和运行实例由上下文及 TODO 脚本在请求时解析。SessionStart 自检只处理托管配置和本地 Penpot 注册状态。
 
 **安装器行为**：
 
@@ -67,7 +66,7 @@ node runtime-hooks/scripts/install.mjs
 
 2. **自动定位项目根目录**
 
-从当前工作目录向上找 Git 根目录，作为项目根。多仓库场景可以用 `AGENT_REPO_ROOTS` 显式指定映射。
+从当前工作目录向上找 Git 根目录，作为项目根。多仓库任务应在各自的 Git 工作目录里读取对应记忆和 TODO。
 
 <Aside type="caution">
 不在 Git 仓库里时找不到项目根，项目记忆和 TODO 上下文都不会注入。
@@ -75,7 +74,7 @@ node runtime-hooks/scripts/install.mjs
 
 3. **确保项目记忆文件存在**
 
-按 `docs/PROJECT-MEMORY.md` → `docs/project-memory.md` → 仓库根 `PROJECT-MEMORY.md` 的顺序查找。都没有就创建一份空模板；主要章节还是空的，会提示先用 `init-docs` 采集事实。
+按仓库根 `PROJECT-MEMORY.md` → `docs/PROJECT-MEMORY.md` → `docs/project-memory.md` 的顺序查找。都没有就在根目录创建一份空模板；主要章节还是空的，会提示先用 `init-docs` 采集事实。
 
 4. **加载相关项目记忆**
 
@@ -91,51 +90,23 @@ node runtime-hooks/scripts/install.mjs
 
 如果还处在规划阶段，带上的是当前阶段、已完成阶段、下一阶段和阶段 Owner——以及当前阶段是否允许修改生产文件。
 
-6. **提示适用 Skill**
+6. **提供辅助路由提示**
 
-```markdown
-根据当前状态，推荐以下 Skill：
-- 继续实现: universal-development, crud-development
-- 完成验证: code-review
-- 提交代码: git-commit
-- 查看进度: progress
-```
+本地 `skill-router.yaml` 命中场景时可输出候选 Skill。这是辅助上下文，不代表已经调用 Skill；可用清单和正文仍由 Harness 原生发现按需加载。
 
 **上下文预算控制**：注入内容有总量上限，行为内核、项目记忆和 TODO 提醒都只放当前问题真正需要的部分。超过预算时自动截断并提示直接读取文件。
 
 ### PreToolUse Hook
 
-**触发时机**：AI 尝试调用工具之前（Read、Write、Edit、Bash 等）
+**触发时机**：AI 尝试调用安装器 matcher 覆盖的写入或命令工具之前（Write、Edit、Bash、exec_command、apply_patch 等）
 
 **主要功能**：
 
 1. **命令防护**
 
-检测高置信度破坏性 Bash 命令：
+检查广泛目标的递归强制删除、强制推送或删除远端 ref、丢弃工作区状态、清库和根目录权限改写等命令。命中后返回拒绝原因；放行不等于操作安全或已授权。
 
-```bash
-# 级别 1: 高危系统命令
-rm -rf /
-rm -rf /*
-dd if=/dev/zero of=/dev/sda
-mkfs.*
-:(){ :|:& };:  # fork bomb
-
-# 级别 2: 强制推送
-git push --force
-git push -f
-git push --force-with-lease
-
-# 级别 3: 权限提升
-sudo rm -rf
-chmod -R 777 /
-```
-
-命中后直接拒绝并给出中文原因，不是"提示确认"——同一条命令重试仍会被拒绝。确需执行时由使用者在自己的终端里操作。
-
-<Aside type="danger">
-`AGENT_COMMAND_GUARD=0` 可关闭命令防护（不推荐），但必须在**启动 CLI 之前** `export`：行内前缀（`AGENT_COMMAND_GUARD=0 git push --force`）只影响被执行的子进程，防护所在的 Hook 进程读不到它，命令照样被拒绝。
-</Aside>
+验证安装不应执行危险命令。准确规则与只检查命令字符串的方法见 [PreToolUse Hook](/skills/hooks/pre-tool-use/)。`AGENT_COMMAND_GUARD=0` 会跳过整个 PreToolUse，包含流程写入门禁，不应当作排障修复。
 
 2. **流程门禁检查**
 
@@ -147,11 +118,11 @@ chmod -R 777 /
 |------|------|--------------|--------------|------|
 | 规划阶段 | ✓ | ✓ | ✗ | 只读 |
 | 实施阶段 | ✓ | ✓ | ✓ | ✓ |
-| 交付阶段 | ✓ | ✓ | ✓ | ✓ |
+| 交付阶段 | ✓ | ✓ | ✗ | 状态核验及已授权 Git 交付 |
 
-3. **写集边界检查**
+3. **TODO 和写集边界**
 
-写入当前 Feature 写集之外的文件时会收到警告，并提示这个文件可能属于另一个 Feature。处理方式只有两种：先把该文件补进当前 Feature 的写集，或者切到真正拥有它的那个 Feature。
+PreToolUse 会在活动工作流中拒绝直接修改 TODO，要求由状态机原子写回。写集互斥由 TODO 状态机在并行领取、状态解析和完成检查时核验；当前 PreToolUse 不逐文件比对并行写集，Agent 仍需核对实际 diff。
 
 <Aside type="tip">
 并行开发时，写集互斥检查防止两个任务同时改同一个文件。
@@ -163,14 +134,14 @@ chmod -R 777 /
 
 **主要功能**：
 
-与 UserPromptSubmit 类似，但额外让子智能体知道：
+与 UserPromptSubmit 复用同一上下文注入逻辑。具体委派还应由主 Agent 写清：
 
 1. **父任务上下文**：主任务是什么、当前在做哪个 Feature。
 2. **职责边界**：它只负责这个 Feature 的哪一部分、能改哪些文件；不允许改写集外的文件，也不允许自己变更 TODO 状态。
 3. **交接契约**：结束时必须交回哪些东西——改了哪些文件、覆盖了哪些 AC、证据是什么。
 
 <Aside type="tip">
-并行派子智能体时，写集互斥同样生效：两个子智能体不会被允许同时改同一个文件。
+并行委派必须由主 Agent 划定互斥写集；不能把上下文提示当作文件锁。
 </Aside>
 
 ### SubagentStop Hook
@@ -208,22 +179,22 @@ SubagentStop 只校验 handoff，不代替主 Agent 的 Review、完成切换或
 
 3. **Git 收口提醒**
 
-状态更新后会提示下一步是提交，并给出建议的 `git add` / `git commit` / `git push` 命令——TODO 文件本身也在建议的暂存列表里，避免代码提交了、状态没跟上。
+状态更新后会提示主 Agent 精确提交业务改动和唯一 TODO 的 `[x]` hunk。Stop Hook 不执行 `git commit` 或 `git push`，这些操作由主 Agent 在已有授权内完成。
 
 4. **自动续作检查**
 
-提交完成后自动在 TODO 里找下一项可执行的 Feature，找到就原子领取并继续；找不到就停下并说明原因（依赖未完成 / 写集冲突 / 队列已空）。
+同次 commit & push 的远端核验通过后，再在 TODO 里找可执行 Feature。核验前的本地 `[x]` 会处于 `delivery-pending`，不能提前解锁下游。
 
 **续作条件**：
 
-- ✅ 所有依赖都是 `[x]` 完成状态
+- ✅ 所有依赖的 `[x]` 已进入核验过的远端功能提交
 - ✅ 写集与其他进行中任务不冲突
 - ✅ 当前开发者是 Owner
-- ✅ 没有阻塞（`[!]`）
+- ✅ 当前实例没有其他 `[~]`，候选项没有共享迁移、配置、契约、端口或账号资源
 
 5. **语音提醒**
 
-回合结束时播放一个短音，用来区分三种情况：需要你做决定或补信息、任务真正完成、普通答复。你不用盯着终端也能知道该不该回来看。
+通知脚本区分确认、任务完成和普通回复。实际触发通道因客户端而异：当前 Claude Code 注册确认事件音频，Codex 完成通知走用户级 `notify`，详见 [中文语音通知](/skills/hooks/notification/)。
 
 <Aside type="tip">
 设置 `AGENT_COMPLETION_SOUND=0` 可关闭语音提醒；也可以用下面的环境变量换成自己的音频文件。
@@ -247,59 +218,42 @@ docs/<developer-id>/tasks/todo/<项目名>.md
 
 **唯一性检查**：
 
-`docs/<developer-id>/tasks/todo/` 下出现第二个文件时会直接阻断，要求你先合并或把不做的那份移出去，而不是自己猜该用哪一份。
+当前开发者只能有一份活动 TODO。脚本保留历史文件选择逻辑，不能据此并行维护多个活动清单；发现冲突时应先核对 Owner、实例和未完成项，再通过任务维护流程处理。
 
 ### Feature 状态机
 
-每个 Feature 有五种状态：
+每个 Feature 使用四种 checkbox 状态；Epic 是汇总节点，不是第五种状态：
 
 ```markdown
 [ ] - 未开始（依赖未满足或未领取）
 [~] - 进行中（已领取，有执行实例）
-[x] - 完成（已提交并推送）
-[!] - 阻塞（遇到问题，需要人工介入）
+[x] - 本地已准备完成，远端核验通过后才算已交付
+[!] - 阻塞（记录阻塞原因和恢复条件）
 Epic - 汇总（不可领取，自动计算）
 ```
 
 ### Feature 结构
 
-```markdown
-- [ ] `USER-LOGIN` 用户登录
-  - 依赖: `USER-REG`
-  - Owner: alice-chen
-  - 执行实例: session-abc123
-  - 并行写集: `src/api/user/login.ts`, `src/pages/login.vue`, `src/router/index.ts`
-  - AC-001: 用户可以通过表单登录
-  - AC-002: JWT token 存储
-  - Review: pending
-```
+完整字段与可复制的格式统一见 [Stop Hook 的 Feature 示例](/skills/hooks/stop/)。解析器从 `验收` 行读取全部 AC，从单行 `结果` 读取证据、来源复核与 Review；独立写 `AC-001` 或 `Review` 行不能替代这些字段。
 
-**字段说明**：
-
-- **ID**：大写字母、数字、连字符，如 `USER-LOGIN`
-- **依赖**：`无` 或反引号 ID 列表，如 `` `USER-REG` ``
-- **Owner**：当前开发者 ID
-- **执行实例**：Runtime Instance ID（仅 `[~]` 时存在）
-- **并行写集**：该 Feature 修改的文件列表（用于并行冲突检测）
-- **AC**：验收条件（每个 AC 必须有证据）
-- **Review**：code-review 状态（pending / pass / fail）
+`规划` 与 `验证` 决定适用门禁，`并行写集` 和 `[~]` 的 `执行实例` 使用反引号值。完成时通过状态机准备 `[x]`，再将该 TODO 改动与完整功能一同 commit、push。
 
 ### Epic 汇总
 
 Epic 是同一 TODO 内的完成汇总：
 
 ```markdown
-## Epic: USER-MGMT - 用户管理系统
-- [x] `USER-REG` 用户注册
-- [x] `USER-LOGIN` 用户登录
-- [~] `USER-PROFILE` 个人信息
-- [ ] `USER-SETTINGS` 用户设置
+- [ ] `USER-MGMT` 用户管理系统
+  - [x] `USER-REG` 用户注册
+  - [x] `USER-LOGIN` 用户登录
+  - [~] `USER-PROFILE` 个人信息
+  - [ ] `USER-SETTINGS` 用户设置
 ```
 
 **特性**：
 
 - ❌ 不可领取（只有 Feature 可以领取）
-- ❌ 没有执行实例、依赖、写集
+- ❌ 没有执行实例和写集，不可被领取
 - ✅ 最后一个子 Feature 完成时自动变为 `[x]`
 - ✅ 用于进度统计和可视化
 
@@ -312,19 +266,20 @@ Epic 是同一 TODO 内的完成汇总：
   - 依赖: 无
   - 依赖: `USER-REG`
   - 依赖: `USER-REG`, `USER-LOGIN`
+  - 依赖: `USER-MGMT`  # Epic 依赖等价于依赖其全部子 Feature
 
 非法依赖:
   - 依赖: USER-REG  # 缺少反引号
   - 依赖: `UNKNOWN`  # ID 不存在
   - 依赖: `USER-LOGIN`（在 USER-LOGIN 内）  # 自依赖
-  - 依赖: `USER-MGMT`（USER-MGMT 是 Epic）  # 依赖 Epic 等价于依赖其全部子 Feature
 ```
 
-**依赖是否满足**：只有依赖项处于 `[x]` 才算满足。
+**依赖是否满足**：依赖项必须处于 `[x]`，且与业务改动同次交付并经过远端核验。
 
 | 依赖项状态 | 能否领取 |
 |---|---|
-| `[x]` 完成 | ✓ 可以 |
+| `[x]` 且远端核验通过 | ✓ 可以 |
+| 仅本地 `[x]` | ✗ 先完成交付核验 |
 | `[~]` 进行中 | ✗ 等它完成 |
 | `[ ]` 未开始 | ✗ 先做它 |
 | `[!]` 阻塞 | ✗ 先解阻塞 |
@@ -336,14 +291,14 @@ Epic 是同一 TODO 内的完成汇总：
 **写集互斥检查**：领取新 Feature 时，把它的写集和所有 `[~]` 任务的写集求交集。交集为空才允许并行。
 
 - 两个 Feature 各改自己的 API 和页面，没有共同文件 → 可以并行
-- 两个 Feature 都要改 `src/router/index.ts` → 冲突，只能串行；或者把这个文件从其中一个 Feature 的写集里拿掉
+- 两个 Feature 都要改 `src/router/index.ts` → 冲突，应串行，或重新确认共享改动的唯一 Owner 后调整交付边界
 
 **并行条件**：
 
 - ✅ 不同 Feature
 - ✅ 不同执行实例
-- ✅ 所有依赖已完成
-- ✅ 写集完全互斥（无交集）
+- ✅ 所有依赖已完成远端核验
+- ✅ 写集完全互斥（无交集），没有共享迁移、配置、契约、端口或账号资源
 
 ### 状态怎么流转
 
@@ -372,13 +327,10 @@ AGENT_TODO_DIR=/repo/docs/alice-chen/tasks/todo
 # Runtime Instance ID（仅在 Harness 未提供时兜底）
 AGENT_RUNTIME_INSTANCE_ID=worker-a
 
-# 仓库根目录映射
-AGENT_REPO_ROOTS='{"backend":"/checkout/backend"}'
-
-# 禁用 Runtime Hook（不推荐）
+# 停用启动自检、PreToolUse 和提示音；不关闭上下文与 TODO 状态逻辑
 AGENT_RUNTIME_HOOKS_DISABLED=1
 
-# 禁用命令防护（不推荐）
+# 停用 PreToolUse（同时跳过其流程写入门禁）
 AGENT_COMMAND_GUARD=0
 
 # 禁用自动修复
@@ -437,7 +389,7 @@ find docs/ -path "*/tasks/todo/*.md"
 grep '\[~\]' docs/<developer-id>/tasks/todo/<项目名>.md
 ```
 
-有交集就只能三选一：等冲突任务完成、把共享文件从其中一个写集里移出去、或者干脆串行做。
+有交集时先等冲突任务完成，或明确共享改动的唯一 Owner 后重新规划边界。不要仅从写集里删掉仍然需要修改的文件来规避冲突检查。
 
 <Aside type="tip">
 更细的症状-处理对照见 [Hook 故障排查](/skills/hooks/troubleshooting/) 和 [故障排查](/skills/troubleshooting/)。

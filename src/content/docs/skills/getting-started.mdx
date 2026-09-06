@@ -1,333 +1,102 @@
 ---
-title: 快速开始
-description: 手把手教你安装和使用 Skills Framework
-order: 1
+title: 安装与配置
+description: 获取 Skill 源仓库，接入 Claude Code 或 Codex，并确认发现与 Hook 状态
+sidebar:
+  order: 1
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
-## 系统要求
+本页完成客户端接入。已经安装过的用户可直接进入[快速上手](/skills/quickstart/)；更新仓库后，先看本页的[同步新增 Skill](#同步新增-skill)。
 
-在开始之前，请确保你的系统满足以下要求：
+## 1. 准备环境
 
-- **Node.js**：v18.0.0 或更高版本
-- **Git**：已配置 `user.name` 和 `user.email`
-- **Claude Code 或 Codex**：已安装任一客户端
-- **操作系统**：macOS、Linux 或 Windows
+- 已安装 Git、Node.js 和要使用的 Claude Code 或 Codex，版本满足对应客户端要求。
+- Git 已配置 `user.name` 和 `user.email`；TODO 的开发者目录优先由目标仓库的 Git `user.name` 生成。
+- 使用 `resume-claude` 或 `resume-codex` 读取历史时需要 Python 3；读取压缩的 Codex `.jsonl.zst` 文件还需要 `zstd`。
 
-<Aside type="tip">
-检查 Node.js 版本：`node --version`  
-检查 Git 配置：`git config user.name`
-</Aside>
-
-## 安装步骤
-
-### 第 1 步：克隆仓库
+以下终端命令按 macOS/Linux shell 编写。先确认命令可用：
 
 ```bash
-# 克隆 Skills Framework 仓库到本地
-git clone https://github.com/your-org/skills.git ~/.agent-workflow/skills
+git --version
+node --version
+git config --get user.name
+git config --get user.email
+```
 
-# 进入仓库目录
-cd ~/.agent-workflow/skills
+## 2. 获取 Skill 源仓库
+
+```bash
+git clone https://git.qiucou.cn/dengtx/skills.git
+cd skills
+```
+
+已有仓库时进入已有的 Skill 源目录，不需要重新克隆。下文的 `add-skill/`、`runtime-hooks/` 等脚本路径都相对于 **Skill 源仓库根目录**，不能在本页面所在的文档仓库执行。
+
+源目录可以位于团队已有位置。客户端发现目录由注册脚本探测，不要求把源码直接克隆进 `~/.claude/skills` 或 `~/.agents/skills`。
+
+## 3. 注册到要使用的客户端
+
+按目标客户端选择一条命令；两种客户端都要使用时分别注册。
+
+### Claude Code
+
+```bash
+AGENT_WORKFLOW_CLIENT=claude-code node add-skill/scripts/validate-skill-catalog.mjs --install-discovery --require-discovery=claude-code
+```
+
+### Codex
+
+```bash
+AGENT_WORKFLOW_CLIENT=codex node add-skill/scripts/validate-skill-catalog.mjs --install-discovery --require-discovery=codex
+```
+
+该命令会先检查并按需安装 Runtime Hook、注册当前客户端的远端 Penpot MCP，再建立 Skill 发现入口。已有发现目录需要替换时，脚本先创建带时间戳的备份。
+
+<Aside type="note">
+目录 validator 包含安装和修复动作，不是只读检查。首次注册 Penpot 需要既有客户端配置或 `PENPOT_MCP_URL` 等真实来源；缺失时按错误补齐配置，不猜地址，也不能把未完成注册记为成功。
+</Aside>
+
+成功结果应包括：
+
+```text
+退出码：0
+errors: []
+runtimeHooks.installed: true
+penpotMcp.configured: true
 ```
 
 <Aside type="caution">
-**路径说明**：
-- Claude Code 用户：建议使用 `~/.claude/skills`
-- Codex 用户：建议使用 `~/.agents/skills`
-- 也可以使用软链接或镜像方式同步
+Codex 安装器若提示新的非托管 Hook 尚未信任，按当前客户端的 `/hooks` 提示审查并信任。Hook 支持和信任状态以当前客户端版本为准；不能仅凭文件已写入判断 Hook 已生效。
 </Aside>
 
-### 第 2 步：安装 Runtime Hook
+## 4. 在客户端确认发现与调用
 
-Runtime Hook 是 Skills Framework 的核心组件，负责自动上下文注入和命令防护。
+| 客户端 | 显式调用示例 | 如何确认 |
+| --- | --- | --- |
+| Claude Code | `/project-navigator 定位当前项目的启动入口` | 查看当前会话可用 Skill，并核对响应是否引用真实路径 |
+| Codex | `$project-navigator 定位当前项目的启动入口` | 用 `/skills` 浏览，或输入 `$` 查看补全 |
 
-```bash
-# 安装 Runtime Hook
-node runtime-hooks/scripts/install.mjs
+两种客户端都支持用自然语言描述任务，由 Agent 根据可用 Skill 的用途选择。Codex 的 `/skills` 是浏览入口，`/skill-name` 不是其 Skill 调用语法。
 
-# 预期输出：
-# ✓ 检测到 Claude Code
-# ✓ 备份现有配置到 ~/.claude/hooks.backup.json
-# ✓ 合并 SessionStart Hook
-# ✓ 合并 UserPromptSubmit Hook
-# ✓ 合并 PreToolUse Hook
-# ✓ 合并 Stop Hook
-# ✓ 安装完成
-```
+本站收录的框架 Skill 数量见 [Skill 目录](/skills/catalog/)。客户端可能另外加载系统 Skill、项目级 Skill 或同名优选项，因此不要把固定条目数作为安装成功条件。
 
-<Aside type="danger">
-**Codex 用户特别注意**：安装后必须运行 `/hooks` 命令，审查并信任新的 Hook。这是 Codex 的安全机制，不能跳过。
-</Aside>
+找不到新增条目时，先确认当前客户端的发现路径可读；仍未刷新再重新打开会话。文件可发现、Hook 安装成功和 Skill 实际调用成功是不同的检查结果。
 
-### 第 3 步：验证安装
+## 同步新增 Skill
+
+更新已有 Skill 源仓库后，在该源目录重新运行上面的对应客户端注册命令，确认新增目录已进入原生发现范围。共享目录通过软链接接入时，内容修改作用于同一真实来源，不需要按客户端重复复制。
+
+本次新增的会话恢复入口是 [`resume-claude`](/skills/skills-reference/medium/resume-claude/) 和 [`resume-codex`](/skills/skills-reference/medium/resume-codex/)。使用方法见[历史会话接续](/skills/usage/session-resume/)。
+
+普通业务请求不重复运行注册命令。只诊断 Hook 本地安装状态时，在 Skill 源目录执行：
 
 ```bash
-# 检查 Runtime Hook 状态
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 预期输出结尾会给出一行汇总：
-# Context budget: PASS
-```
-
-✅ **检查点**：如果看到 "Context budget: PASS"，说明安装成功。
-
-### 第 4 步：注册 Skill 发现
-
-让 Claude Code 或 Codex 能够自动发现 Skills。
-
-```bash
-# 自动注册到当前客户端
-node add-skill/scripts/validate-skill-catalog.mjs --install-discovery --require-discovery=claude-code
-
-# 或者对于 Codex
-node add-skill/scripts/validate-skill-catalog.mjs --install-discovery --require-discovery=codex
-```
-
-✅ **检查点**：运行客户端，输入 `/skills` 应该能看到完整的 Skill 列表。
-
-<Aside type="tip">
-**当前状态**：95 个 Skill 全部完成结构化路由元数据增强（100% 覆盖率），1064 个自然语言触发词（中文 626 + 英文 438）。
-</Aside>
-
-## 基本概念
-
-### 什么是 Skill？
-
-Skill 是一个自包含的能力单元，包含：
-
-- **SKILL.md**：Skill 的完整规则和逻辑
-- **frontmatter**：元数据（触发词、前置条件、冲突规则）
-- **references/**：可选的参考文档和资源
-
-### 什么是 Runtime Hook？
-
-Runtime Hook 在每次用户请求时自动运行，负责：
-
-1. **注入行为内核**：跨客户端一致的行为原则
-2. **加载项目记忆**：自动读取 `PROJECT-MEMORY.md` 相关摘要
-3. **提示当前 TODO**：自动续作未完成的任务
-4. **命令防护**：拦截高风险 Bash 命令
-
-### 什么是项目记忆？
-
-每个项目有唯一的 `PROJECT-MEMORY.md`，记录：
-
-- **Quick facts**：快速事实（技术栈、架构、约定）
-- **Reuse map**：复用地图（组件、工具类、API）
-- **Boundaries**：边界（不使用的技术、禁止的模式）
-
-<Aside type="tip">
-项目记忆由 `project-details` Skill 自动维护，你不需要手工编辑。
-</Aside>
-
-## 第一个 Skill 使用示例
-
-### 场景：创建新项目的 TODO
-
-假设你要开始一个新项目，需要创建任务清单。
-
-#### 步骤 1：启动客户端
-
-```bash
-# 启动 Claude Code
-claude
-
-# 或启动 Codex
-codex
-```
-
-#### 步骤 2：自然语言输入
-
-直接用自然语言描述你的需求：
-
-```
-我要做一个用户管理系统，包括用户注册、登录、个人信息管理
-```
-
-#### 步骤 3：观察自动路由
-
-系统会自动识别这是新项目，触发以下 Skill 序列：
-
-```
-1. task-todo-workflow：建立流程状态机
-2. product-manager：完成产品定义
-3. architecture-design：设计系统架构
-4. tech-decision：选择技术方案
-5. project-manager：生成 TODO 清单
-```
-
-#### 步骤 4：查看生成的 TODO
-
-在项目根目录会生成：
-
-```
-docs/<你的用户名>/tasks/todo/user-management.md
-```
-
-内容示例：
-
-```markdown
-## 流程状态机
-- 当前阶段: task-breakdown
-- 已完成阶段: intake, requirements-analysis, ...
-
-## Epic: USER-MGMT - 用户管理系统
-- [ ] `USER-REG` 用户注册
-  - 依赖: 无
-  - Owner: alice-chen
-  - 写集: `src/api/user/register.ts`, `src/pages/register.vue`
-  
-- [ ] `USER-LOGIN` 用户登录
-  - 依赖: `USER-REG`
-  - Owner: alice-chen
-  - 写集: `src/api/user/login.ts`, `src/pages/login.vue`
-```
-
-✅ **检查点**：你应该看到完整的任务分解，包括依赖关系和写集（修改的文件）。
-
-### 场景：执行第一个任务
-
-#### 步骤 1：自然语言触发
-
-```
-开始实现用户注册功能
-```
-
-#### 步骤 2：自动领取任务
-
-Runtime Hook 会自动：
-
-1. 检查 `USER-REG` 的依赖（无依赖）
-2. 原子领取该任务（状态变为 `[~]`）
-3. 记录执行实例 ID
-4. 加载相关项目记忆
-
-#### 步骤 3：开发实施
-
-系统触发 `universal-development` 或 `crud-development` Skill：
-
-```
-正在实施 USER-REG...
-- 创建 API: src/api/user/register.ts
-- 创建页面: src/pages/register.vue
-- 添加路由配置
-- 完成基本表单验证
-```
-
-#### 步骤 4：自动验证
-
-完成后自动触发 `code-review` Skill：
-
-```
-Review 结果：
-✓ API 参数校验完整
-✓ 错误处理符合规范
-✓ 前端表单验证正确
-⚠ 建议：密码强度校验可以增强
-```
-
-#### 步骤 5：Git 提交
-
-修复 Review 问题后，自然语言触发：
-
-```
-提交代码
-```
-
-系统触发 `git-commit` Skill：
-
-```bash
-# 自动执行
-git add src/api/user/register.ts src/pages/register.vue
-git commit -m "feat: 实现用户注册功能
-
-- 添加注册 API
-- 创建注册页面
-- 完成表单验证
-
-AC-001 -> 用户可以通过表单注册
-Review: pass"
-git push origin feature/user-registration
-```
-
-✅ **检查点**：代码已推送到远程，TODO 中 `USER-REG` 自动变为 `[x]`。
-
-## 常见问题
-
-### Q1：Runtime Hook 没有生效？
-
-**诊断步骤**：
-
-```bash
-# 1. 检查 Hook 安装状态
 node runtime-hooks/scripts/install.mjs --check --json
-
-# 2. 检查客户端配置
-cat ~/.claude/settings.json | grep -A 10 hooks
-
-# 3. 重新安装
-node runtime-hooks/scripts/install.mjs
 ```
 
-### Q2：找不到 Skill？
-
-**诊断步骤**：
-
-```bash
-# 1. 检查 Skill 发现
-node runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 2. 确认客户端发现路径
-# Claude Code: ~/.claude/skills
-# Codex: ~/.agents/skills
-
-# 3. 重新注册
-node add-skill/scripts/validate-skill-catalog.mjs --install-discovery
-```
-
-### Q3：项目记忆文件在哪里？
-
-项目记忆文件位于项目根目录：
-
-```
-项目根目录/
-  └── docs/
-      └── PROJECT-MEMORY.md  # 或 project-memory.md
-```
-
-如果不存在，Runtime Hook 会在第一次请求时自动创建。
-
-### Q4：如何查看当前 TODO？
-
-```bash
-# TODO 文件路径
-docs/<你的Git用户名>/tasks/todo/<项目名>.md
-
-# 查看内容
-cat docs/alice-chen/tasks/todo/user-management.md
-```
-
-### Q5：多人协作时 TODO 冲突怎么办？
-
-每个开发者有独立的 TODO 目录：
-
-```
-docs/
-  ├── alice-chen/
-  │   └── tasks/todo/user-management.md
-  ├── bob-wang/
-  │   └── tasks/todo/user-management.md
-```
-
-通过 `写集`（修改的文件列表）自动检测冲突，不同写集可以并行开发。
+`skill-catalog-context.cjs --check` 检查目录上下文与预算，不能替代 Hook 安装或客户端调用验证。更多问题见[故障排查](/skills/troubleshooting/)和 [Hook 安装与配置](/skills/hooks/installation/)。
 
 ## 下一步
 
-<Aside type="tip">
-**推荐学习路径**：
-1. 阅读[核心概念](/skills/core-concepts/)，深入理解 Skill 系统
-2. 查看[功能开发流程](/skills/usage/feature-development/)，学习完整的开发流程
-3. 浏览[Skill 目录](/skills/catalog/critical-high/)，了解可用的 95 个 Skill
-</Aside>
+进入目标业务仓库，按[快速上手](/skills/quickstart/)完成第一次使用。需要开发完整功能时，再阅读[第一个功能开发](/skills/first-feature/)。

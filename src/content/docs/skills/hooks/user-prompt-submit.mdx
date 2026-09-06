@@ -1,7 +1,8 @@
 ---
 title: UserPromptSubmit Hook
 description: 每轮对话自动带上的项目上下文
-order: 43
+sidebar:
+  order: 3
 ---
 
 import { Aside } from '@astrojs/starlight/components'
@@ -15,7 +16,7 @@ import { Aside } from '@astrojs/starlight/components'
 | 一份跨客户端统一的行为准则 | 不用反复叮嘱"先查证再动手""别过度设计" |
 | 与当轮问题相关的项目事实摘要 | 不用每次说明技术栈、可复用工具、禁用项 |
 | 当前开发者的活动 TODO 状态 | 不用重复交代做到哪一步了 |
-| 当前场景适用的 Skill 提示 | 不用自己记住该用哪个 Skill |
+| 当前场景的辅助 Skill 提示 | 提供候选名称，具体使用仍按 Harness 发现结果和 Skill 正文判断 |
 
 **触发时机**：每次提交提示词都会触发——首个问题、后续追问、命令执行后的反馈、明确的续作请求。
 
@@ -29,6 +30,8 @@ Hook 会注入一份跨客户端统一的行为准则，Claude Code 和 Codex �
 准则是全局统一的，不按项目定制。项目特有的约束写进项目记忆的 Boundaries 章节。
 </Aside>
 
+如果共享 `behavior-kernel.md` 缺失或格式暂时不合规，本 Hook 会带上不可用提示并成功返回，避免把每次输入拦住；它不会在项目中生成第二份原则。修复 Skills 源文件后运行安装器并重启客户端，详见 [Hook 故障排查](/skills/hooks/troubleshooting/#行为内核校验失败)。
+
 ## 项目记忆
 
 ### 文件位置
@@ -36,12 +39,12 @@ Hook 会注入一份跨客户端统一的行为准则，Claude Code 和 Codex �
 Hook 每轮会确认仓库里存在唯一一份项目记忆，按以下顺序查找：
 
 ```
+PROJECT-MEMORY.md
 docs/PROJECT-MEMORY.md
 docs/project-memory.md
-PROJECT-MEMORY.md
 ```
 
-文件不存在、或主要章节还是空的时候，Hook 会提示 Agent 先去采集事实（走 `init-docs` → `project-details`），而不是带着空上下文往下做。
+文件不存在时会在仓库根创建模板；主要章节还是空时，Hook 提示 Agent 通过 `init-docs` 采集事实，再由 `project-details` 原位归并。
 
 ### 三个章节
 
@@ -115,27 +118,18 @@ docs/bob-wang/tasks/todo/payment-system.md
 ```
 
 <Aside type="caution">
-每个开发者只能有一份活动 TODO。存在多份时 Hook 会阻断并要求你先合并——否则 Agent 无法确定该接着做哪一份。
+每个开发者只能有一份活动 TODO。出现多份或实例冲突时，先核对归属与未完成项，再通过任务维护流程处理，不由 Agent 猜测或直接移动文件。
 </Aside>
 
 ### 你不必每轮重述进度
 
-Agent 每轮都已经知道你当前领取的是哪个功能、它依赖什么、写集包含哪些文件、验收条件还剩哪几条没打勾、Review 过了没有，以及下一个可做的功能是哪个。还在规划阶段时，它知道走到了哪一步、在等谁确认。
+Hook 带上当前 Feature 的路径与标识，并提示 Agent 回读原始 TODO，核对依赖、写集、验收和阶段。注入是有界提醒，不保证每轮都包含所有 AC、Review 结果和下一项详情。
 
-所以你可以直接说"继续"或者"接着做下一个"，不用每次先交代一遍上下文。完全没有活动 TODO 时，Agent 会提示你先建一份。
+你可以直接说“继续”或“接着做下一个”，Agent 再按当前授权读取对应任务。没有活动 TODO 时是否需要创建，取决于本轮是否为需要规划的业务功能；普通答复与低风险文档维护不因此增加任务清单。
 
 ## Skill 提示
 
-Hook 会根据当前状态提示适用的 Skill，减少你点名 Skill 的次数：
-
-| 当前状态 | 提示的 Skill |
-|---------|------------|
-| 新项目、还没 TODO | `task-todo-workflow`、`product-manager`、`architecture-design` |
-| 已有 TODO 但需求变了 | `change-impact-analysis`、`project-manager` |
-| 有活动 Feature 待实现 | `crud-development`、`api-development`、`frontend-design` |
-| 有未审查的代码改动 | `code-review`、`check` |
-
-这些只是提示，Agent 仍会结合你的实际要求判断。你也可以直接点名要用哪个 Skill。
+本地 `skill-router.yaml` 命中时可产生场景与候选 Skill 提示。它不读取各 `SKILL.md` 的 frontmatter，也不自动执行 `gates` 或 `related_skills.after`。Harness 负责原生发现与按需加载，Agent 按实际要求判断；你也可以直接点名 Skill。
 
 ## 处理流程
 
@@ -148,7 +142,7 @@ graph TD
     D --> F{有活动 TODO?}
     E --> F
     F -->|是| G[带上当前 Feature 状态]
-    F -->|否| H[提示创建 TODO]
+    F -->|否| H[按请求判断是否需要规划]
     G --> I[提示适用 Skill]
     H --> I
     I --> J[Agent 带着上下文开始处理]
@@ -158,8 +152,8 @@ graph TD
 
 | 环境变量 | 设成什么 | 效果 |
 |---------|---------|------|
-| `AGENT_RUNTIME_HOOKS_DISABLED` | `1` | 关闭全部 Hook，本页所有注入都不再发生 |
-| `AGENT_DEVELOPER_NAME` | 开发者 ID | 指定身份，仅在 Git identity 不可用时生效 |
+| `AGENT_RUNTIME_HOOKS_DISABLED` | `1` | 不关闭本页上下文脚本；只影响部分其他 Hook |
+| `AGENT_DEVELOPER_NAME` | 开发者 ID | Git identity 与系统登录用户名都不可用时兜底 |
 | `AGENT_TODO_DIR` | 目录路径 | 指定 TODO 目录，只接受符合规范的路径 |
 | `AGENT_SKILL_DISCOVERY_FALLBACK` | `1` | 为不支持原生 Skill 发现的旧客户端打开兜底 |
 
@@ -202,42 +196,15 @@ echo "docs/$(git config user.name)/tasks/todo/"
 find docs/ -name "*.md" -path "*/tasks/todo/*"
 ```
 
-处理：
-
-```bash
-# 身份不对就改 Git 配置
-git config user.name "alice-chen"
-
-# 或把 TODO 挪到规范路径
-mkdir -p docs/alice-chen/tasks/todo
-mv docs/wrong-path/todo/*.md docs/alice-chen/tasks/todo/
-```
+核对 Hook 注入的 `<developer_scope>` 和系统用户名。`developer-id` 会规范化，不能只用原始 `git user.name` 拼接路径。身份确实错误时先修正仓库 Git 配置；历史 TODO 的归属和迁移应通过 `task-todo-workflow` 处理，不直接移动其他开发者的文件。
 
 ### 提示存在多份活动 TODO
 
-先各自看一眼，决定留哪份，其余归档：
-
-```bash
-cat docs/alice-chen/tasks/todo/project1.md
-cat docs/alice-chen/tasks/todo/project2.md
-
-mkdir -p docs/alice-chen/tasks/archive
-mv docs/alice-chen/tasks/todo/project2.md docs/alice-chen/tasks/archive/
-```
-
-两份都在做就先合并成一份，再继续。
+先只读核对每份 TODO 的归属、当前实例和正在执行的 Feature，再由 `task-todo-workflow` 合并或处理历史落点。不要通过直接移动文件解除仍被其他实例领取的任务。
 
 ### 注入的上下文被截断
 
-内容过多时会截断，并提示 Agent 直接读源文件，不会因此丢信息。想让摘要更准，就精简源头：
-
-```bash
-# 删掉不再成立的项目事实
-vim docs/PROJECT-MEMORY.md
-
-# 拆分过大的 TODO
-vim docs/alice-chen/tasks/todo/project.md
-```
+内容过多时会截断，Agent 应直接读取相关源章节。通过 `project-details` 归并过时事实；唯一 TODO 保留完整功能，不为缩短注入而拆成多个活动清单。
 
 ## 下一步
 

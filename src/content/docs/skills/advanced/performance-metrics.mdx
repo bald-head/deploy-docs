@@ -1,417 +1,92 @@
 ---
-title: 性能指标
-description: Skills Framework 路由系统的性能指标和优化历程
-order: 51
+title: 评估与验证边界
+description: 区分目录检查、静态场景、真实调用与行为增益
+sidebar:
+  order: 1
 ---
 
-import { Aside } from '@astrojs/starlight/components'
+Skill 数量、触发词数量和元数据覆盖率只能描述目录。它们不能证明 Agent 选择正确，也不能证明任务完成得更好。旧文档中的准确率、固定路由耗时和 Token 降幅没有对应的真实运行证据，不作为当前效果结论。
 
-## 当前性能指标
+## 每种检查能证明什么
 
-<Aside type="tip">
-**最新数据**（2026-09-04）：基于全部 95 个 Skill 完成结构化增强后的测量结果
-</Aside>
+| 检查 | 可得结论 | 不能据此推断 |
+| --- | --- | --- |
+| 目录与 frontmatter 校验 | 名称、描述、索引和引用满足当前检查规则 | 客户端实际调用成功、任务完成率 |
+| Hook 安装状态 | 本地托管配置是否安装、是否需要更新 | 客户端已信任 Hook、事件已经执行 |
+| 上下文预算检查 | 本次上下文生成与字节预算结果 | 所有模型的 Token 用量和实际请求延迟 |
+| 场景契约检查 | 评测场景及其 Skill 引用有效 | 真实路由准确率、行为稳定性 |
+| 静态配对 Review | 相同请求下的职责和边界更清楚 | 在目标 Harness 中实际产生了增益 |
+| 目标 Harness 的真实 observation | 指定场景中的选择、交接、停止与任务结果 | 未覆盖客户端、任务或环境的效果 |
 
-### 路由准确率
+验证一次 Skill 修改时，先根据变更选择所需证据，不把所有检查重复跑一遍。普通文案修改以差异、直接引用和一次 Review 为主。
 
-| 指标 | 数值 |
-|------|-----|
-| **场景覆盖率** | 74/74 (100%) |
-| **路由准确率** | 96%+ |
-| **歧义场景** | 2/74 (2.7%) |
-| **通过 conflicts 解决的歧义** | 2/2 (100%) |
+## 检查场景契约
 
-### 触发词统计
-
-| 类别 | 数量 |
-|------|-----|
-| **中文触发词** | 626 个 |
-| **英文触发词** | 438 个 |
-| **总触发词** | 1064 个 |
-| **覆盖 Skill 数** | 95/95 (100%) |
-
-### Frontmatter 增强覆盖率
-
-| 元数据字段 | 覆盖率 |
-|-----------|--------|
-| **triggers (结构化)** | 95/95 (100%) |
-| **gates** | 95/95 (100%) |
-| **conflicts** | 95/95 (100%) |
-| **related_skills** | 95/95 (100%) |
-
-### 优先级分布
-
-| 优先级 | Skill 数 | 平均中文触发词 | 平均英文触发词 | gates 覆盖 | conflicts 覆盖 |
-|--------|---------|------------|------------|-----------|------------|
-| Critical | 1 | 8 | 6 | 1/1 | 1/1 |
-| High | 19 | 6-8 | 4-6 | 19/19 | 19/19 |
-| Medium | 30 | 6-8 | 4-6 | 30/30 | 30/30 |
-| Low | 38 | 4-6 | 3-5 | 38/38 | 38/38 |
-| Fallback | 7 | 3-4 | 2-3 | 7/7 | 7/7 |
-
-<Aside type="tip">
-**100% 覆盖率**：所有 95 个 Skill 都已完成结构化增强，包括触发词的两种合法格式：嵌套格式（72个）和数组格式（23个）。
-</Aside>
-
-## Token 优化
-
-### Context 注入优化
-
-通过渐进式加载和上下文压缩，Runtime Hook 注入的 token 消耗大幅降低：
-
-| 阶段 | Token 消耗 | 优化幅度 |
-|------|-----------|---------|
-| **优化前** | ~65,000 tokens | - |
-| **优化后** | ~8,000 tokens | **-87.7%** |
-
-**优化措施**：
-
-1. **按需加载 frontmatter**
-   - 只注入当前请求相关的 Skill 元数据
-   - 不再注入完整 Skill 目录
-
-2. **行为内核提取**
-   - 跨客户端最小行为内核独立维护
-   - 从 `runtime-hooks/behavior-kernel.md` 加载
-   - 避免在每个 Skill 中重复
-
-3. **项目记忆有界摘要**
-   - 只读取 `PROJECT-MEMORY.md` 中与当前问题相关的摘要
-   - 不注入完整项目文档
-
-4. **TODO 上下文压缩**
-   - 只提示当前开发者的活动 TODO
-   - 不注入所有开发者的 TODO 历史
-
-### 路由延迟
-
-| 操作 | 延迟 |
-|------|-----|
-| **触发词匹配** | < 0.1ms |
-| **Gates 检查** | < 0.1ms |
-| **Conflicts 解决** | < 0.09ms |
-| **总路由时间** | **< 0.29ms** |
-
-<Aside type="tip">
-路由延迟不到 1 毫秒，对用户体验无感知影响。
-</Aside>
-
-## 优化历程
-
-### Phase 1: Decision Tree (2026-08)
-
-**目标**：建立场景路由决策树
-
-**成果**：
-- 定义 74 个典型场景
-- 初始触发词 400+ 个
-- 路由准确率 93.3%
-
-### Phase 2: Runtime Hook Integration (2026-08)
-
-**目标**：将路由系统集成到 Runtime Hook
-
-**成果**：
-- `UserPromptSubmit` Hook 注入路由提示
-- `SubagentStart` Hook 传递上下文
-- `PreToolUse` Hook 防护检查
-
-### Phase 3: High Priority Enhancement (2026-09)
-
-**目标**：增强 20 个高优先级 Skill 的 frontmatter
-
-**成果**：
-- 触发词从平均 3 个增至 7 个
-- 100% 覆盖 gates 和 conflicts
-- 路由准确率提升至 95%+
-- 歧义场景从 5 个降至 3 个
-
-**增强维度**：
-```yaml
-triggers:
-  zh: [口语化表达]
-  en: [English triggers]
-gates: [可验证的前置条件]
-conflicts: [职责边界说明]
-related_skills: [结构化依赖]
-```
-
-### Phase 4: Medium Priority Enhancement (2026-09)
-
-**目标**：增强 30 个中优先级 Skill
-
-**成果**：
-- 触发词增加 180+ 个
-- gates/conflicts 覆盖率 50% → 80%
-- 路由准确率稳定在 96%+
-
-### Phase 5: Low Priority Enhancement (2026-09)
-
-**目标**：增强 38 个低优先级 Skill
-
-**成果**：
-- 触发词增加 242 个（中文 195 + 英文 144 - 前期重复）
-- gates/conflicts 覆盖率 80% → 91.5%
-- 总触发词达到 737 个
-- 歧义场景降至 2 个
-
-**差异化策略**：
-- Low 优先级用**更少但更专有**的触发词
-- gates 限定为技术栈/格式可验证条件
-- conflicts 数量 3-6 个（平均 3.95），必须压住 High/Medium
-
-### Phase 6: Telemetry & Monitoring (2026-09)
-
-**目标**：建立遥测和监控系统
-
-**成果**：
-- 路由统计工具
-- 调试模式
-- 性能基准测试
-
-## 准确率分析
-
-### 歧义场景解决
-
-**场景 1：页面设计 vs 页面优化**
-
-用户输入："优化这个页面"
-
-```
-匹配结果：
-  - frontend-design（触发词：页面设计）
-  - frontend-polish（触发词：优化页面）
-
-Gates 检查：
-  frontend-design:
-    gates: "尚未有实现"
-    当前状态: 页面已存在
-    结果: ✗ 不满足
-
-  frontend-polish:
-    gates: "已有页面实现"
-    当前状态: 页面已存在
-    结果: ✓ 满足
-
-Conflicts 规则：
-  frontend-design.conflicts.frontend-polish:
-    "frontend-design 负责从零设计新页面；frontend-polish 负责已有页面的优化"
-
-最终选择：frontend-polish
-准确率：100%
-```
-
-**场景 2：需求变更 vs 新需求**
-
-用户输入："需求改了，用户表要加手机号字段"
-
-```
-匹配结果：
-  - change-impact-analysis（触发词：需求改了）
-  - product-manager（触发词：需求）
-
-Gates 检查：
-  change-impact-analysis:
-    gates: "已有批准的范围"
-    当前状态: TODO 文件存在
-    结果: ✓ 满足
-
-  product-manager:
-    gates: "尚未有批准的范围"
-    当前状态: TODO 文件存在
-    结果: ✗ 不满足
-
-Conflicts 规则：
-  change-impact-analysis.conflicts.product-manager:
-    "change-impact-analysis 负责已有范围的变更；新需求用 product-manager"
-
-最终选择：change-impact-analysis
-准确率：100%
-```
-
-### 路由失败分析
-
-在 96%+ 的准确率中，剩余 &lt;4% 的失败主要来自：
-
-1. **触发词不匹配** (~2%)
-   - 用户使用未定义的触发词
-   - 例如："搞个页面"（不在触发词列表中）
-   - **解决方案**：持续收集用户输入，扩充触发词列表
-
-2. **Gates 条件不满足** (~1%)
-   - 用户意图正确，但当前状态不满足 gates
-   - 例如：未完成产品定义就要求开始实现
-   - **解决方案**：提示用户先完成前置步骤
-
-3. **多个 Skill 得分相同** (&lt;1%)
-   - 极少数情况下，多个 Skill 的评分完全相同
-   - **解决方案**：通过 conflicts 规则强制选择，或提示用户明确意图
-
-## 性能优化建议
-
-### 触发词优化
-
-1. **持续收集用户输入**
-   ```bash
-   # 查看路由统计
-   node runtime-hooks/scripts/routing-stats.cjs
-   
-   # 分析失败的路由
-   grep "Routing failed" ~/.claude/logs/*.log
-   ```
-
-2. **扩充口语化触发词**
-   - 分析用户的自然表达
-   - 添加同义词和变体
-
-3. **Low 优先级保持克制**
-   - 不要为了提升召回率而增加通用触发词
-   - 保持技术栈/格式限定
-
-### Gates 优化
-
-1. **确保可验证**
-   - gates 应该能通过代码/文件/状态验证
-   - 避免主观判断
-
-2. **与 conflicts 配合**
-   - gates 处理"能不能触发"
-   - conflicts 处理"该选哪个"
-
-### Conflicts 优化
-
-1. **说明决策依据**
-   - 不只是列出相关 Skill
-   - 明确职责边界
-
-2. **Low 优先级重点维护**
-   - Low 优先级 Skill 需要更多 conflicts
-   - 确保不会抢占 High/Medium 的场景
-
-## 监控工具
-
-### 路由调试
+在 Skill 源仓库根目录执行：
 
 ```bash
-# 启动调试模式
-AGENT_DEBUG_ROUTING=1 claude
-
-# 查看详细路由过程
-export AGENT_DEBUG_ROUTING=1
+node evals/route-eval.mjs
 ```
 
-### 路由统计
+没有提供 observation 时，成功结果中的 `behaviorEvaluated` 仍是 `false`：
+
+```text
+ok: true
+contracts: 以本次输出为准
+behaviorEvaluated: false
+```
+
+它表示 `evals/route-scenarios.json` 的结构和引用有效。该文件是评测契约，不是客户端的运行时路由表。
+
+## 采集真实行为
+
+要比较修改前后或启用与未启用 Skill 的效果，先用目标 Harness 独立执行场景，再把观察值写到工作区外或临时目录中的 JSON。不能根据期望答案填充“实际结果”。
+
+观察文件的顶层使用 `schemaVersion: 1` 和 `runs`。每条 run 按源仓库 `evals/README.md` 的契约记录：
+
+| 字段 | 含义 |
+| --- | --- |
+| `scenarioId`、`runId` | 场景和独立运行标识 |
+| `variant` | `with-skill`、`without-skill` 或 `previous` |
+| `primaryRoute`、`forbiddenHits` | 最终主路由与禁止命中 |
+| `signals`、`handoff` | 实际出现的必需信号和交接 |
+| `stopCondition`、`goalCompleted` | 停止条件与目标结果 |
+| `contextCharacters` | 非负整数的上下文字符数，不是 Token 数 |
+| `initialPrimaryRoute` | 可选；只有能观察首次选择时才记录 |
+
+当前评测器要求每个场景至少有 3 次独立 `with-skill` 运行，并且整份输入至少包含一个 `without-skill` 或 `previous` 基线。比较某个场景的增益时，该场景本身也必须有基线；没有基线的场景只能报告当前表现。
+
+把路径替换成真实观察文件后运行：
 
 ```bash
-# 查看路由统计
-node runtime-hooks/scripts/routing-stats.cjs
-
-# 输出示例：
-# Total requests: 1,234
-# Successful routing: 1,186 (96.1%)
-# Ambiguous resolved: 45 (3.6%)
-# Failed routing: 3 (0.2%)
-#
-# Top 10 Skills:
-# 1. universal-development: 342 (27.7%)
-# 2. code-review: 187 (15.1%)
-# 3. git-commit: 156 (12.6%)
+node evals/route-eval.mjs --observations=/absolute/path/to/route-observations.json
 ```
 
-### 性能基准
+评测器会检查主路由、禁止命中、必需信号、交接、停止条件和目标结果。独立运行不足、缺失必要基线或结果未满足场景条件时会返回非零退出码；`behaviorEvaluated: true` 本身不代表通过，还要核对 `ok`、`errors` 和各场景结果。
 
-```bash
-# 运行路由性能测试
-node runtime-hooks/scripts/routing-benchmark.cjs
+## 解读结果
 
-# 输出示例：
-# Trigger matching: 0.08ms
-# Gates checking: 0.09ms
-# Conflicts resolving: 0.08ms
-# Total routing time: 0.25ms
-```
+| 输出 | 如何使用 |
+| --- | --- |
+| `routeStability` | 选择是否一致；一致地选错也可能稳定，需要同时看期望路由与目标结果 |
+| `expectedRouteRate` | 主路由符合场景预期的比例 |
+| `goalCompletionRate` | 满足场景要求、交接和目标完成条件的比例 |
+| `forbiddenRouteRate` | 命中禁止路由的比例 |
+| `routeCorrectionRate` | 有首次路由记录时计算纠偏比例；缺失时为不可计算 |
+| `averageContextCharacters` | 该组运行的平均上下文字符数 |
+| `delta` | 当前组与该场景基线的差值；没有基线时不提供比较 |
 
-## 下一步优化方向
+报告结论时带上客户端与版本、Skill 版本、场景范围、重复次数和基线来源。准确率、耗时或成本只能用于实际覆盖的样本，不能推广成框架的固定保证。
 
-### 短期（1-2 周）
+## 辅助路由与遥测
 
-1. **扩充触发词的口语化表达**
-   - 基于真实用户输入数据
-   - 分析常见表达方式
-   - 特别关注失败路由的输入
+源仓库还包含 `skill-router.yaml` 和 `runtime-hooks/scripts/skill-router.cjs`，用于辅助场景候选匹配。它们不自动读取并同步全部 Skill frontmatter；当前辅助路由器的 `checkGates()` 也不执行实际门槛核验。
 
-2. **优化数组格式与嵌套格式的一致性**
-   - 当前：72 个嵌套格式 + 23 个数组格式
-   - 建立格式选择指导原则
-   - 两种格式在路由系统中完全等价
+因此，候选出现次数不是 Skill 实际调用次数，命中率不是正确率，候选匹配耗时也不是完整 Agent 请求耗时。原生发现、辅助提示和真实执行需要分别核对，详见[发现与选择机制](/skills/core-concepts/routing/)。
 
-3. **建立路由测试套件**
-   - 为每个场景编写测试用例
-   - 自动化验证路由准确率
+## 维护入口
 
-### 中期（1-2 月）
-
-1. **建立路由测试套件**
-   - 为每个场景编写测试用例
-   - 自动化验证路由准确率
-
-2. **优化 conflicts 规则**
-   - 分析歧义场景
-   - 完善职责边界说明
-
-3. **性能持续优化**
-   - 减少 Runtime Hook 注入延迟
-   - 优化 gates 检查逻辑
-
-### 长期（3-6 月）
-
-1. **机器学习增强**
-   - 基于历史路由数据训练模型
-   - 自动推荐触发词和 gates
-
-2. **用户反馈闭环**
-   - 收集用户对路由结果的反馈
-   - 自动调整路由策略
-
-3. **跨语言支持**
-   - 扩展到更多语言（日语、韩语等）
-   - 建立多语言触发词库
-
-## 基准对比
-
-### 与传统关键词匹配对比
-
-| 指标 | 传统关键词 | Skills Framework |
-|------|----------|-----------------|
-| 准确率 | ~75% | 96%+ |
-| 歧义处理 | 无 | conflicts 规则 |
-| 上下文感知 | 无 | Runtime Hook |
-| 口语化支持 | 差 | 强 |
-
-### 与其他 AI Routing 系统对比
-
-| 指标 | 基于 LLM | Skills Framework |
-|------|---------|-----------------|
-| 延迟 | 100-500ms | < 0.3ms |
-| 可解释性 | 黑盒 | 完全透明 |
-| 可维护性 | 低（需重训练） | 高（编辑 YAML） |
-| Token 消耗 | 高 | 低（-87.7%） |
-
-## 总结
-
-Skills Framework 通过三层路由机制和结构化元数据，实现了：
-
-- ✅ **96%+ 路由准确率**
-- ✅ **< 0.3ms 路由延迟**
-- ✅ **-87.7% Token 消耗**
-- ✅ **100% 场景覆盖**
-- ✅ **1064 个自然语言触发词**
-- ✅ **100% frontmatter 增强覆盖率**（95/95 个 Skill）
-
-这些指标使其成为目前最准确、最高效的 Coding Agent 路由系统之一。
-
-## 下一步
-
-- [路由调试](/skills/advanced/routing-debug/) - 如何调试路由问题
-- [Frontmatter 规范](/skills/advanced/frontmatter-spec/) - 详细的元数据规范
-- [创建新 Skill](/skills/advanced/creating-skills/) - 如何创建高质量 Skill
+- [Frontmatter 规范](/skills/advanced/frontmatter-spec/)：修改描述、适用条件与协作边界。
+- [Skill 优化](/skills/skills-reference/medium/skill-optimizer/)：审查或修改已有 Skill。
+- [安装与配置](/skills/getting-started/)：完成指定客户端接入。
+- [故障排查](/skills/troubleshooting/)：区分发现、Hook 与任务执行问题。

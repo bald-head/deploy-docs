@@ -1,719 +1,168 @@
 ---
 title: 故障排查
-description: 常见问题的诊断和解决方案
-order: 90
+description: 按 Hook、Skill 发现、TODO、路由与项目记忆定位常见问题
+sidebar:
+  order: 90
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 
 ## 快速诊断
 
-### 问题分类
+| 症状 | 先检查 |
+|---|---|
+| 没有上下文或 Hook 提示 | [Runtime Hook 问题](#runtime-hook-问题) |
+| 找不到某个 Skill | [Skill 发现问题](#skill-发现问题) |
+| TODO 路径或状态不符 | [TODO 问题](#todo-问题) |
+| 候选 Skill 与任务不符 | [路由问题](#路由问题) |
+| 无法领取、完成或续作 | [任务管理问题](#任务管理问题) |
+| 项目事实没有加载 | [项目记忆问题](#项目记忆问题) |
+| 命令或写入被拒绝 | [命令防护问题](#命令防护问题) |
 
-根据症状快速定位问题类型：
-
-| 症状 | 可能原因 | 跳转到 |
-|-----|---------|--------|
-| Runtime Hook 未生效 | 安装不完整 | [Hook 问题](#runtime-hook-问题) |
-| 找不到 Skill | 发现路径错误 | [Skill 发现问题](#skill-发现问题) |
-| TODO 路径不对 | Git 配置问题 | [TODO 问题](#todo-问题) |
-| 路由到错误的 Skill | 触发词歧义 | [路由问题](#路由问题) |
-| 无法领取任务 | 依赖或写集冲突 | [任务管理问题](#任务管理问题) |
-| 项目记忆未加载 | 文件路径问题 | [项目记忆问题](#项目记忆问题) |
-| 命令被拦截 | 命令防护触发 | [命令防护问题](#命令防护问题) |
+文中的 `<skills-root>`、`<repo-root>` 和 `<developer-id>` 均为占位符。脚本从 Skills 仓库读取，TODO 与项目记忆则属于当前目标 Git 仓库，先确认两者没有混用。
 
 ## Runtime Hook 问题
 
-### 症状：Hook 未生效
+### Hook 没生效
 
-**表现**：
-- 没有自动注入行为内核
-- 没有加载项目记忆
-- 没有 TODO 提醒
-
-**诊断步骤**：
+先检查本地托管配置：
 
 ```bash
-# 1. 检查 Hook 安装状态
-node ~/.agent-workflow/skills/runtime-hooks/scripts/install.mjs --check --json
-
-# 预期输出：
-{
-  "installed": true,
-  "hooks": {
-    "SessionStart": true,
-    "UserPromptSubmit": true,
-    "PreToolUse": true,
-    "SubagentStart": true,
-    "SubagentStop": true,
-    "Stop": true
-  }
-}
+node "<skills-root>/runtime-hooks/scripts/install.mjs" --check --json
 ```
 
-**如果 `installed: false`**：
+通过条件是 `installed: true` 且 `needsInstall: false`。需要更新时，按返回的 `installCommand` 或 [安装与配置](/skills/getting-started/) 处理。Claude Code 要重新启动会话；Codex 通过 `/hooks` 检查并信任新的定义。
 
-```bash
-# 2. 重新安装
-node ~/.agent-workflow/skills/runtime-hooks/scripts/install.mjs
+检查通过不表示客户端已重新加载，也不代表远端 MCP 已连通。不要在真实工作区执行破坏性命令来验证安装。
 
-# 3. Codex 用户需要信任 Hook
-codex
-/hooks
-# 审查并信任所有 Hook
-```
+### 每次启动都提示更新
 
-**如果 `installed: true` 但仍未生效**：
+核对客户端实际配置目录与安装器检查结果，尤其是 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 和固定的 Node 解释器路径。切换 Node 版本后重新运行安装器；重复发生时可用 `AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0` 暂停自动对齐，保留差异提示用于排查。
 
-```bash
-# 4. 检查客户端配置
-cat ~/.claude/settings.json | grep -A 20 hooks
+### Stop 没有发生
 
-# 或 Codex（Hook 与 notify 分成两个文件）
-cat ~/.codex/hooks.json
-grep -A 3 '^notify' ~/.codex/config.toml
+强制退出或客户端崩溃不保证发出 Stop 事件。恢复会话后读取原 TODO、当前实例和 Git 事实，按 [会话接续](/skills/usage/session-resume/) 恢复。不要仅用一句“已完成”或额外状态提交代替完成检查。
 
-# 5. 确认路径正确
-which node
-# 确保 Hook 命令中的 node 路径正确
-```
-
-**临时禁用 Hook 测试**：
-
-```bash
-AGENT_RUNTIME_HOOKS_DISABLED=1 claude
-```
-
-如果禁用后问题消失，说明是 Hook 配置问题。
-
-### 症状：SessionStart Hook 每次都重装
-
-**原因**：Hook 版本检测认为配置不一致。
-
-**解决方案**：
-
-```bash
-# 禁用自动修复
-export AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0
-
-# 或在配置文件中设置
-echo 'AGENT_RUNTIME_HOOKS_AUTO_UPDATE=0' >> ~/.zshrc
-```
-
-### 症状：Stop Hook 未触发
-
-**原因**：会话异常退出或客户端 bug。
-
-**解决方案**：
-
-```bash
-# 直接说明任务完成
-"USER-LOGIN 已经完成,所有验收条件都通过了"
-
-# 然后提交代码
-git add .
-git commit -m "feat: implement user login"
-git push
-```
+<Aside type="note">
+`AGENT_RUNTIME_HOOKS_DISABLED=1` 不是总开关：它停用 SessionStart、PreToolUse 和提示音，但上下文与 TODO 脚本仍可能运行。完整事件与配置排查见 [Hook 故障排查](/skills/hooks/troubleshooting/)。
+</Aside>
 
 ## Skill 发现问题
 
-### 症状：找不到 Skill
+### 找不到 Skill
 
-**表现**：
-- 输入触发词后没有反应
-- `/skills` 命令显示的 Skill 列表不完整
-
-**诊断步骤**：
+先看当前客户端原生提供的 Skill 发现结果，确认 Skill 的 `SKILL.md` 可读、frontmatter 中的 `name` 与 `description` 有值，以及注册目录没有多嵌套一层。
 
 ```bash
-# 1. 检查 Skill 目录
-ls ~/.agent-workflow/skills/
-
-# 应该看到所有 Skill 目录
-
-# 2. 检查发现机制
-node ~/.agent-workflow/skills/runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 预期输出：
-Skills discovered: 95 skills
-Root alias: <skills-root>
+rg --files "<skills-root>" -g SKILL.md
+sed -n '1,35p' "<skills-root>/product-manager/SKILL.md"
 ```
 
-**如果 Skill 数量不对**：
+Skill 数量会随版本和项目级覆盖变化，不能把固定数量作为通过条件。同名 Skill 还要核对实际命中的路径；原生发现根和同步步骤见 [安装与配置](/skills/getting-started/)。
 
-```bash
-# 3. 检查 SKILL.md 格式
-cat ~/.agent-workflow/skills/product-manager/SKILL.md | head -20
-
-# 确保有 frontmatter:
----
-name: product-manager
-description: "..."
-...
----
-```
-
-**如果仍然找不到**：
-
-```bash
-# 4. 启用兜底发现
-export AGENT_SKILL_DISCOVERY_FALLBACK=1
-
-# 5. 重新启动客户端
-claude
-```
-
-### 症状：触发错误的 Skill
-
-**原因**：触发词歧义或路由规则问题。
-
-**解决方案**：
-
-```bash
-# 1. 使用更明确的触发词
-❌ "优化"
-✅ "优化用户登录页面的加载性能"
-
-# 2. 查看 Skill 的触发词
-cat ~/.agent-workflow/skills/frontend-polish/SKILL.md | grep -A 10 "triggers:"
-
-# 3. 启用路由调试
-export AGENT_DEBUG_ROUTING=1
-claude
-```
+`AGENT_SKILL_DISCOVERY_FALLBACK=1` 是旧客户端兜底，不应在原生发现已经正常时默认开启。目录 validator 的安装与 Penpot 注册核验是同步流程的一部分，普通业务回合无需重复运行。
 
 ## TODO 问题
 
-### 症状：TODO 路径不对
+### 路径不符
 
-**表现**：
-- TODO 文件不在预期路径
-- 或者找不到 TODO 文件
+TODO 规范路径为：
 
-**诊断步骤**：
+```text
+docs/<developer-id>/tasks/todo/<原文件名>.md
+```
+
+开发者身份依次来自当前仓库 Git `user.name`、系统登录用户名、最后才是 `AGENT_DEVELOPER_NAME`。身份还会规范化，不能直接把未经处理的显示名拼成目录。
 
 ```bash
-# 1. 检查 Git 配置
-git config user.name
-
-# 如果为空或不正确，设置：
-git config user.name "alice-chen"
-
-# 2. 检查预期路径
-echo "docs/$(git config user.name)/tasks/todo/"
-
-# 3. 查找实际路径
-find docs/ -name "*.md" -path "*/tasks/todo/*"
+git rev-parse --show-toplevel
+git config --get user.name
+whoami
+rg --files docs -g '*.md'
 ```
 
-**如果路径不一致**：
+将实际文件与 Hook 注入的 `<developer_scope>` 对照。身份确实错误时先修正仓库配置；历史落点由 `task-todo-workflow` 核对归属后处理，不直接移动或删除其他开发者的 TODO。
+
+### 多份活动 TODO
+
+每位开发者只保留一份活动 TODO。先核对各文件中的未完成 Feature、执行实例和依赖，再合并或处理历史文件。不要靠删除文件、写 `.active-todo` 或切换环境变量掩盖仍在运行的实例冲突。
+
+### 状态和 Git 不同步
+
+先只读核对：
 
 ```bash
-# 4. 移动 TODO 到正确路径
-mkdir -p docs/alice-chen/tasks/todo
-mv docs/wrong-path/todo/project.md docs/alice-chen/tasks/todo/
-
-# 5. 更新 Git 配置
-git config user.name "alice-chen"
+git status --short
+git log --oneline -5
+git diff --name-only
 ```
 
-### 症状：多个活动 TODO
+本地 `[x]` 可能只是首次 commit 前准备好的完成 hunk。它必须与真实功能改动同次 commit & push，远端核验通过前显示 `delivery-pending`，不能解锁依赖项。
 
-**表现**：
-```
-错误: 发现多个活动 TODO
-docs/alice-chen/tasks/todo/project1.md
-docs/alice-chen/tasks/todo/project2.md
-```
-
-**原因**：每个开发者只能有一个活动 TODO。
-
-**解决方案**：
-
-```bash
-# 1. 决定保留哪个 TODO
-cat docs/alice-chen/tasks/todo/project1.md
-cat docs/alice-chen/tasks/todo/project2.md
-
-# 2. 移动或删除其他 TODO
-mv docs/alice-chen/tasks/todo/project2.md docs/alice-chen/tasks/archive/
-
-# 或合并两个 TODO（手动）
-```
-
-### 症状：TODO 状态不同步
-
-**表现**：
-- 代码已提交，TODO 仍是 `[~]`
-- 或 TODO 是 `[x]`，但代码未提交
-
-**原因**：状态机异常或手动修改 TODO。
-
-**解决方案**：
-
-```bash
-# 1. 检查实际状态
-git log --oneline -10
-cat docs/alice-chen/tasks/todo/project.md
-
-# 2. 如果代码已提交但 TODO 未更新
-"USER-LOGIN 已经完成并提交"
-
-# 3. 如果 TODO 已完成但代码未提交
-git add .
-git commit -m "feat: implement user login"
-git push
-```
-
-<Aside type="caution">
-不要手动修改 TODO 状态，让 Stop Hook 自动管理。
-</Aside>
+如果功能已经单独提交、TODO 仍为 `[~]`，先查明交付包为什么不完整，再由主 Agent 在已有授权和当前 Git 状态下修复；不要追加“仅更新 TODO 状态”的提交，也不要自动重写已发布历史。
 
 ## 路由问题
 
-### 症状：总是触发 universal-development
+### 候选 Skill 不准确
 
-**原因**：触发词不够明确，匹配到兜底 Skill。
+先分清当前看到的是 Harness 原生发现结果，还是 `<skill_routing>` 中的本地辅助提示。本地路由读取 `skill-router.yaml`，不自动读取各 `SKILL.md` 的 frontmatter；`gates`、`conflicts` 和 `related_skills.after` 不能被理解成自动门禁或调用链。
 
-**解决方案**：
+给 Agent 补充具体操作、已有实现和期望结果，或直接点名 Skill。新页面设计与已有页面优化、性能诊断与视觉调整、已批准范围变更与新需求定义应按实际目标区分。
 
-```bash
-# 使用更明确的触发词
+### 查看路由记录
 
-❌ "开发"
-✅ "开发用户注册 API"（触发 api-development）
-
-❌ "实现"
-✅ "实现用户注册的 CRUD 功能"（触发 crud-development）
-
-❌ "做一个页面"
-✅ "设计用户登录页面"（触发 frontend-design）
-```
-
-### 症状：想要 A Skill 却触发了 B Skill
-
-**诊断步骤**：
+实际的观测脚本是：
 
 ```bash
-# 1. 查看两个 Skill 的 triggers
-cat ~/.agent-workflow/skills/skill-a/SKILL.md | grep -A 10 "triggers:"
-cat ~/.agent-workflow/skills/skill-b/SKILL.md | grep -A 10 "triggers:"
-
-# 2. 查看 gates
-cat ~/.agent-workflow/skills/skill-a/SKILL.md | grep -A 5 "gates:"
-cat ~/.agent-workflow/skills/skill-b/SKILL.md | grep -A 5 "gates:"
-
-# 3. 查看 conflicts
-cat ~/.agent-workflow/skills/skill-a/SKILL.md | grep -A 5 "conflicts:"
+node "<skills-root>/runtime-hooks/scripts/routing-telemetry.cjs" --status
+node "<skills-root>/runtime-hooks/scripts/analyze-routing.cjs" report --days 7 --json
 ```
 
-**解决方案**：
-
-使用 Skill-A 的精确触发词，避免歧义：
-
-```
-"调用 skill-a 实现 XXX"
-```
-
-或者明确说明场景，让系统根据 gates 选择：
-
-```
-"为新页面设计 UI"（新页面 → frontend-design）
-"优化已有页面性能"（已有页面 → frontend-polish）
-```
+遥测默认关闭，启用 `AGENT_ROUTER_TELEMETRY=1` 后才有记录；关键词记录还需要单独启用。记录的是辅助匹配结果，不证明 Harness 实际调用正确率。测量边界见 [评估与验证边界](/skills/advanced/performance-metrics/)。
 
 ## 任务管理问题
 
-### 症状：无法领取任务
+### 无法领取
 
-**表现**：
-```
-尝试领取 USER-LOGIN
-错误: 依赖未满足 / 写集冲突
-```
+依次核对当前 Feature 的状态、依赖、runtime instance 和并行写集：
 
-**诊断步骤**：
+- 一个实例只能拥有一个 `[~]`，一个 Feature 只能由一个实例领取。
+- 依赖必须指向同一 TODO 中存在的 Feature 或 Epic，不能自依赖或成环。
+- 依赖的 `[x]` 必须已进入核验过的远端功能提交。
+- 不同实例并行时，写集须互斥，也不能共享迁移、配置、契约、端口或账号资源。
 
-```bash
-# 1. 检查依赖
-cat docs/alice-chen/tasks/todo/project.md
+共享文件确实需要两项修改时应串行，或重新确认唯一 Owner 与交付边界。不要仅把该文件从写集声明里删掉。
 
-# 查看 USER-LOGIN 的依赖
-- [ ] `USER-LOGIN` 用户登录
-  - 依赖: `USER-REG`  # 检查 USER-REG 是否 [x]
+### 无法完成
 
-# 2. 检查写集冲突
-grep '\[~\]' docs/alice-chen/tasks/todo/project.md
+核对所有 AC 是否有新鲜证据、适用交付面是否完整、Review 是否通过，以及写集内是否存在真实改动。完成摘要中的 `Review: pass` 只是结果字段，不能代替实际 Review。
 
-# 查看进行中任务的写集
-[~] USER-REG
-  写集: src/api/user/register.ts, src/router/index.ts
+默认复用已有检查或一次真实主路径；高风险、覆盖率、CI 或 finding 不会自动授权新增测试源码。只有用户本轮明确要求时才新增或修改测试。
 
-# 检查 USER-LOGIN 写集
-[ ] USER-LOGIN
-  写集: src/api/user/login.ts, src/router/index.ts
-  
-# 发现冲突: src/router/index.ts
-```
+### 实例不匹配
 
-**解决方案**：
-
-**依赖未满足**：
-```bash
-# 等待依赖任务完成
-"继续实现 USER-REG"
-"完成 USER-REG"
-"提交 USER-REG"
-
-# 然后领取 USER-LOGIN
-"开始实现 USER-LOGIN"
-```
-
-**写集冲突**：
-```bash
-# 方案1: 等待冲突任务完成
-"完成 USER-REG"
-
-# 方案2: 调整写集边界
-# 将 src/router/index.ts 从其中一个任务移除
-
-# 方案3: 串行执行
-# 不并行，依次完成
-```
-
-### 症状：任务一直是进行中状态
-
-**原因**：完成门禁未满足或 Stop Hook 未触发。
-
-**诊断步骤**：
-
-```bash
-# 1. 检查完成条件
-cat docs/alice-chen/tasks/todo/project.md
-
-[~] USER-LOGIN
-  AC-001: 用户可以登录 -> ?  # 缺少证据
-  AC-002: Token 存储 -> ?     # 缺少证据
-  Review: pending             # 未 Review
-```
-
-**解决方案**：
-
-```bash
-# 1. 补充 AC 证据
-"USER-LOGIN 完成验证：
-- AC-001: 用户可以登录 -> 手工测试通过
-- AC-002: Token 存储 -> DevTools 验证"
-
-# 2. 执行 code-review
-"审查 USER-LOGIN 的代码"
-
-# 3. 确认所有条件满足后
-"完成 USER-LOGIN"
-```
+先确认原实例是否仍在运行。原 Owner 未释放时，不启动第二个实例续作同一 Feature；确认原实例停止后，由主 Agent 通过状态机完成释放与重新分配。
 
 ## 项目记忆问题
 
-### 症状：项目记忆未加载
+### 文件没加载
 
-**表现**：每轮请求前看不到项目记忆上下文。
+先确认当前工作目录在目标 Git 仓库中。查找顺序是根目录 `PROJECT-MEMORY.md`、`docs/PROJECT-MEMORY.md`、`docs/project-memory.md`；已有文件直接复用。
 
-**诊断步骤**：
+主要章节为空时，使用 `init-docs` 采集仓库事实，再由 `project-details` 原位归并。示例技术栈、占位文字或旧对话不应当作真实事实。
 
-```bash
-# 1. 检查文件是否存在
-ls docs/PROJECT-MEMORY.md
-ls docs/project-memory.md
-ls PROJECT-MEMORY.md
+### 摘要缺少某条事实
 
-# 2. 如果不存在，手动创建
-"初始化项目记忆"
-
-# 3. 检查内容
-cat docs/PROJECT-MEMORY.md
-```
-
-**解决方案**：
-
-```bash
-# 自动初始化
-"初始化项目记忆"
-
-# 系统会调用 init-docs → project-details
-```
-
-### 症状：项目记忆内容过时
-
-**解决方案**：
-
-```bash
-# 手动触发更新
-"更新项目记忆"
-
-# 或者重新采集
-"重新初始化项目记忆"
-```
-
-### 症状：项目记忆注入不完整
-
-**原因**：上下文预算超限。
-
-**解决方案**：
-
-```bash
-# 1. 检查预算
-node ~/.agent-workflow/skills/runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 2. 直接读取完整文件
-"读取 PROJECT-MEMORY.md 的完整内容"
-
-# 3. 精简项目记忆（删除过时内容）
-```
+注入按问题选择有界摘要，不保证包含全文。让 Agent 读取对应源章节，再核对当前源码。稳定事实保存在项目记忆，任务进度只在唯一 TODO 中维护。
 
 ## 命令防护问题
 
-### 症状：命令被拦截
+保留 Hook 返回的完整拒绝原因，区分危险命令检查、提交署名检查和流程写入门禁。PreToolUse 不是完整 Shell 或 SQL 解析器，未拦截不等于操作安全或已授权。
 
-**表现**：
-```
-错误: 检测到高风险命令
-rm -rf /path/to/dir
-```
-
-**诊断步骤**：
-
-```bash
-# 1. 检查命令是否真的危险
-# 如果确实是误拦截
-
-# 2. 使用更安全的命令
-rm -rf /path/to/specific/dir  # 明确路径
-
-# 3. 临时禁用命令防护（不推荐）
-AGENT_COMMAND_GUARD=0 claude
-```
-
-### 症状：Git 强制推送被拦截
-
-**原因**：命令防护按设计拦截会改写或删除远端 ref 的 `git push`。`--force`、`-f`、`--force-with-lease`、`--force-if-includes` 都在拦截范围内，Agent 侧不存在"更安全的写法"可以绕过。
-
-**解决方案**：
-
-```bash
-# 1. 先确认是否真的需要改写远端历史
-git log --oneline -10
-git log origin/main --oneline -10
-
-# 2. 绝大多数情况下用普通 push 就够（本地落后时先 rebase）
-git pull --rebase origin main
-git push origin main
-```
-
-3. 确实需要强推时，由你在自己的终端里手动执行，Agent 不代为绕过。
-
-4. 只有你确认要长期关闭命令防护时，才在**启动 CLI 之前**导出环境变量并重启会话：
-
-```bash
-export AGENT_COMMAND_GUARD=0   # 必须在启动 Claude Code / Codex 之前导出
-```
-
-<Aside type="caution">
-`AGENT_COMMAND_GUARD=0 git push --force` 这种行内前缀无效：环境变量只作用于 `git` 子进程，而防护运行在 CLI 启动时就已带好环境的 Hook 进程中，命令依然会被拒绝。
-</Aside>
-
-## 性能问题
-
-### 症状：Skill 路由很慢
-
-**原因**：目录扫描或上下文过大。
-
-**解决方案**：
-
-```bash
-# 1. 检查 Skill 数量
-ls ~/.agent-workflow/skills/ | wc -l
-
-# 2. 如果有大量自定义 Skill，考虑归档不常用的
-mkdir ~/.agent-workflow/skills-archive
-mv ~/.agent-workflow/skills/rarely-used-skill ~/.agent-workflow/skills-archive/
-
-# 3. 清理项目记忆
-# 删除过时内容，保持精简
-```
-
-### 症状：项目记忆加载慢
-
-**原因**：记忆文件过大。
-
-**解决方案**：
-
-```bash
-# 1. 检查文件大小
-wc -l docs/PROJECT-MEMORY.md
-
-# 2. 如果超过 500 行，精简内容
-# 保留核心事实，删除过时信息
-
-# 3. 或分离到独立文档
-# 将详细内容移到 docs/architecture.md
-# 在记忆中只保留引用
-```
-
-## Git 问题
-
-### 症状：提交时 TODO 未包含
-
-**原因**：忘记暂存 TODO 文件。
-
-**解决方案**：
-
-```bash
-# 1. 查看未暂存文件
-git status
-
-# 2. 暂存 TODO
-git add docs/alice-chen/tasks/todo/project.md
-
-# 3a. 上一次提交尚未推送：修正它，再正常 push
-git commit --amend --no-edit
-git push origin <当前分支>
-
-# 3b. 上一次提交已经推送：追加一次提交，不要改写远端历史
-git commit -m "docs: 补充 TODO 状态更新"
-git push origin <当前分支>
-```
-
-<Aside type="note">
-已推送的提交不要用 `--amend` + 强推来"补一下"：强推被命令防护按设计拦截，追加一次提交是唯一不需要改写远端历史的路径。
-</Aside>
-
-### 症状：远端校验失败
-
-**表现**：
-```
-错误: 本地 [x] 但远端未找到
-```
-
-**原因**：push 失败或网络问题。
-
-**解决方案**：
-
-```bash
-# 1. 检查远端
-git log origin/main --oneline -10
-
-# 2. 如果确实未推送
-git push origin main
-
-# 3. 如果推送失败，检查网络
-ping github.com
-
-# 4. 重试推送
-git push origin main
-```
-
-## 环境问题
-
-### 症状：Node 版本不兼容
-
-**表现**：
-```
-错误: Node.js v16 不支持
-```
-
-**解决方案**：
-
-```bash
-# 1. 检查 Node 版本
-node --version
-
-# 2. 升级到 v18+
-# macOS (Homebrew)
-brew install node@18
-
-# Linux (nvm)
-nvm install 18
-nvm use 18
-
-# 3. 验证
-node --version  # 应该 >= 18.0.0
-```
-
-### 症状：权限问题
-
-**表现**：
-```
-错误: EACCES: permission denied
-```
-
-**解决方案**：
-
-```bash
-# 1. 检查文件权限
-ls -la ~/.agent-workflow/skills/
-
-# 2. 修复权限
-chmod -R u+rw ~/.agent-workflow/skills/
-
-# 3. 检查目录所有者
-ls -ld ~/.agent-workflow/
-
-# 4. 如果所有者不对
-sudo chown -R $USER ~/.agent-workflow/
-```
-
-## 获取帮助
-
-### 诊断信息收集
-
-提问前收集以下信息：
-
-```bash
-# 1. 系统信息
-uname -a
-node --version
-git --version
-
-# 2. 客户端版本
-claude --version
-# 或
-codex --version
-
-# 3. Hook 状态
-node ~/.agent-workflow/skills/runtime-hooks/scripts/install.mjs --check --json
-
-# 4. Skill 发现状态
-node ~/.agent-workflow/skills/runtime-hooks/scripts/skill-catalog-context.cjs --check
-
-# 5. Git 配置
-git config user.name
-git config user.email
-
-# 6. 当前 TODO 路径
-find docs/ -path "*/tasks/todo/*.md"
-
-# 7. 项目记忆路径
-find docs/ -name "PROJECT-MEMORY.md" -o -name "project-memory.md"
-```
-
-### 社区支持
-
-- **GitHub Issues**: 报告 bug 和功能请求
-- **GitHub Discussions**: 提问和讨论
-- **文档**: 查阅完整文档
-
-### 日志调试
-
-```bash
-# 启用详细日志
-export AGENT_DEBUG=1
-export AGENT_DEBUG_ROUTING=1
-claude
-```
+阶段与已获授权不一致时，先核对 TODO 和已有产物，再用状态机推进。命令误报应保留目标与规则证据，定向修正；不通过换写法、关闭 Hook 或真实执行危险操作来“验证”。详细边界见 [PreToolUse Hook](/skills/hooks/pre-tool-use/)。
 
 ## 下一步
 
-- [最佳实践](/skills/best-practices/) - 避免常见问题
-- [核心概念](/skills/core-concepts/) - 理解系统原理
-- [使用指南](/skills/usage/) - 学习正确的使用方式
+- [使用指南](/skills/usage/) - 按任务继续操作
+- [核心概念](/skills/core-concepts/) - 理解发现、记忆与状态管理
+- [最佳实践](/skills/best-practices/) - 日常协作建议
