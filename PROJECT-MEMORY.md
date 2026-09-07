@@ -9,6 +9,7 @@
 ## Reuse map
 
 - `astro.config.ts`：站点配置与主题导航的唯一入口，使用 `starlight-sidebar-topics-dropdown`；主题内可用自动目录和页面 `sidebar.order` 指定顺序。
+- `src/content/docs/index.mdx`：首页沿用 Starlight Hero、Houston 图片和四个主题入口；`src/styles/home.css` 通过首页标记限定样式，不改变普通文档页和主题导航。
 - `src/content/docs/skills/getting-started.mdx`：安装入口；`quickstart.mdx`：安装后的第一次使用；`usage/`：日常场景与操作流程。
 - `src/content/docs/skills/catalog/`：按任务与优先级查找 Skill；`skills-reference/<priority>/`：单个 Skill 的用途、输入、示例和边界。新增 Skill 同步这些入口，参考页复用现有 Starlight 文档样式。
 - `src/content/docs/skills/core-concepts/`、`hooks/`、`advanced/`：原理、Hook 运维与维护者参考；入门页通过链接引用，避免重复整套流程。

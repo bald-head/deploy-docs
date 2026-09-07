@@ -1,40 +1,101 @@
 ---
-title: Skills Framework 与部署文档
-description: Claude Code、Codex 的 Skill 使用手册，以及 Docker、Linux、Java 部署参考
+title: Skills Framework & 部署文档
+description: Claude Code、Codex 的 97 个 Skill 使用手册，以及 Docker、Linux、Java 部署参考
 template: splash
+hero:
+  tagline: 让 AI Agent 按你的规则写代码，让服务按你的配置跑起来
+  image:
+    file: ../../assets/houston.webp
+  actions:
+    - text: 安装与上手
+      link: /skills/getting-started/
+      icon: rocket
+      variant: primary
+    - text: Skill 手册
+      link: /skills/skills-reference/
+      icon: document
+      variant: secondary
+    - text: Docker 部署
+      link: /docker/
+      icon: seti:docker
+      variant: minimal
 ---
 
-本站包含两部分：Skills Framework 的安装与使用文档，以及 Docker、Linux、Java 的部署和运维参考。通过左侧主题菜单切换。
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+import '../../styles/home.css';
 
-## Skills Framework
+<div class="docs-home">
 
-第一次使用，从[安装与配置](/skills/getting-started/)进入，完成后阅读[快速上手](/skills/quickstart/)。已有项目的开发、修复和交付步骤集中在[使用指南](/skills/usage/)。
+## 快速导航
 
-| 你要做什么 | 阅读入口 |
+Claude Code / Codex 研发手册，以及 Docker、Java、Linux 部署与运维参考。
+
+<CardGrid>
+  <Card title="Skills Framework" icon="rocket">
+
+    **97 个 Skill + Runtime Hooks**
+
+    从客户端接入到功能开发、代码审查与 Git 交付。
+
+    [快速上手](/skills/quickstart/) · [使用指南](/skills/usage/) · [Skill 目录](/skills/catalog/)
+
+    [进入 Skills 文档 →](/skills/)
+
+  </Card>
+  <Card title="Docker 部署" icon="seti:docker">
+
+    **组件部署与 Compose 配置**
+
+    MySQL、Nginx、Elasticsearch，以及日志收集、文件存储和任务调度。
+
+    [MySQL](/docker/use/mysql/) · [Nginx](/docker/use/nginx/) · [Elasticsearch](/docker/use/elasticsearch/)
+
+    [进入 Docker 文档 →](/docker/)
+
+  </Card>
+  <Card title="Java 后端" icon="seti:java">
+
+    **Spring Boot 日志配置**
+
+    按级别分文件、滚动归档、异步输出与控制台着色。
+
+    [日志配置](/java/logging/)
+
+    [进入 Java 文档 →](/java/logging/)
+
+  </Card>
+  <Card title="Linux 运维" icon="linux">
+
+    **系统安装与基础环境**
+
+    联网与离线安装、软件源和树莓派环境。独立章节仍在整理。
+
+    [Docker 安装参考](/docker/)
+
+    [进入 Linux 文档 →](/linux/)
+
+  </Card>
+</CardGrid>
+
+## 按问题直接找
+
+| 你现在要做什么 | 阅读入口 |
 | --- | --- |
-| 了解文档内容与本次新增 Skill | [Skills 文档导览](/skills/) |
-| 接入 Claude Code 或 Codex | [安装与配置](/skills/getting-started/) |
-| 在当前项目开始使用 | [快速上手](/skills/quickstart/) |
-| 完成一个功能 | [第一个功能开发](/skills/first-feature/) |
-| 读取或接续 Claude Code、Codex 历史会话 | [历史会话接续](/skills/usage/session-resume/) |
-| 按任务选择 Skill | [Skill 目录](/skills/catalog/) |
-| 查询某个 Skill 的用法和边界 | [Skill 参考手册](/skills/skills-reference/) |
-| 找不到 Skill、Hook 未生效或任务停住 | [故障排查](/skills/troubleshooting/) |
-
-本站收录 **97 个框架 Skill**。Skill 由客户端原生发现和按需读取，Runtime Hook 提供行为约束、项目记忆与任务上下文；原理和维护资料见[核心概念](/skills/core-concepts/)与 [Runtime Hooks](/skills/hooks/)。
-
-## 部署与运维
-
-这部分按组件查阅，每篇包含对应环境的配置和操作步骤。
-
-| 你要做什么 | 阅读入口 |
-| --- | --- |
-| 安装 Docker | [Docker 部署](/docker/) |
-| 启动 MySQL、Nginx 或 Elasticsearch | [MySQL](/docker/use/mysql/) · [Nginx](/docker/use/nginx/) · [Elasticsearch](/docker/use/elasticsearch/) |
+| 完成一个功能 | [第一个功能开发](/skills/first-feature/) · [使用指南](/skills/usage/) |
+| 接续 Claude Code 或 Codex 历史会话 | [历史会话接续](/skills/usage/session-resume/) |
+| 查某个 Skill 的用法和边界 | [Skill 参考手册](/skills/skills-reference/) |
+| Skill 未生效、命令被拦或 TODO 停住 | [故障排查](/skills/troubleshooting/) · [Runtime Hooks](/skills/hooks/) |
 | 配置日志收集 | [ELK](/docker/use/elk/) · [EFK](/docker/use/efk/) · [ELFK](/docker/use/elfk/elfk/) |
-| 处理容器日志占满磁盘 | [Docker 日志过大](/docker/fqa/logs-too-large/) |
+| 容器日志占满磁盘 | [Docker 日志过大](/docker/fqa/logs-too-large/) |
 | 配置 Spring Boot 日志 | [Java 日志配置](/java/logging/) |
-| 配置 RTSP 转 WebRTC | [webrtc-stream](/docker/use/webrtc-stream/) |
-| 查找 Linux 内容 | [Linux 运维](/linux/)，目前仍在整理 |
+| RTSP 转 WebRTC | [webrtc-stream](/docker/use/webrtc-stream/) |
 
-部署文档涉及不同系统与组件版本，执行前核对目标环境、镜像标签和软件源。页面中的示例配置需要按实际环境调整。
+## 使用建议
+
+首次使用 Skills，从 [安装与配置](/skills/getting-started/) 开始，再按 [快速上手](/skills/quickstart/) 完成一次实际使用。日常查阅可直接进入 [参考手册](/skills/skills-reference/)；原理与维护见 [核心概念](/skills/core-concepts/)和 [Runtime Hooks](/skills/hooks/)。
+
+<Aside type="caution" title="部署前核对环境">
+部署文档覆盖不同系统和组件版本。执行前核对目标环境、镜像标签与软件源，按实际环境调整示例配置。
+</Aside>
+
+</div>

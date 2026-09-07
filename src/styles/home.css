@@ -1,0 +1,174 @@
+/* Keep homepage polish local to the landing page, including Starlight's hero. */
+body:has(.docs-home) .hero {
+  gap: 2rem;
+  padding-block: 2rem 3rem;
+}
+
+body:has(.docs-home) .hero h1 {
+  font-size: 2.5rem;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+body:has(.docs-home) .hero .tagline {
+  max-width: 32rem;
+  font-size: 1.125rem;
+  line-height: 1.8;
+  text-wrap: pretty;
+}
+
+body:has(.docs-home) .hero .stack {
+  gap: 1.75rem;
+  min-width: 0;
+}
+
+body:has(.docs-home) .hero > img {
+  width: min(100%, 19rem);
+  aspect-ratio: 1;
+}
+
+body:has(.docs-home) .hero .actions {
+  gap: 0.75rem;
+}
+
+body:has(.docs-home) .hero .sl-link-button {
+  min-height: 2.875rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0;
+}
+
+.docs-home h2 {
+  font-size: 1.625rem;
+  letter-spacing: 0;
+}
+
+.docs-home .card-grid {
+  gap: 1.25rem;
+  margin-block: 1.5rem 3rem;
+}
+
+.docs-home .card {
+  min-width: 0;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  border-top: 3px solid var(--sl-card-border);
+  gap: 1.25rem;
+}
+
+.docs-home .card:nth-child(2) {
+  --sl-card-border: var(--sl-color-blue);
+  --sl-card-bg: var(--sl-color-blue-low);
+}
+
+.docs-home .card .title {
+  gap: 0.75rem;
+  font-size: 1.25rem;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.docs-home .card .body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.docs-home .card .body > * {
+  margin-block: 0;
+}
+
+.docs-home .card .body > :last-child {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  font-weight: 600;
+}
+
+.docs-home a {
+  text-underline-offset: 0.2em;
+}
+
+.docs-home a:focus-visible,
+body:has(.docs-home) .hero a:focus-visible {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 4px;
+}
+
+.docs-home table {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+  font-size: 0.9375rem;
+}
+
+.docs-home th,
+.docs-home td {
+  padding: 0.875rem 1rem;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.docs-home th {
+  background: var(--sl-color-gray-6);
+}
+
+@media (min-width: 50rem) {
+  body:has(.docs-home) .hero {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+  }
+}
+
+@media (max-width: 49.999rem) {
+  body:has(.docs-home) .hero {
+    gap: 1.25rem;
+    padding-block: 0.5rem 1.5rem;
+  }
+
+  body:has(.docs-home) .hero > img {
+    width: min(40%, 6rem);
+  }
+
+  body:has(.docs-home) .hero .stack {
+    gap: 1.25rem;
+  }
+
+  body:has(.docs-home) .hero .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(100%, 22rem);
+    align-self: center;
+  }
+
+  body:has(.docs-home) .hero .sl-link-button {
+    justify-content: center;
+    padding-inline: 0.625rem;
+  }
+
+  body:has(.docs-home) .hero .sl-link-button:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .docs-home .card {
+    padding: 1.25rem;
+  }
+
+  .docs-home th,
+  .docs-home td {
+    padding: 0.75rem 0.5rem;
+  }
+}
+
+@media (max-width: 49.999rem) and (max-height: 40rem) {
+  body:has(.docs-home) .hero > img {
+    width: 4rem;
+  }
+
+  body:has(.docs-home) .hero {
+    gap: 0.75rem;
+    padding-block: 0 1rem;
+  }
+}
